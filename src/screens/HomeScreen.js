@@ -1,3 +1,4 @@
+import { useNavigation } from '@react-navigation/native';
 import React from 'react';
 import {
   View,
@@ -34,6 +35,7 @@ const LeagueCard = () => (
 );
 
 const HomeScreen = () => {
+  const navigation = useNavigation(); // ✅ add this
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -44,7 +46,7 @@ const HomeScreen = () => {
       </View>
 
       {/* Create League Button */}
-      <TouchableOpacity style={styles.createLeague}>
+      <TouchableOpacity onPress={() => navigation.navigate('CreateLeague')}>
         <Text style={styles.createLeagueText}>Create your league</Text>
         <Icon name="chevron-right" size={24} color="#fff" />
       </TouchableOpacity>
