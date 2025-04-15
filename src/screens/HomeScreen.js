@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 import React, { useState } from 'react';
+=======
+import { useNavigation } from '@react-navigation/native';
+import React from 'react';
+>>>>>>> origin/main
 import {
   View,
   Text,
@@ -48,6 +53,7 @@ const LeagueCard = () => (
   </View>
 );
 
+<<<<<<< HEAD
 const HomeScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState('Nearby');
 
@@ -59,6 +65,10 @@ const HomeScreen = ({ navigation }) => {
     navigation.navigate('CreateLeague');
   };
 
+=======
+const HomeScreen = () => {
+  const navigation = useNavigation(); // ✅ add this
+>>>>>>> origin/main
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -71,7 +81,11 @@ const HomeScreen = ({ navigation }) => {
       </View>
 
       {/* Create League Button */}
+<<<<<<< HEAD
       <TouchableOpacity style={styles.createLeague} onPress={handleCreateLeague}>
+=======
+      <TouchableOpacity onPress={() => navigation.navigate('CreateLeague')}>
+>>>>>>> origin/main
         <Text style={styles.createLeagueText}>Create your league</Text>
         <Icon name="chevron-right" size={24} color="#fff" />
       </TouchableOpacity>
