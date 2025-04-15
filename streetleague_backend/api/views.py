@@ -1,8 +1,11 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from rest_framework.views import APIView  # Import APIView
 from rest_framework import status
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
+from .serializers import LeagueSerializer
+from .models import League
 
 @api_view(['POST'])
 def register(request):
@@ -34,3 +37,12 @@ def register(request):
             'access': access_token,
             'refresh': refresh_token
         }, status=status.HTTP_201_CREATED)
+
+# CreateLeagueView should be defined outside the register function
+class CreateLeagueView(APIView):
+    def post(self, request):
+        serializer = LeagueSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
