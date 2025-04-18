@@ -83,3 +83,28 @@ dist/
 build/
 .DS_Store
 *.log
+
+
+# Django settings and secrets
+*.env
+.env.
+local_settings.py
+settings_local.py
+
+# Python
+*.pyc
+*.pyo
+_pycache_/
+
+# Virtualenv (Django)
+env/
+venv/
+ENV/
+.venv/
+
+# IDE/Editor files
+.idea/
+.vscode/
+
+# Other
+*.swp
