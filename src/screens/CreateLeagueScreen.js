@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,10 @@ import { WebView } from 'react-native-webview';
 
 const { height } = Dimensions.get('window');
 
-const CreateLeagueScreen = () => {
+const CreateLeagueScreen = ({ navigation, route }) => {
   const [location, setLocation] = useState('');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
   const [sport, setSport] = useState('');
   const [leagueName, setLeagueName] = useState('');
   const [description, setDescription] = useState('');
@@ -24,17 +26,15 @@ const CreateLeagueScreen = () => {
   const [time, setTime] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const onCreate = () => {
-    console.log({
-      location,
-      sport,
-      leagueName,
-      isCasual: isCasual ? 'Casual' : 'Competitive',
-      description,
-      date,
-      time,
-    });
-  };
+  useEffect(() => {
+    if (route.params?.coords) {
+      const { latitude, longitude } = route.params.coords;
+      setLatitude(latitude);
+      setLongitude(longitude);
+      setLocation(`Lat: ${latitude.toFixed(4)}, Lon: ${longitude.toFixed(4)}`);
+    }
+  }, [route.params?.coords]);
+
 
   const handleCalendarMessage = (event) => {
     try {
@@ -49,6 +49,38 @@ const CreateLeagueScreen = () => {
     }
   };
 
+  const onCreate = async () => {
+    const payload = {
+      name: leagueName,
+      description,
+      sport,
+      location,
+      latitude,
+      longitude,
+      date_time: `${date}T${time}`, // Combine properly or use a date library
+      league_type: isCasual ? 'casual' : 'competitive',
+    };
+  
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/create-league/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!response.ok) throw new Error('Something went wrong');
+  
+      const data = await response.json();
+      console.log('League created!', data);
+      // You can navigate or show success toast
+    } catch (err) {
+      console.error('Error creating league:', err);
+    }
+  };
+  
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.label}>Where are you hosting?</Text>
@@ -60,9 +92,10 @@ const CreateLeagueScreen = () => {
         placeholderTextColor="#888"
       />
 
-      <TouchableOpacity style={styles.mapBtn}>
+      <TouchableOpacity style={styles.mapBtn} onPress={() => navigation.navigate('MapPicker')}>
         <Text style={styles.mapBtnText}>Choose on Map</Text>
       </TouchableOpacity>
+
 
       <Text style={styles.label}>Choose the Sport</Text>
       <TextInput
