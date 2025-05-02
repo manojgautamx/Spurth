@@ -1,40 +1,53 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text } from 'react-native';
-import MapView, { Marker, UrlTile } from 'react-native-maps';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { WebView } from 'react-native-webview';
 
-const MapPickerScreen = ({ navigation, route }) => {
-  const [selectedLocation, setSelectedLocation] = useState({
-    latitude: 27.700769, // Kathmandu default
-    longitude: 85.300140,
-  });
+const MapPickerScreen = ({ navigation }) => {
+  const [selectedCoords, setSelectedCoords] = useState(null);
+  const [address, setAddress] = useState('');
 
-  const onMapPress = (e) => {
-    setSelectedLocation(e.nativeEvent.coordinate);
+  const handleMessage = async (event) => {
+    const data = JSON.parse(event.nativeEvent.data);
+    const { latitude, longitude } = data;
+
+    setSelectedCoords(data);
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+      );
+      const json = await response.json();
+      const displayName = json.display_name || 'Unnamed location';
+      setAddress(displayName);
+    } catch (err) {
+      console.error('Error fetching address:', err);
+      setAddress('Unnamed location');
+    }
   };
 
   const handleConfirm = () => {
-    navigation.navigate('CreateLeague', { coords: selectedLocation });
+    if (selectedCoords) {
+      navigation.navigate('CreateLeague', {
+        selectedLocation: {
+          latitude: selectedCoords.latitude,
+          longitude: selectedCoords.longitude,
+          display_name: address || 'Unnamed location',
+        },
+      });
+    } else {
+      Alert.alert('No location selected', 'Please tap on the map to select a location.');
+    }
   };
 
   return (
     <View style={{ flex: 1 }}>
-      <MapView
-        provider={null} // Important: to allow custom tiles
-        style={StyleSheet.absoluteFill}
-        initialRegion={{
-          ...selectedLocation,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-        onPress={onMapPress}
-      >
-        <UrlTile
-          urlTemplate="http://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maximumZ={19}
-          flipY={false}
-        />
-        <Marker coordinate={selectedLocation} />
-      </MapView>
+      <WebView
+        source={{ uri: 'file:///android_asset/map.html' }}
+        onMessage={handleMessage}
+        originWhitelist={['*']}
+        allowFileAccess
+        javaScriptEnabled
+      />
 
       <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
         <Text style={styles.confirmText}>Confirm Location</Text>

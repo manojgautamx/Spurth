@@ -19,7 +19,10 @@ class League(models.Model):
     longitude = models.FloatField()
     date_time = models.DateTimeField()
     league_type = models.CharField(max_length=20, choices=LEAGUE_TYPE_CHOICES)
+    max_players = models.PositiveIntegerField(default=0)  # 👈 New field
+    price = models.CharField(max_length=50, default="Free")  # 👈 New field
     created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_leagues')
 
     def __str__(self):
         return self.name

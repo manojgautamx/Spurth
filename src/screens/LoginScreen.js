@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,12 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AuthContext } from '../context/AuthContext';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const { login } = useContext(AuthContext);
 
   const handleLogin = async () => {
     try {
@@ -27,9 +28,7 @@ const LoginScreen = ({ navigation }) => {
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('accessToken', data.access);
-        await AsyncStorage.setItem('refreshToken', data.refresh);
-        navigation.navigate('Home');
+        await login(data.access, data.refresh);
       } else {
         Alert.alert('Login Failed', data.detail || 'Invalid credentials');
       }
@@ -41,34 +40,26 @@ const LoginScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* Logo */}
       <Image source={require('../assets/logo.png')} style={styles.logo} />
-
-      {/* Title */}
       <Text style={styles.title}>Sign in to your account</Text>
 
-      {/* Username Input */}
       <Text style={styles.label}>Username</Text>
       <TextInput
         style={styles.input}
         placeholder="e.g. johndoe"
-        placeholderTextColor="#E81F89"
         value={username}
         onChangeText={setUsername}
       />
 
-      {/* Password Input */}
       <Text style={styles.label}>Password</Text>
       <TextInput
         style={styles.input}
         placeholder="****"
-        placeholderTextColor="#E81F89"
         secureTextEntry
         value={password}
         onChangeText={setPassword}
       />
 
-      {/* Sign In Button */}
       <TouchableOpacity style={styles.signInButton} onPress={handleLogin}>
         <Text style={styles.signInText}>SIGN IN</Text>
       </TouchableOpacity>
