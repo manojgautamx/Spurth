@@ -14,7 +14,10 @@ class UserSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         return user
     
+
 class LeagueSerializer(serializers.ModelSerializer):
-     class Meta:
+    class Meta:
         model = League
         fields = '__all__'
+        read_only_fields = ('created_by',)
+

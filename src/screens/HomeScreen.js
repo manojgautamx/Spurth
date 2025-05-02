@@ -1,152 +1,131 @@
-<<<<<<< HEAD
-import React, { useState } from 'react';
-=======
-import { useNavigation } from '@react-navigation/native';
-import React from 'react';
->>>>>>> origin/main
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
+  FlatList,
   TouchableOpacity,
-  ScrollView,
-  Image,
-  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { getAuthToken } from '../utils/auth';
+import { useNavigation } from '@react-navigation/native';
+import Navbar from '../components/Navbar';
 
-const screenWidth = Dimensions.get('window').width;
-const cardWidth = (screenWidth - 48) / 2;
+const API_URL = 'http://10.0.2.2:8000/api/my-leagues/';
 
-const LeagueCard = () => (
-  <View style={styles.card}>
-    <Image
-      source={require('../assets/futsal.png')}
-      style={styles.cardImage}
-      resizeMode="cover"
-    />
-    <Text style={styles.title}>Futsal Play</Text>
-
-    <View style={styles.row}>
-      <View style={styles.iconRow}>
-        <Ionicons name="football-outline" size={12} color="gray" />
-        <Text style={styles.infoText}>Futsal</Text>
-      </View>
-      <Text style={styles.infoText}>1/22</Text>
-      <View style={styles.iconRow}>
-        <Ionicons name="location-outline" size={12} color="gray" />
-        <Text style={styles.infoText}>4 km</Text>
-      </View>
-    </View>
-
-    <View style={styles.row}>
-      <View style={styles.iconRow}>
-        <Ionicons name="calendar-outline" size={12} color="gray" />
-        <Text style={styles.infoText}>13 Feb, 2025, 8:00 PM</Text>
-      </View>
-      <View style={styles.iconRow}>
-        <Ionicons name="star-outline" size={12} color="gray" />
-        <Text style={styles.infoText}>Pro</Text>
-      </View>
-    </View>
-  </View>
-);
-
-<<<<<<< HEAD
-const HomeScreen = ({ navigation }) => {
-  const [activeTab, setActiveTab] = useState('Nearby');
-
-  const handleCardPress = () => {
-    navigation.navigate('LeagueDetails');
-  };
-
-  const handleCreateLeague = () => {
-    navigation.navigate('CreateLeague');
-  };
-
-=======
 const HomeScreen = () => {
-  const navigation = useNavigation(); // ✅ add this
->>>>>>> origin/main
+  const handleMenuPress = () => {
+    // Open drawer or perform some action
+    console.log('Menu pressed');
+  };
+  const handleProfilePress = () => {
+    console.log('Profile Pressed')
+  };
+  const [myLeagues, setMyLeagues] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const navigation = useNavigation();
+
+  const fetchLeagues = async () => {
+    try {
+      setLoading(true);
+      const token = await getAuthToken();
+
+      if (!token) {
+        throw new Error('No access token found.');
+      }
+
+      const response = await fetch(API_URL, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Failed to fetch leagues');
+      }
+
+      const data = await response.json();
+      setMyLeagues(data);
+    } catch (err) {
+      console.error('Error fetching leagues:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLeagues();
+  }, []);
+
+  const renderLeagueCard = ({ item }) => (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Ionicons name="trophy" size={24} color="#E81F89" />
+        <Text style={styles.cardTitle}>{item.name}</Text>
+      </View>
+      <Text style={styles.cardDetail}>🏅 Sport: {item.sport}</Text>
+      <Text style={styles.cardDetail}>📍 Location: {item.location}</Text>
+      <Text style={styles.cardDetail}>🗓 Date & Time: {item.date_time}</Text>
+      <Text style={styles.cardDetail}>🎮 League Type: {item.league_type}</Text>
+      <Text style={styles.cardDetail}>👥 Max Players: {item.max_players}</Text>
+      <Text style={styles.cardDetail}>💰 Price: ₹{item.price}</Text>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#E81F89" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity onPress={fetchLeagues} style={styles.retryButton}>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => console.log('Menu clicked')}>
-          <Icon name="menu" size={28} color="#fff" />
-        </TouchableOpacity>
-        <Image source={require('../assets/image.png')} style={styles.logo} />
-        <TouchableOpacity style={styles.profilePlaceholder} />
-      </View>
-
-      {/* Create League Button */}
-<<<<<<< HEAD
-      <TouchableOpacity style={styles.createLeague} onPress={handleCreateLeague}>
-=======
-      <TouchableOpacity onPress={() => navigation.navigate('CreateLeague')}>
->>>>>>> origin/main
+      <TouchableOpacity
+        onPress={() => navigation.navigate('CreateLeague')}
+        style={styles.createLeagueBtn}
+      >
         <Text style={styles.createLeagueText}>Create your league</Text>
-        <Icon name="chevron-right" size={24} color="#fff" />
+        <Ionicons name="chevron-forward" size={24} color="#fff" />
       </TouchableOpacity>
 
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity onPress={() => setActiveTab('Nearby')}>
-          <Text style={[styles.tabText, activeTab === 'Nearby' && styles.activeTab]}>
-            Nearby
-            </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => navigation.navigate('Joined')}>
-              <Text style={styles.tabText}>Joined Leagues</Text>
-              </TouchableOpacity>
-              </View>
-
-      {/* Filter & Sort */}
       <View style={styles.filterRow}>
         <TouchableOpacity style={styles.filterOption}>
-          <Icon name="filter-list" size={20} color="#fff" />
+          <Ionicons name="filter" size={20} color="#fff" />
           <Text style={styles.filterText}>Filter</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.filterOption}>
-          <Icon name="sort" size={20} color="#fff" />
+          <Ionicons name="swap-vertical" size={20} color="#fff" />
           <Text style={styles.filterText}>Sort by</Text>
         </TouchableOpacity>
       </View>
 
-      {/* League Cards */}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <View style={styles.cardGrid}>
-          {activeTab === 'Nearby'
-            ? [...Array(6)].map((_, idx) => (
-                <TouchableOpacity key={idx} onPress={handleCardPress}>
-                  <LeagueCard />
-                </TouchableOpacity>
-              ))
-            : (
-              <Text style={{ color: 'gray', marginTop: 20 }}>
-                You haven't joined any leagues yet.
-              </Text>
-            )}
-        </View>
-      </ScrollView>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity>
-          <Ionicons name="home-outline" size={24} color="#e91e63" />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <Ionicons name="search-outline" size={24} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <Ionicons name="notifications-outline" size={24} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <Ionicons name="chatbubble-outline" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      {myLeagues.length === 0 ? (
+        <Text style={styles.emptyText}>You haven’t created any leagues yet.</Text>
+      ) : (
+        <FlatList
+          data={myLeagues}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderLeagueCard}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
+      )}
     </View>
   );
 };
@@ -154,109 +133,97 @@ const HomeScreen = () => {
 export default HomeScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', paddingTop: 40, paddingHorizontal: 16 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  logo: { width: 30, height: 30, borderRadius: 15 },
-  profilePlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'gray',
-    borderWidth: 1,
-    borderColor: '#fff',
-  },
-  createLeague: {
-    flexDirection: 'row',
-    backgroundColor: '#2a2a2a',
+  container: {
+    flex: 1,
+    backgroundColor: '#121212',
     padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    paddingTop: 100, // <-- Adjust this value as needed
   },
-  createLeagueText: { color: '#fff', fontSize: 16 },
-
-  // Tabs
-  tabs: {
+  createLeagueBtn: {
     flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 10,
+    alignItems: 'center',
+    backgroundColor: '#E81F89',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 16,
+    justifyContent: 'space-between',
   },
-  tabText: {
-    color: 'gray',
-    marginRight: 24,
-    fontSize: 14,
-  },
-  activeTab: {
-    color: '#e91e63',
+  createLeagueText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
-    borderBottomWidth: 2,
-    borderBottomColor: '#e91e63',
-    paddingBottom: 4,
   },
-
-  // Filter Row
   filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 16,
-    gap: 24,
   },
   filterOption: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#1F1F1F',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
   },
   filterText: {
-    color: 'gray',
-    fontSize: 12,
+    color: '#fff',
     marginLeft: 6,
   },
-
-  // Cards
-  cardGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
   card: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#1F1F1F',
     borderRadius: 12,
-    padding: 10,
-    width: cardWidth,
-    marginBottom: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
-  cardImage: {
-    width: '100%',
-    height: 100,
-    borderRadius: 10,
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  title: { color: '#fff', fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-    alignItems: 'center',
+  cardTitle: {
+    marginLeft: 10,
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
-  infoText: { color: 'gray', fontSize: 11 },
-  iconRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  cardDetail: {
+    color: '#AAAAAA',
+    fontSize: 14,
+    marginTop: 4,
   },
-
-  // Bottom Nav
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#333',
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
     backgroundColor: '#121212',
+  },
+  errorText: {
+    color: '#FF5C5C',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  emptyText: {
+    color: '#CCCCCC',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 20,
+  },
+  retryButton: {
+    marginTop: 12,
+    backgroundColor: '#E81F89',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });
