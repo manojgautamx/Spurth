@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import jwtDecode from 'jwt-decode';
+import { jwtDecode } from "jwt-decode";
 import dayjs from 'dayjs';
 import { useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
