@@ -8,4 +8,6 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('create-league/', CreateLeagueView.as_view(), name='create-league'),
     path('my-leagues/', MyLeaguesView.as_view(), name='my-leagues'),
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,54 +8,35 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { getAuthToken } from '../utils/auth';
 import { useNavigation } from '@react-navigation/native';
 import Navbar from '../components/Navbar';
+import { SafeAreaView } from 'react-native';
+import useAxios from '../utils/useAxios';
+import { AuthContext } from '../context/AuthContext'
 
 const API_URL = 'http://10.0.2.2:8000/api/my-leagues/';
 
 const HomeScreen = () => {
-  const handleMenuPress = () => {
-    // Open drawer or perform some action
-    console.log('Menu pressed');
-  };
-  const handleProfilePress = () => {
-    console.log('Profile Pressed')
-  };
   const [myLeagues, setMyLeagues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigation = useNavigation();
+  const axios = useAxios();
+  const { logout } = useContext(AuthContext);
+
 
   const fetchLeagues = async () => {
     try {
       setLoading(true);
-      const token = await getAuthToken();
-
-      if (!token) {
-        throw new Error('No access token found.');
-      }
-
-      const response = await fetch(API_URL, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to fetch leagues');
-      }
-
-      const data = await response.json();
-      setMyLeagues(data);
+      const response = await axios.get('http://10.0.2.2:8000/api/my-leagues/');
+      setMyLeagues(response.data);
     } catch (err) {
       console.error('Error fetching leagues:', err);
-      setError(err.message);
+      setError(err.response?.data?.detail || 'Failed to fetch leagues');
     } finally {
       setLoading(false);
     }
-  };
+  };  
 
   useEffect(() => {
     fetchLeagues();
@@ -96,37 +77,46 @@ const HomeScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity
-        onPress={() => navigation.navigate('CreateLeague')}
-        style={styles.createLeagueBtn}
-      >
-        <Text style={styles.createLeagueText}>Create your league</Text>
-        <Ionicons name="chevron-forward" size={24} color="#fff" />
-      </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerText}>My Leagues</Text>
+          <TouchableOpacity onPress={logout}>
+            <Ionicons name="log-out-outline" size={24} color="#E81F89" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.container}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CreateLeague')}
+          style={styles.createLeagueBtn}
+        >
+          <Text style={styles.createLeagueText}>Create your league</Text>
+          <Ionicons name="chevron-forward" size={24} color="#fff" />
+        </TouchableOpacity>
 
-      <View style={styles.filterRow}>
-        <TouchableOpacity style={styles.filterOption}>
-          <Ionicons name="filter" size={20} color="#fff" />
-          <Text style={styles.filterText}>Filter</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.filterOption}>
-          <Ionicons name="swap-vertical" size={20} color="#fff" />
-          <Text style={styles.filterText}>Sort by</Text>
-        </TouchableOpacity>
+        <View style={styles.filterRow}>
+          <TouchableOpacity style={styles.filterOption}>
+            <Ionicons name="filter" size={20} color="#fff" />
+            <Text style={styles.filterText}>Filter</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.filterOption}>
+            <Ionicons name="swap-vertical" size={20} color="#fff" />
+            <Text style={styles.filterText}>Sort by</Text>
+          </TouchableOpacity>
+        </View>
+
+        {myLeagues.length === 0 ? (
+          <Text style={styles.emptyText}>You haven’t created any leagues yet.</Text>
+        ) : (
+          <FlatList
+            data={myLeagues}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderLeagueCard}
+            contentContainerStyle={{ paddingBottom: 20 }}
+          />
+        )}
       </View>
-
-      {myLeagues.length === 0 ? (
-        <Text style={styles.emptyText}>You haven’t created any leagues yet.</Text>
-      ) : (
-        <FlatList
-          data={myLeagues}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderLeagueCard}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
-    </View>
+    </SafeAreaView>
+    
   );
 };
 
@@ -137,7 +127,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
     padding: 16,
-    paddingTop: 100, // <-- Adjust this value as needed
+    paddingTop: 40, // <-- Adjust this value as needed
   },
   createLeagueBtn: {
     flexDirection: 'row',

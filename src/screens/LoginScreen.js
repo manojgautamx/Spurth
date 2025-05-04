@@ -9,34 +9,38 @@ import {
   Alert,
 } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import axiosInstance from '../utils/axiosInstance';
 
 const LoginScreen = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const { login } = useContext(AuthContext);
+  
 
   const handleLogin = async () => {
     try {
-      const response = await fetch('http://10.0.2.2:8000/api/token/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+      const response = await axiosInstance.post('/api/token/', {
+        username,
+        password,
       });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        await login(data.access, data.refresh);
-      } else {
-        Alert.alert('Login Failed', data.detail || 'Invalid credentials');
+  
+      console.log('Login API Response:', response.data); // <-- debug here
+  
+      const data = response.data;
+  
+      if (!data.access || !data.refresh) {
+        throw new Error('Access or refresh token missing in response');
       }
+  
+      await login(data.access, data.refresh);
     } catch (error) {
       console.error('Login Error:', error);
-      Alert.alert('Error', 'Something went wrong');
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Invalid credentials or server error';
+      Alert.alert('Login Failed', errorMsg);
     }
   };
+  
 
   return (
     <View style={styles.container}>

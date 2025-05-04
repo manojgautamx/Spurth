@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Modal,
   Dimensions,
   ActivityIndicator,
   Alert,
@@ -15,7 +14,7 @@ import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { WebView } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
+import axiosInstance from '../utils/axiosInstance';
 
 const { height } = Dimensions.get('window');
 
@@ -34,7 +33,6 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   const [maxPlayers, setMaxPlayers] = useState('');
   const [price, setPrice] = useState('Free');
 
@@ -52,20 +50,13 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         const data = await res.json();
         setSuggestions(data);
       } catch (err) {
-        console.error('Autocomplete error:', err);
+        console.error('Location autocomplete error:', err);
       }
     };
 
     const timeoutId = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(timeoutId);
   }, [location]);
-
-  const handleSuggestionPress = (item) => {
-    setLocation(item.display_name);
-    setLatitude(parseFloat(item.lat));
-    setLongitude(parseFloat(item.lon));
-    setSuggestions([]);
-  };
 
   useEffect(() => {
     if (route.params?.selectedLocation) {
@@ -76,6 +67,13 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       setSuggestions([]);
     }
   }, [route.params?.selectedLocation]);
+
+  const handleSuggestionPress = (item) => {
+    setLocation(item.display_name);
+    setLatitude(parseFloat(item.lat));
+    setLongitude(parseFloat(item.lon));
+    setSuggestions([]);
+  };
 
   const onCreate = async () => {
     if (!leagueName || !location || !sport || !date || !time || !maxPlayers) {
@@ -101,22 +99,13 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   
     try {
       const token = await AsyncStorage.getItem('accessToken');
-      const response = await fetch('http://10.0.2.2:8000/api/create-league/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
   
-      if (!response.ok) throw new Error('Something went wrong');
+      await axiosInstance.post('http://10.0.2.2:8000/api/create-league/', payload);
   
-      const data = await response.json();
       Alert.alert('Success', 'League created successfully!');
-      navigation.navigate('Home', { refresh: true });  // 👈 pass param
+      navigation.navigate('Home', { refresh: true });
     } catch (err) {
-      console.error('Error creating league:', err);
+      console.error('Create league error:', err.message);
       setError('Failed to create league.');
     } finally {
       setLoading(false);
@@ -127,6 +116,8 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>Create a League</Text>
+
+      {/* Location Input */}
       <Text style={styles.label}>Where are you hosting?</Text>
       <TextInput
         style={styles.input}
@@ -147,8 +138,8 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       <TouchableOpacity style={styles.mapBtn} onPress={() => navigation.navigate('MapPicker')}>
         <Text style={styles.mapBtnText}>Choose on Map</Text>
       </TouchableOpacity>
-      
 
+      {/* Map Preview */}
       {latitude && longitude && (
         <WebView
           source={{
@@ -170,7 +161,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         />
       )}
 
-
+      {/* Sport */}
       <Text style={styles.label}>Choose the Sport</Text>
       <TextInput
         style={styles.input}
@@ -180,6 +171,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         placeholderTextColor="#888"
       />
 
+      {/* Date & Time */}
       <Text style={styles.label}>Time & Date</Text>
       <View style={styles.row}>
         <TouchableOpacity style={styles.dateBtn} onPress={() => setDatePickerVisibility(true)}>
@@ -192,6 +184,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
 
+      {/* League Name */}
       <Text style={styles.label}>Name your League</Text>
       <TextInput
         style={styles.input}
@@ -201,14 +194,14 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         placeholderTextColor="#888"
       />
 
+      {/* Casual/Competitive Toggle */}
       <Text style={styles.label}>Casual or Competitive</Text>
       <TouchableOpacity style={styles.casualBtn} onPress={() => setIsCasual(!isCasual)}>
-        <Text style={styles.casualText}>
-          {isCasual ? '⚪ Casual' : '🏆 Competitive'}
-        </Text>
+        <Text style={styles.casualText}>{isCasual ? '⚪ Casual' : '🏆 Competitive'}</Text>
         <Icon name="chevron-forward-outline" size={20} color="#fff" />
       </TouchableOpacity>
 
+      {/* Max Players */}
       <Text style={styles.label}>Maximum Players</Text>
       <TextInput
         style={styles.input}
@@ -219,6 +212,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         keyboardType="numeric"
       />
 
+      {/* Price */}
       <Text style={styles.label}>Price (leave as 'Free' if no cost)</Text>
       <TextInput
         style={styles.input}
@@ -226,10 +220,9 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         onChangeText={setPrice}
         placeholder="Free or a price in numbers"
         placeholderTextColor="#888"
-        keyboardType="default"
       />
 
-
+      {/* Description */}
       <Text style={styles.label}>Description</Text>
       <TextInput
         style={styles.textArea}
@@ -238,19 +231,17 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         placeholder="Tell more about the event..."
         placeholderTextColor="#888"
         multiline
-        numberOfLines={4}
       />
 
+      {/* Error Message */}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
+      {/* Submit Button */}
       <TouchableOpacity style={styles.createBtn} onPress={onCreate} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.createText}>CREATE</Text>
-        )}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.createText}>CREATE</Text>}
       </TouchableOpacity>
 
+      {/* Date/Time Pickers */}
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
         mode="date"
@@ -261,7 +252,6 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         }}
         onCancel={() => setDatePickerVisibility(false)}
       />
-
       <DateTimePickerModal
         isVisible={isTimePickerVisible}
         mode="time"
@@ -282,6 +272,13 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 60,
     minHeight: height,
+  },
+  header: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#fff',
+    textAlign: 'center',
   },
   label: {
     color: '#fff',
@@ -367,14 +364,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  header: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#333',
-    textAlign: 'center',
-  },
-  
 });
 
 export default CreateLeagueScreen;
