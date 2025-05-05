@@ -3,6 +3,7 @@ from .models import League
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
+admin.site.register(User)
 
 class LeagueAdmin(admin.ModelAdmin):
     list_display = ('name', 'sport', 'location', 'date_time', 'league_type', 'max_players', 'price', 'created_by')
