@@ -10,6 +10,7 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
+import LeagueDescriptionScreen from '../screens/LeagueDescriptionScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -31,6 +32,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="CreateLeague" component={CreateLeagueScreen} />
           <Stack.Screen name="MapPicker" component={MapPickerScreen} />
+          <Stack.Screen name="LeagueDescription" component={LeagueDescriptionScreen} />
         </>
       ) : (
         <>

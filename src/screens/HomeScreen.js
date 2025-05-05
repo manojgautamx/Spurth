@@ -43,7 +43,10 @@ const HomeScreen = () => {
   }, []);
 
   const renderLeagueCard = ({ item }) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      onPress={() => navigation.navigate('LeagueDescription', { league: item })}
+      style={styles.card}
+    >
       <View style={styles.cardHeader}>
         <Ionicons name="trophy" size={24} color="#E81F89" />
         <Text style={styles.cardTitle}>{item.name}</Text>
@@ -54,8 +57,9 @@ const HomeScreen = () => {
       <Text style={styles.cardDetail}>🎮 League Type: {item.league_type}</Text>
       <Text style={styles.cardDetail}>👥 Max Players: {item.max_players}</Text>
       <Text style={styles.cardDetail}>💰 Price: ₹{item.price}</Text>
-    </View>
+    </TouchableOpacity>
   );
+  
 
   if (loading) {
     return (
