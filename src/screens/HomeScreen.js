@@ -18,6 +18,7 @@ const API_URL = 'http://10.0.2.2:8000/api/my-leagues/';
 
 const HomeScreen = () => {
   const [myLeagues, setMyLeagues] = useState([]);
+  const [otherLeagues, setOtherLeagues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigation = useNavigation();
@@ -124,6 +125,7 @@ const HomeScreen = () => {
   );
 };
 
+
 export default HomeScreen;
 
 const styles = StyleSheet.create({
@@ -221,3 +223,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 });
+
