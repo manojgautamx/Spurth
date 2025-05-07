@@ -55,3 +55,35 @@ class MyLeaguesView(APIView):
         leagues = League.objects.filter(created_by=request.user)
         serializer = LeagueSerializer(leagues, many=True)
         return Response(serializer.data)
+
+
+# 🔥 NEW: List Public Leagues (not created by this user)
+class PublicLeaguesView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        leagues = League.objects.exclude(created_by=request.user)
+        serializer = LeagueSerializer(leagues, many=True)
+        return Response(serializer.data)
+
+
+# 🔥 NEW: Join League View
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def join_league(request, league_id):
+    try:
+        league = League.objects.get(id=league_id)
+        if request.user in league.participants.all():
+            return Response({'detail': 'You already joined this league.'}, status=400)
+        league.participants.add(request.user)
+        return Response({'detail': 'Successfully joined the league.'}, status=200)
+    except League.DoesNotExist:
+        return Response({'detail': 'League not found.'}, status=404)
+
+# 🔥 NEW: List Joined Leagues (user is a participant but not creator)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def joined_leagues(request):
+    leagues = League.objects.filter(participants=request.user).exclude(created_by=request.user)
+    serializer = LeagueSerializer(leagues, many=True)
+    return Response(serializer.data)
