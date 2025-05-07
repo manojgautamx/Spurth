@@ -6,42 +6,51 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView, // <-- Added for scrollable container
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import Navbar from '../components/Navbar';
 import { SafeAreaView } from 'react-native';
 import useAxios from '../utils/useAxios';
-import { AuthContext } from '../context/AuthContext'
-
-const API_URL = 'http://10.0.2.2:8000/api/my-leagues/';
+import { AuthContext } from '../context/AuthContext';
 
 const HomeScreen = () => {
   const [myLeagues, setMyLeagues] = useState([]);
   const [otherLeagues, setOtherLeagues] = useState([]);
+  const [joinedLeagues, setJoinedLeagues] = useState([]); // <-- NEW STATE
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigation = useNavigation();
   const axios = useAxios();
   const { logout } = useContext(AuthContext);
 
-
   const fetchLeagues = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://10.0.2.2:8000/api/my-leagues/');
-      setMyLeagues(response.data);
+      
+      // <-- Modified: Fetch both my leagues and other leagues
+      const [myResponse, otherResponse, joinedResponse] = await Promise.all([
+        axios.get('http://10.0.2.2:8000/api/my-leagues/'),
+        axios.get('http://10.0.2.2:8000/api/public-leagues/'),
+        axios.get('http://10.0.2.2:8000/api/joined-leagues/'),
+      ]);
+
+      setMyLeagues(myResponse.data);
+      setOtherLeagues(otherResponse.data); // <-- Save other leagues
+      setJoinedLeagues(joinedResponse.data); // <-- Set joined leagues
     } catch (err) {
       console.error('Error fetching leagues:', err);
       setError(err.response?.data?.detail || 'Failed to fetch leagues');
     } finally {
       setLoading(false);
     }
-  };  
+  };
 
   useEffect(() => {
-    fetchLeagues();
-  }, []);
+    const unsubscribe = navigation.addListener('focus', fetchLeagues); // refresh when screen is focused
+    return unsubscribe;
+  }, [navigation]);
 
   const renderLeagueCard = ({ item }) => (
     <TouchableOpacity
@@ -58,9 +67,9 @@ const HomeScreen = () => {
       <Text style={styles.cardDetail}>🎮 League Type: {item.league_type}</Text>
       <Text style={styles.cardDetail}>👥 Max Players: {item.max_players}</Text>
       <Text style={styles.cardDetail}>💰 Price: ₹{item.price}</Text>
+      <Text style={styles.cardDetail}>Created by {item.created_by}</Text>
     </TouchableOpacity>
   );
-  
 
   if (loading) {
     return (
@@ -82,14 +91,16 @@ const HomeScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerText}>My Leagues</Text>
-          <TouchableOpacity onPress={logout}>
-            <Ionicons name="log-out-outline" size={24} color="#E81F89" />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.container}>
+    <SafeAreaView style={{ flex: 1, paddingTop: 46, backgroundColor: '#000' }}>
+      <View style={styles.headerRow}>
+        <Text style={styles.headerText}>StreetLeague</Text>
+        <TouchableOpacity onPress={logout}>
+          <Ionicons name="log-out-outline" size={24} color="#E81F89" />
+        </TouchableOpacity>
+      </View>
+
+      {/* <-- Wrapped main content in ScrollView */}
+      <ScrollView style={styles.container}>
         <TouchableOpacity
           onPress={() => navigation.navigate('CreateLeague')}
           style={styles.createLeagueBtn}
@@ -98,17 +109,8 @@ const HomeScreen = () => {
           <Ionicons name="chevron-forward" size={24} color="#fff" />
         </TouchableOpacity>
 
-        <View style={styles.filterRow}>
-          <TouchableOpacity style={styles.filterOption}>
-            <Ionicons name="filter" size={20} color="#fff" />
-            <Text style={styles.filterText}>Filter</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterOption}>
-            <Ionicons name="swap-vertical" size={20} color="#fff" />
-            <Text style={styles.filterText}>Sort by</Text>
-          </TouchableOpacity>
-        </View>
-
+        {/* -- My Leagues Section -- */}
+        <Text style={styles.sectionTitle}>My Leagues</Text>
         {myLeagues.length === 0 ? (
           <Text style={styles.emptyText}>You haven’t created any leagues yet.</Text>
         ) : (
@@ -116,65 +118,90 @@ const HomeScreen = () => {
             data={myLeagues}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderLeagueCard}
-            contentContainerStyle={{ paddingBottom: 20 }}
+            scrollEnabled={false} // <-- Allow ScrollView to handle scrolling
           />
         )}
-      </View>
+
+        {/* -- Other Leagues Section (Newly added) -- */}
+        <Text style={styles.sectionTitle}>Other Leagues</Text>
+        {otherLeagues.length === 0 ? (
+          <Text style={styles.emptyText}>No public leagues available right now.</Text>
+        ) : (
+          <FlatList
+            data={otherLeagues}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderLeagueCard}
+            scrollEnabled={false} // <-- Allow ScrollView to handle scrolling
+          />
+        )}
+
+        {/* Joined Leagues */}
+        <Text style={styles.sectionTitle}>Joined Leagues</Text>
+        {joinedLeagues.length === 0 ? (
+          <Text style={styles.emptyText}>You haven’t joined any leagues yet.</Text>
+        ) : (
+          <FlatList
+            data={joinedLeagues}
+            keyExtractor={(item) => item.id.toString()}
+            renderItem={renderLeagueCard}
+            scrollEnabled={false}
+          />
+        )}
+
+      </ScrollView>
     </SafeAreaView>
-    
   );
 };
 
-
-export default HomeScreen;
-
+// Styles remain unchanged except where noted
 const styles = StyleSheet.create({
   container: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
     flex: 1,
-    backgroundColor: '#121212',
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     padding: 16,
-    paddingTop: 40, // <-- Adjust this value as needed
+    paddingTop: 20,
+    backgroundColor: '#fff',
+  },
+  headerText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#E81F89',
   },
   createLeagueBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#E81F89',
     padding: 12,
     borderRadius: 10,
-    marginBottom: 16,
+    marginVertical: 16,
+    flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   createLeagueText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: 'bold',
-  },
-  filterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  filterOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1F1F1F',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  filterText: {
-    color: '#fff',
-    marginLeft: 6,
+    fontWeight: '600',
   },
   card: {
-    backgroundColor: '#1F1F1F',
-    borderRadius: 12,
+    backgroundColor: '#f9f9f9',
     padding: 16,
     marginBottom: 12,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -182,45 +209,41 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardTitle: {
-    marginLeft: 10,
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
+    marginLeft: 8,
+    color: '#333',
   },
   cardDetail: {
-    color: '#AAAAAA',
     fontSize: 14,
-    marginTop: 4,
+    color: '#555',
+    marginBottom: 2,
   },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: '#121212',
-  },
-  errorText: {
-    color: '#FF5C5C',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 10,
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginVertical: 12,
+    color: '#E81F89',
   },
   emptyText: {
-    color: '#CCCCCC',
+    fontStyle: 'italic',
+    color: '#888',
+    marginBottom: 16,
+  },
+  errorText: {
+    color: 'red',
     fontSize: 16,
-    textAlign: 'center',
-    marginTop: 20,
+    marginBottom: 12,
   },
   retryButton: {
-    marginTop: 12,
     backgroundColor: '#E81F89',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    padding: 10,
     borderRadius: 8,
   },
   retryText: {
-    color: '#FFFFFF',
+    color: '#fff',
     fontWeight: 'bold',
   },
 });
 
+export default HomeScreen;
