@@ -87,3 +87,24 @@ def joined_leagues(request):
     leagues = League.objects.filter(participants=request.user).exclude(created_by=request.user)
     serializer = LeagueSerializer(leagues, many=True)
     return Response(serializer.data)
+
+
+# 🔥 NEW: Update League View
+@api_view(['PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def update_league(request, league_id):
+    try:
+        league = League.objects.get(id=league_id)
+
+        # Ensure only the creator can update the league
+        if league.created_by != request.user:
+            return Response({'detail': 'You do not have permission to edit this league.'}, status=403)
+
+        serializer = LeagueSerializer(league, data=request.data)
+        if serializer.is_valid():
+            serializer.save()  # created_by remains unchanged
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    except League.DoesNotExist:
+        return Response({'detail': 'League not found.'}, status=404)
