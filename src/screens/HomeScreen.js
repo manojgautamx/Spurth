@@ -23,22 +23,33 @@ const HomeScreen = () => {
   const [error, setError] = useState('');
   const navigation = useNavigation();
   const axios = useAxios();
-  const { logout } = useContext(AuthContext);
+  const { logout, user } = useContext(AuthContext);
 
   const fetchLeagues = async () => {
     try {
       setLoading(true);
-      
-      // <-- Modified: Fetch both my leagues and other leagues
+
       const [myResponse, otherResponse, joinedResponse] = await Promise.all([
         axios.get('http://10.0.2.2:8000/api/my-leagues/'),
         axios.get('http://10.0.2.2:8000/api/public-leagues/'),
         axios.get('http://10.0.2.2:8000/api/joined-leagues/'),
       ]);
 
-      setMyLeagues(myResponse.data);
-      setOtherLeagues(otherResponse.data); // <-- Save other leagues
-      setJoinedLeagues(joinedResponse.data); // <-- Set joined leagues
+      const myLeaguesData = myResponse.data;
+      const joinedLeaguesData = joinedResponse.data;
+
+      // Extract the IDs of joined leagues for exclusion
+      const joinedLeagueIds = joinedLeaguesData.map((league) => league.id);
+
+      // Filter otherLeagues to exclude joined leagues
+      const filteredOtherLeagues = otherResponse.data.filter(
+        (league) => !joinedLeagueIds.includes(league.id)
+      );
+
+      setMyLeagues(myLeaguesData);
+      setJoinedLeagues(joinedLeaguesData);
+      setOtherLeagues(filteredOtherLeagues);
+
     } catch (err) {
       console.error('Error fetching leagues:', err);
       setError(err.response?.data?.detail || 'Failed to fetch leagues');
@@ -47,6 +58,7 @@ const HomeScreen = () => {
     }
   };
 
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', fetchLeagues); // refresh when screen is focused
     return unsubscribe;
@@ -54,8 +66,22 @@ const HomeScreen = () => {
 
   const renderLeagueCard = ({ item }) => (
     <TouchableOpacity
-      onPress={() => navigation.navigate('LeagueDescription', { league: item })}
-      style={styles.card}
+        onPress={() => {
+          console.log("User Object:", user);  // Full user object
+          console.log("User Username:", user?.username);  // Extracted username
+
+          console.log("League Object:", item);  // Full league object
+          console.log("Created By Object:", item.created_by);  // Full created_by object
+          console.log("Created By Username:", item.created_by?.username);  // Extracted username
+
+          const targetScreen = user?.username === item.created_by?.username ? 'LeagueOwnerScreen' : 'LeagueViewerScreen';
+          console.log("Navigating to:", targetScreen);
+
+          navigation.navigate(targetScreen, { league: item });
+        }}
+
+
+
     >
       <View style={styles.cardHeader}>
         <Ionicons name="trophy" size={24} color="#E81F89" />
@@ -67,7 +93,7 @@ const HomeScreen = () => {
       <Text style={styles.cardDetail}>🎮 League Type: {item.league_type}</Text>
       <Text style={styles.cardDetail}>👥 Max Players: {item.max_players}</Text>
       <Text style={styles.cardDetail}>💰 Price: ₹{item.price}</Text>
-      <Text style={styles.cardDetail}>Created by {item.created_by}</Text>
+      <Text style={styles.cardDetail}>Created by {item.created_by?.username}</Text>
     </TouchableOpacity>
   );
 

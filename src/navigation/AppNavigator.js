@@ -10,7 +10,8 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
-import LeagueDescriptionScreen from '../screens/LeagueDescriptionScreen';
+import LeagueOwnerScreen from '../screens/LeagueOwnerScreen';
+import LeagueViewerScreen from '../screens/LeagueViewerScreen';
 import EditLeagueScreen from '../screens/EditLeagueScreen';
 
 const Stack = createNativeStackNavigator();
@@ -33,8 +34,9 @@ export default function AppNavigator() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="CreateLeague" component={CreateLeagueScreen} />
           <Stack.Screen name="MapPicker" component={MapPickerScreen} />
-          <Stack.Screen name="LeagueDescription" component={LeagueDescriptionScreen} />
           <Stack.Screen name="EditLeague" component={EditLeagueScreen} />
+          <Stack.Screen name="LeagueOwnerScreen" component={LeagueOwnerScreen} />
+          <Stack.Screen name="LeagueViewerScreen" component={LeagueViewerScreen} />
         </>
       ) : (
         <>
