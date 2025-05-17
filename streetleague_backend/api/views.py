@@ -5,12 +5,15 @@ from rest_framework.views import APIView
 from rest_framework import status, permissions
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from rest_framework.parsers import MultiPartParser, FormParser
+import json
+
 
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import LeagueSerializer
-from .models import League
+from .serializers import LeagueSerializer, UserProfileSerializer
+from .models import League, UserProfile
 
 # User Registration View
 @api_view(['POST'])
@@ -45,11 +48,13 @@ class CreateLeagueView(APIView):
         serializer = LeagueSerializer(data=request.data)
 
         if serializer.is_valid():
-            # Set `created_by` explicitly here
             serializer.save(created_by=request.user)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+        # Print detailed errors for debugging
+        print("Validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 # List My Leagues View
@@ -60,17 +65,6 @@ class MyLeaguesView(APIView):
         leagues = League.objects.filter(created_by=request.user)
         serializer = LeagueSerializer(leagues, many=True)
         return Response(serializer.data)
-
-
-# # List Public Leagues View
-# class PublicLeaguesView(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def get(self, request):
-#         leagues = League.objects.exclude(created_by=request.user)
-#         serializer = LeagueSerializer(leagues, many=True)
-#         return Response(serializer.data)
-
 
 # List Public Leagues View
 class PublicLeaguesView(APIView):
@@ -141,3 +135,94 @@ def update_league(request, league_id):
 
     except League.DoesNotExist:
         return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class UserProfileCreateView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        user = request.user
+
+        # Get or create the user profile
+        profile, created = UserProfile.objects.get_or_create(user=user)
+
+        data = request.data.copy()
+
+        # Decode favorite_sports JSON string if necessary
+        favorite_sports = request.data.getlist('favorite_sports')
+        if favorite_sports:
+            data['favorite_sports'] = ','.join(favorite_sports)
+
+
+        # Create the serializer with the current profile instance (for update)
+        serializer = UserProfileSerializer(profile, data=data, partial=True)
+
+        if serializer.is_valid():
+            serializer.save(user=user)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def get(self, request):
+        user = request.user
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            return Response({'detail': 'Profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = UserProfileSerializer(profile)
+        return Response(serializer.data)
+
+class ProfileStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        profile = getattr(user, 'profile', None)  # assuming OneToOneField to a Profile model
+        if not profile:
+            return Response({'profile_complete': False})
+
+        required_fields = [profile.gender, profile.birth_date, profile.avatar]
+        is_complete = all(required_fields)
+        return Response({'profile_complete': is_complete})
+    
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def view_user_profile(request, user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        if not hasattr(user, 'profile'):
+            return Response({'detail': 'Profile not found for this user.'}, status=404)
+        serializer = UserProfileSerializer(user.profile)
+        return Response(serializer.data)
+    except User.DoesNotExist:
+        return Response({'detail': 'User not found.'}, status=404)
+
+# class UpdateProfileView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def put(self, request):
+#         profile = request.user.profile
+#         serializer = ProfileSerializer(profile, data=request.data, partial=True)
+#         if serializer.is_valid():
+#             serializer.save()
+#             return Response(serializer.data)
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
+class UpdateProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        return self.update_profile(request, partial=False)
+
+    def patch(self, request):
+        return self.update_profile(request, partial=True)
+
+    def update_profile(self, request, partial):
+        profile = request.user.profile
+        serializer = UserProfileSerializer(profile, data=request.data, partial=partial)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
