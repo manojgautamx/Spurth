@@ -79,9 +79,6 @@ const HomeScreen = () => {
 
           navigation.navigate(targetScreen, { league: item });
         }}
-
-
-
     >
       <View style={styles.cardHeader}>
         <Ionicons name="trophy" size={24} color="#E81F89" />
@@ -127,6 +124,13 @@ const HomeScreen = () => {
 
       {/* <-- Wrapped main content in ScrollView */}
       <ScrollView style={styles.container}>
+        <TouchableOpacity
+        style={styles.profileButton}
+        onPress={() => navigation.navigate('ProfileView')}
+      >
+        <Text style={styles.profileButtonText}>View Profile</Text>
+      </TouchableOpacity>
+      
         <TouchableOpacity
           onPress={() => navigation.navigate('CreateLeague')}
           style={styles.createLeagueBtn}

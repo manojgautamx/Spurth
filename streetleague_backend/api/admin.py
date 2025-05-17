@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import League
+from .models import League, UserProfile
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -19,3 +19,16 @@ class LeagueAdmin(admin.ModelAdmin):
 
 
 admin.site.register(League, LeagueAdmin)
+
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ['user', 'get_leagues_created', 'get_leagues_joined']
+
+    def get_leagues_created(self, obj):
+        return obj.user.created_leagues.count()
+    get_leagues_created.short_description = 'Leagues Created'
+
+    def get_leagues_joined(self, obj):
+        return obj.user.joined_leagues.exclude(created_by=obj.user).count()
+    get_leagues_joined.short_description = 'Leagues Joined'
+
+admin.site.register(UserProfile, UserProfileAdmin)
