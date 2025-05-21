@@ -115,6 +115,7 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={{ flex: 1, paddingTop: 46, backgroundColor: '#000' }}>
+      <Navbar />
       <View style={styles.headerRow}>
         <Text style={styles.headerText}>StreetLeague</Text>
         <TouchableOpacity onPress={logout}>
