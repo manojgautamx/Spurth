@@ -19,23 +19,47 @@ import axiosInstance from '../utils/axiosInstance';
 const { height } = Dimensions.get('window');
 
 const CreateLeagueScreen = ({ navigation, route }) => {
-  const [location, setLocation] = useState('');
-  const [latitude, setLatitude] = useState(null);
-  const [longitude, setLongitude] = useState(null);
-  const [sport, setSport] = useState('');
-  const [leagueName, setLeagueName] = useState('');
-  const [description, setDescription] = useState('');
-  const [isCasual, setIsCasual] = useState(true);
+
+  // 🔥 Detect Edit Mode
+  const editingLeague = route?.params?.league || null;
+  const isEditing = !!editingLeague;
+
+  // 🔥 Pre-fill fields if editing
+  const [location, setLocation] = useState(editingLeague?.location || '');
+  const [latitude, setLatitude] = useState(editingLeague?.latitude || null);
+  const [longitude, setLongitude] = useState(editingLeague?.longitude || null);
+  const [sport, setSport] = useState(editingLeague?.sport || '');
+  const [leagueName, setLeagueName] = useState(editingLeague?.name || '');
+  const [description, setDescription] = useState(editingLeague?.description || '');
+  const [isCasual, setIsCasual] = useState(
+    editingLeague?.league_type === 'competitive' ? false : true
+  );
+  const [maxPlayers, setMaxPlayers] = useState(
+    editingLeague?.max_players?.toString() || ''
+  );
+  const [price, setPrice] = useState(
+    editingLeague?.price === 0 ? 'Free' : editingLeague?.price?.toString() || 'Free'
+  );
+
+  // 🔥 Format existing datetime
+  const initialDate = editingLeague?.date_time
+    ? editingLeague.date_time.split('T')[0]
+    : '';
+  const initialTime = editingLeague?.date_time
+    ? editingLeague.date_time.split('T')[1].slice(0, 5)
+    : '';
+
+  const [date, setDate] = useState(initialDate);
+  const [time, setTime] = useState(initialTime);
+
+  // Others
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [isTimePickerVisible, setTimePickerVisibility] = useState(false);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState('');
-  const [price, setPrice] = useState('Free');
 
+  // Autocomplete suggestions
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (location.length < 3) {
@@ -45,7 +69,9 @@ const CreateLeagueScreen = ({ navigation, route }) => {
 
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            location
+          )}`
         );
         const data = await res.json();
         setSuggestions(data);
@@ -75,15 +101,16 @@ const CreateLeagueScreen = ({ navigation, route }) => {
     setSuggestions([]);
   };
 
-  const onCreate = async () => {
+  // 🔥 CREATE or UPDATE handler
+  const handleSubmit = async () => {
     if (!leagueName || !location || !sport || !date || !time || !maxPlayers) {
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
       return;
     }
-  
+
     setLoading(true);
     setError('');
-  
+
     const payload = {
       name: leagueName,
       description,
@@ -96,26 +123,35 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       max_players: parseInt(maxPlayers),
       price: price.trim().toLowerCase() === 'free' ? 0 : parseFloat(price),
     };
-  
+
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-  
-      await axiosInstance.post('http://10.0.2.2:8000/api/create-league/', payload);
-  
-      Alert.alert('Success', 'League created successfully!');
+      if (isEditing) {
+        // 🔥 UPDATE API
+        await axiosInstance.put(
+          `http://10.0.2.2:8000/api/update-league/${editingLeague.id}/`,
+          payload
+        );
+        Alert.alert("Success", "League updated!");
+      } else {
+        // 🔥 CREATE API
+        await axiosInstance.post('http://10.0.2.2:8000/api/create-league/', payload);
+        Alert.alert("Success", "League created successfully!");
+      }
+
       navigation.navigate('Home', { refresh: true });
     } catch (err) {
-      console.error('Create league error:', err.message);
-      setError('Failed to create league.');
+      console.error('League error:', err);
+      setError('Failed to save league.');
     } finally {
       setLoading(false);
     }
   };
-  
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>Create a League</Text>
+      <Text style={styles.header}>
+        {isEditing ? "Edit League" : "Create a League"}
+      </Text>
 
       {/* Location Input */}
       <Text style={styles.label}>Where are you hosting?</Text>
@@ -126,6 +162,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         placeholder="Location"
         placeholderTextColor="#888"
       />
+
       {suggestions.map((item, index) => (
         <TouchableOpacity
           key={index}
@@ -135,7 +172,11 @@ const CreateLeagueScreen = ({ navigation, route }) => {
           <Text style={{ color: '#fff' }}>{item.display_name}</Text>
         </TouchableOpacity>
       ))}
-      <TouchableOpacity style={styles.mapBtn} onPress={() => navigation.navigate('MapPicker')}>
+
+      <TouchableOpacity
+        style={styles.mapBtn}
+        onPress={() => navigation.navigate('MapPicker')}
+      >
         <Text style={styles.mapBtnText}>Choose on Map</Text>
       </TouchableOpacity>
 
@@ -154,7 +195,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
                   L.marker([${latitude}, ${longitude}]).addTo(map);
                 </script>
               </body></html>
-            `
+            `,
           }}
           style={{ height: 150, marginTop: 10, borderRadius: 10 }}
           scrollEnabled={false}
@@ -174,11 +215,18 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       {/* Date & Time */}
       <Text style={styles.label}>Time & Date</Text>
       <View style={styles.row}>
-        <TouchableOpacity style={styles.dateBtn} onPress={() => setDatePickerVisibility(true)}>
+        <TouchableOpacity
+          style={styles.dateBtn}
+          onPress={() => setDatePickerVisibility(true)}
+        >
           <Icon name="calendar-outline" size={20} color="#fff" />
           <Text style={styles.dateText}>{date || 'Select Date'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.dateBtn} onPress={() => setTimePickerVisibility(true)}>
+
+        <TouchableOpacity
+          style={styles.dateBtn}
+          onPress={() => setTimePickerVisibility(true)}
+        >
           <Icon name="time-outline" size={20} color="#fff" />
           <Text style={styles.dateText}>{time || 'Select Time'}</Text>
         </TouchableOpacity>
@@ -196,8 +244,13 @@ const CreateLeagueScreen = ({ navigation, route }) => {
 
       {/* Casual/Competitive Toggle */}
       <Text style={styles.label}>Casual or Competitive</Text>
-      <TouchableOpacity style={styles.casualBtn} onPress={() => setIsCasual(!isCasual)}>
-        <Text style={styles.casualText}>{isCasual ? '⚪ Casual' : '🏆 Competitive'}</Text>
+      <TouchableOpacity
+        style={styles.casualBtn}
+        onPress={() => setIsCasual(!isCasual)}
+      >
+        <Text style={styles.casualText}>
+          {isCasual ? '⚪ Casual' : '🏆 Competitive'}
+        </Text>
         <Icon name="chevron-forward-outline" size={20} color="#fff" />
       </TouchableOpacity>
 
@@ -218,7 +271,7 @@ const CreateLeagueScreen = ({ navigation, route }) => {
         style={styles.input}
         value={price}
         onChangeText={setPrice}
-        placeholder="Free or a price in numbers"
+        placeholder="Free or amount"
         placeholderTextColor="#888"
       />
 
@@ -237,27 +290,36 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {/* Submit Button */}
-      <TouchableOpacity style={styles.createBtn} onPress={onCreate} disabled={loading}>
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.createText}>CREATE</Text>}
+      <TouchableOpacity
+        style={styles.createBtn}
+        onPress={handleSubmit}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.createText}>
+            {isEditing ? "SAVE CHANGES" : "CREATE"}
+          </Text>
+        )}
       </TouchableOpacity>
 
-      {/* Date/Time Pickers */}
+      {/* Date & Time Pickers */}
       <DateTimePickerModal
         isVisible={isDatePickerVisible}
         mode="date"
         onConfirm={(selectedDate) => {
-          const formatted = selectedDate.toISOString().split('T')[0];
-          setDate(formatted);
+          setDate(selectedDate.toISOString().split('T')[0]);
           setDatePickerVisibility(false);
         }}
         onCancel={() => setDatePickerVisibility(false)}
       />
+
       <DateTimePickerModal
         isVisible={isTimePickerVisible}
         mode="time"
         onConfirm={(selectedTime) => {
-          const formatted = selectedTime.toTimeString().slice(0, 5);
-          setTime(formatted);
+          setTime(selectedTime.toTimeString().slice(0, 5));
           setTimePickerVisibility(false);
         }}
         onCancel={() => setTimePickerVisibility(false)}

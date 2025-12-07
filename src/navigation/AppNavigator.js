@@ -13,10 +13,10 @@ import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
 import LeagueOwnerScreen from '../screens/LeagueOwnerScreen';
 import LeagueViewerScreen from '../screens/LeagueViewerScreen';
-import EditLeagueScreen from '../screens/EditLeagueScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
+import LeagueChatScreen from '../screens/LeagueChatScreen';
 
 export const ProfileStatusContext = createContext(); // ✅ Expose context
 
@@ -68,11 +68,11 @@ export default function AppNavigator() {
               <Stack.Screen name="Home" component={HomeScreen} />
               <Stack.Screen name="CreateLeague" component={CreateLeagueScreen} />
               <Stack.Screen name="MapPicker" component={MapPickerScreen} />
-              <Stack.Screen name="EditLeague" component={EditLeagueScreen} />
               <Stack.Screen name="LeagueOwnerScreen" component={LeagueOwnerScreen} />
               <Stack.Screen name="LeagueViewerScreen" component={LeagueViewerScreen} />
               <Stack.Screen name="ProfileView" component={ProfileViewScreen} />
               <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
+              <Stack.Screen name="LeagueChatScreen" component={LeagueChatScreen} />
             </>
           ) : (
             <Stack.Screen name="Profile" component={ProfileScreen} />
