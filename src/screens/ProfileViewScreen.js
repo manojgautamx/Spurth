@@ -1,10 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
+import React, { useEffect, useState, useCallback, useContext } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+} from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
 import { Button } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { useFocusEffect } from '@react-navigation/native';
-import { useCallback } from 'react';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { AuthContext } from '../context/AuthContext';
 
 const BASE_URL = 'http://10.0.2.2:8000';
 
@@ -12,7 +20,7 @@ export default function ProfileViewScreen() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigation = useNavigation();
-
+  const { logout } = useContext(AuthContext);
 
   useFocusEffect(
     useCallback(() => {
@@ -40,6 +48,20 @@ export default function ProfileViewScreen() {
     }, [])
   );
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: logout,
+        },
+      ]
+    );
+  };
 
   if (loading) {
     return (
@@ -57,7 +79,7 @@ export default function ProfileViewScreen() {
     );
   }
 
-   const getAvatarUri = () => {
+  const getAvatarUri = () => {
     if (!profile.avatar) return null;
     return profile.avatar.startsWith('http')
       ? profile.avatar
@@ -73,17 +95,32 @@ export default function ProfileViewScreen() {
           <Text style={styles.placeholderText}>No Avatar</Text>
         </View>
       )}
-      
-      <Button title="Edit Profile" onPress={() => navigation.navigate('ProfileEdit', { profile })} />
+
+      <Button
+        title="Edit Profile"
+        onPress={() => navigation.navigate('ProfileEdit', { profile })}
+      />
+
       <Text style={styles.name}>{profile.full_name || 'No Name'}</Text>
-      <Text style={styles.label}><Text style={styles.value}>{profile.username}</Text></Text>
-      <Text style={styles.label}>Age: <Text style={styles.value}>{profile.age}</Text></Text>
-      <Text style={styles.label}>Gender: <Text style={styles.value}>{profile.gender}</Text></Text>
-      <Text style={styles.label}>Birth Date: <Text style={styles.value}>{profile.birth_date}</Text></Text>
-      <Text style={styles.label}>Bio: <Text style={styles.value}>{profile.bio || '—'}</Text></Text>
+      <Text style={styles.label}>
+        Username: <Text style={styles.value}>{profile.username}</Text>
+      </Text>
+      <Text style={styles.label}>
+        Age: <Text style={styles.value}>{profile.age}</Text>
+      </Text>
+      <Text style={styles.label}>
+        Gender: <Text style={styles.value}>{profile.gender}</Text>
+      </Text>
+      <Text style={styles.label}>
+        Birth Date: <Text style={styles.value}>{profile.birth_date}</Text>
+      </Text>
+      <Text style={styles.label}>
+        Bio: <Text style={styles.value}>{profile.bio || '—'}</Text>
+      </Text>
+
       <Text style={styles.label}>Favorite Sports:</Text>
       <View style={styles.chipContainer}>
-        {profile.favorite_sports.length > 0 ? (
+        {profile.favorite_sports?.length > 0 ? (
           profile.favorite_sports.map((sport) => (
             <View key={sport} style={styles.chip}>
               <Text style={styles.chipText}>{sport}</Text>
@@ -94,8 +131,23 @@ export default function ProfileViewScreen() {
         )}
       </View>
 
-      <Text style={styles.stat}>Leagues Created: <Text style={styles.statNumber}>{profile.leagues_created}</Text></Text>
-      <Text style={styles.stat}>Leagues Joined: <Text style={styles.statNumber}>{profile.leagues_joined}</Text></Text>
+      <Text style={styles.stat}>
+        Leagues Created:{' '}
+        <Text style={styles.statNumber}>{profile.leagues_created}</Text>
+      </Text>
+      <Text style={styles.stat}>
+        Leagues Joined:{' '}
+        <Text style={styles.statNumber}>{profile.leagues_joined}</Text>
+      </Text>
+
+      {/* LOGOUT BUTTON */}
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.logoutText}>Logout</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -104,7 +156,7 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     padding: 20,
-    paddingBottom: 60,
+    paddingBottom: 80,
   },
   centered: {
     flex: 1,
@@ -162,5 +214,17 @@ const styles = StyleSheet.create({
   },
   statNumber: {
     color: '#E81F89',
+  },
+  logoutButton: {
+    marginTop: 40,
+    backgroundColor: '#E81F89',
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+  },
+  logoutText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

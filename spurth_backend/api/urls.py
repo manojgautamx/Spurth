@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import register, CreateLeagueView, MyLeaguesView, PublicLeaguesView, join_league, joined_leagues, update_league, leave_league, league_status, delete_league, can_enter_chat, UserProfileCreateView, ProfileStatusView, UpdateProfileView
+from .views import register, CreateLeagueView, MyLeaguesView, PublicLeaguesView, join_league, joined_leagues, update_league, leave_league, league_status, delete_league, can_enter_chat, me, UserProfileCreateView, ProfileStatusView, UpdateProfileView
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -24,5 +24,6 @@ urlpatterns = [
     path('league-status/<int:league_id>/', league_status, name='league-status'),
     path('delete-league/<int:league_id>/', delete_league, name='delete-league'),
     path('can-enter-chat/<int:league_id>/', can_enter_chat, name='can-enter-chat'),
+    path('me/', me),
 ]
 
