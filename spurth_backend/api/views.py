@@ -282,6 +282,17 @@ def view_user_profile(request, user_id):
 #             serializer.save()
 #             return Response(serializer.data)
 #         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# views.py
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me(request):
+    return Response({
+        "id": request.user.id,
+        "username": request.user.username
+    })
+
     
 
 

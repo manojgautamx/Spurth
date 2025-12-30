@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "803651203796",
+    "project_id": "spurth-chat",
+    "storage_bucket": "spurth-chat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:803651203796:android:23d7987b6839e182490141",
+        "android_client_info": {
+          "package_name": "com.streetleague"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBSAHPrUCxWcNcFS2X3M1uORRgm1nV7mDc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
