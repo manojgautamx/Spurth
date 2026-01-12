@@ -116,6 +116,9 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    implementation "com.google.android.gms:play-services-location:21.0.1"
+
 }
 
 apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"

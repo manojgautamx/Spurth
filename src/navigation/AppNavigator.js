@@ -15,7 +15,7 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import NotificationScreen from '../screens/NotificationScreen';
-import ChatScreen from '../screens/ChatScreen';
+import ChatScreen from '../screens/ChatListScreen';
 import CreateLeagueScreen from '../screens/CreateLeagueScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
 import LeagueOwnerScreen from '../screens/LeagueOwnerScreen';
@@ -24,6 +24,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import LeagueChatScreen from '../screens/LeagueChatScreen';
+import ParticipantsListScreen from '../screens/ParticipantsListScreen';
 
 export const ProfileStatusContext = createContext();
 
@@ -141,6 +142,7 @@ export default function AppNavigator() {
               <Stack.Screen name="ProfileView" component={ProfileViewScreen} />
               <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
               <Stack.Screen name="LeagueChatScreen" component={LeagueChatScreen} />
+              <Stack.Screen name="ParticipantsList" component={ParticipantsListScreen} options={{ headerShown: false }} />
             </>
           ) : (
             <Stack.Screen name="Profile" component={ProfileScreen} />

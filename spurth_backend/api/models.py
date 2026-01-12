@@ -37,22 +37,30 @@ class League(models.Model):
 
     # ✅ Optional: check if league is full
     def is_full(self):
-        return self.max_players > 0 and self.participants.count() >= self.max_players
+        return self.max_players > 0 and self.participant_count() >= self.max_players
     
     def has_joined(self, user):
         """Check if a specific user has joined the league."""
         return self.participants.filter(id=user.id).exists()
 
     def join(self, user):
-        """Add a user as a participant."""
-        if not self.is_full():
-            self.participants.add(user)
-            return True
-        return False
+        if self.is_full():
+            return False
+
+        if self.participants.filter(id=user.id).exists():
+            return False
+
+        self.participants.add(user)
+        return True
+
 
     def leave(self, user):
         """Remove a user from the league."""
         self.participants.remove(user)
+    
+    def participant_count(self):
+        return self.participants.count() + 1 
+
 
 
 class UserProfile(models.Model):
