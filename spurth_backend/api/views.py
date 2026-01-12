@@ -6,13 +6,14 @@ from rest_framework import status, permissions
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.generics import ListAPIView
 import json
 
 
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import LeagueSerializer, UserProfileSerializer
+from .serializers import LeagueSerializer, UserProfileSerializer, PublicUserSerializer
 from .models import League, UserProfile
 
 # User Registration View
@@ -92,18 +93,32 @@ def join_league(request, league_id):
     try:
         league = League.objects.get(id=league_id)
 
-        if request.user in league.participants.all():
-            return Response({'detail': 'You already joined this league.'}, status=status.HTTP_400_BAD_REQUEST)
+        if league.created_by == request.user:
+            return Response(
+                {'detail': 'Creator is already part of the league.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if league.is_full():
+            return Response(
+                {'detail': 'League is full.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if league.participants.filter(id=request.user.id).exists():
+            return Response(
+                {'detail': 'You already joined this league.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         league.participants.add(request.user)
-        league.save()
 
-        # Return the full league data with nested `created_by` structure
         serializer = LeagueSerializer(league, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     except League.DoesNotExist:
         return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
+
     
 # Leave League View
 @api_view(['POST'])
@@ -295,7 +310,6 @@ def me(request):
 
     
 
-
 class UpdateProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -312,3 +326,23 @@ class UpdateProfileView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PublicUserSearchView(ListAPIView):
+    serializer_class = PublicUserSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        query = self.request.query_params.get('search', '')
+        if len(query) < 3:
+            return User.objects.none()
+
+        return User.objects.filter(
+            Q(username__icontains=query) |
+            Q(profile__full_name__icontains=query)
+        ).select_related('profile')[:10]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context

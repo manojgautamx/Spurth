@@ -20,8 +20,8 @@ import axiosInstance from '../utils/axiosInstance';
 import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import { Fonts } from '../theme/fonts';
-import { getSportIcon } from '../utils/sportIcons';
-import { getSportImage } from '../utils/getSportImage';
+import LeagueCard from '../components/LeagueCard';
+
 
 
 const BASE_URL = 'http://10.0.2.2:8000';
@@ -99,76 +99,6 @@ const HomeScreen = () => {
       ? profile.avatar
       : `${BASE_URL}${profile.avatar}`;
   };
-
-  const renderLeagueCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() =>
-        navigation.navigate(
-          user?.username === item.created_by?.username
-            ? 'LeagueOwnerScreen'
-            : 'LeagueViewerScreen',
-          { league: item }
-        )
-      }
-    >
-      <Image
-        source={{ uri: getSportImage(item.sport) }}
-        style={styles.cardImage}
-      />
-
-
-      <View style={styles.cardContent}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={styles.cardTitle}>{item.name}</Text>
-          <Ionicons
-            name="information-circle-outline"
-            size={18}
-            color="#999"
-          />
-        </View>
-
-        <View style={styles.infoGrid}>
-          <View style={styles.infoItem}>
-            {getSportIcon(item.sport, 16, '#ccc')}
-            <Text style={styles.infoText}>{item.sport}</Text>
-          </View>
-
-          <View style={styles.infoItem}>
-            <Ionicons name="location-sharp" size={16} color="#ccc" />
-            <Text style={styles.infoText} numberOfLines={1}>
-              {item.location}
-            </Text>
-          </View>
-
-          <View style={styles.infoItem}>
-            <Ionicons name="calendar-outline" size={16} color="#ccc" />
-            <Text style={styles.infoText}>{item.date_time}</Text>
-          </View>
-
-          <View style={styles.infoItem}>
-            <Ionicons name="people-outline" size={16} color="#ccc" />
-            <Text style={styles.infoText}>{item.league_type}</Text>
-          </View>
-        </View>
-
-        <View style={styles.joinedRow}>
-          <View style={styles.avatarStack}>
-            <View style={[styles.avatar, { backgroundColor: '#555' }]} />
-            <View
-              style={[
-                styles.avatar,
-                { backgroundColor: '#777', marginLeft: -10 },
-              ]}
-            />
-          </View>
-          <Text style={styles.joinedText}>
-            1/{item.max_players} Joined
-          </Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
 
   if (loading) {
     return (
@@ -278,13 +208,14 @@ const HomeScreen = () => {
         <FlatList
           data={getActiveData()}
           keyExtractor={item => item.id.toString()}
-          renderItem={renderLeagueCard}
+          renderItem={({ item }) => <LeagueCard league={item} />}
           scrollEnabled={false}
           ListEmptyComponent={
             <Text style={styles.emptyText}>No leagues found.</Text>
           }
           contentContainerStyle={{ paddingBottom: 100 }}
         />
+
       </ScrollView>
     </SafeAreaView>
   );

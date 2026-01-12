@@ -40,7 +40,7 @@ const LeagueOwnerScreen = ({ route, navigation }) => {
         <Text style={styles.buttonText}>Edit League</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-        <Text style={styles.buttonText}>Delete League</Text>
+        <Text style={styles.buttonText}>Delete League fuck you </Text>
       </TouchableOpacity>
     </ScrollView>
   );
