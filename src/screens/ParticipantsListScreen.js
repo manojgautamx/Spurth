@@ -1,49 +1,99 @@
-import React from 'react';
-import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BASE_URL = 'http://10.0.2.2:8000';
 
 const ParticipantsListScreen = ({ route, navigation }) => {
-  // Get data passed from the previous screen
-  const { participants = [], leagueName } = route.params;
+  const { participants: initialParticipants = [], leagueName, isOwner = false, leagueId } = route.params;
 
-  // Helper to resolve avatar (same logic as your viewer)
+  // Local state so list updates instantly after removal
+  const [participants, setParticipants] = useState(initialParticipants);
+
   const getAvatarSource = (avatarPath) => {
     if (!avatarPath) return require('../assets/avatar-placeholder.png');
     if (avatarPath.startsWith('http')) return { uri: avatarPath };
     return { uri: `${BASE_URL}${avatarPath}` };
   };
 
+  const handleRemove = (item) => {
+    Alert.alert(
+      'Remove Participant',
+      `Remove @${item.username} from ${leagueName}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const token = await AsyncStorage.getItem('accessToken');
+              const res = await fetch(
+                `${BASE_URL}/api/remove-participant/${leagueId}/${item.id}/`,
+                {
+                  method: 'DELETE',
+                  headers: { Authorization: `Bearer ${token}` },
+                }
+              );
+              if (res.status === 204) {
+                // Remove from local list immediately
+                setParticipants(prev => prev.filter(p => p.id !== item.id));
+              } else {
+                Alert.alert('Error', 'Failed to remove participant.');
+              }
+            } catch (err) {
+              console.warn('Remove participant failed', err);
+              Alert.alert('Error', 'Something went wrong.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderItem = ({ item }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.userCard}
       onPress={() => navigation.navigate('ProfileView', { userId: item.id })}
+      activeOpacity={0.75}
     >
-      <Image 
-        source={getAvatarSource(item.avatar)} 
-        style={styles.avatar} 
+      <Image
+        source={getAvatarSource(item.avatar)}
+        style={styles.avatar}
       />
       <View style={styles.userInfo}>
         <Text style={styles.username}>@{item.username}</Text>
         <Text style={styles.fullName}>{item.full_name || item.username}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#555" />
+
+      {isOwner ? (
+        <TouchableOpacity
+          style={styles.removeBtn}
+          onPress={() => handleRemove(item)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="person-remove-outline" size={20} color="#FF453A" />
+        </TouchableOpacity>
+      ) : (
+        <Ionicons name="chevron-forward" size={20} color="#555" />
+      )}
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      {/* Custom Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+          <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Participants</Text>
-        <View style={{width: 24}} /> 
+        <View style={{ width: 24 }} />
       </View>
 
-      <Text style={styles.subHeader}>People joined in {leagueName}</Text>
+      <Text style={styles.subHeader}>
+        {participants.length} {participants.length === 1 ? 'person' : 'people'} joined in {leagueName}
+      </Text>
 
       <FlatList
         data={participants}
@@ -51,7 +101,7 @@ const ParticipantsListScreen = ({ route, navigation }) => {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-            <Text style={styles.emptyText}>No one has joined yet.</Text>
+          <Text style={styles.emptyText}>No one has joined yet.</Text>
         }
       />
     </View>
@@ -70,6 +120,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginBottom: 20,
+  },
+  backButton: {
+    padding: 4,
   },
   headerTitle: {
     color: '#fff',
@@ -113,12 +166,15 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12,
   },
+  removeBtn: {
+    padding: 4,
+  },
   emptyText: {
     color: '#777',
     textAlign: 'center',
     marginTop: 50,
     fontStyle: 'italic',
-  }
+  },
 });
 
 export default ParticipantsListScreen;

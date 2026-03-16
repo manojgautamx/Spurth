@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import League, UserProfile
+from .models import League, Post, UserProfile
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -32,3 +32,27 @@ class UserProfileAdmin(admin.ModelAdmin):
     get_leagues_joined.short_description = 'Leagues Joined'
 
 admin.site.register(UserProfile, UserProfileAdmin)
+
+
+@admin.register(Post)
+class PostAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'user',
+        'league',
+        'short_caption',
+        'image_preview',
+        'created_at',
+    )
+    search_fields = ('user__username', 'caption', 'league__name')
+    list_filter = ('league', 'created_at')
+
+    def short_caption(self, obj):
+        return obj.caption[:40] + ('...' if len(obj.caption) > 40 else '')
+    short_caption.short_description = 'Caption'
+
+    def image_preview(self, obj):
+        if obj.image:
+            return "📷 Yes"
+        return "—"
+    image_preview.short_description = 'Image'

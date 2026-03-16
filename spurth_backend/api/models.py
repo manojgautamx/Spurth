@@ -21,6 +21,12 @@ class League(models.Model):
     longitude = models.FloatField()
     date_time = models.DateTimeField()
     league_type = models.CharField(max_length=20, choices=LEAGUE_TYPE_CHOICES)
+    cover_image = models.ImageField(
+        upload_to="league_covers/",
+        null=True,
+        blank=True
+    )
+    is_cancelled = models.BooleanField(default=False)
 
     # 🔥 Optional fields for richer UX
     max_players = models.PositiveIntegerField(default=0)  # Max number of participants
@@ -87,3 +93,41 @@ class UserProfile(models.Model):
             return None
         today = date.today()
         return today.year - self.birth_date.year - ((today.month, today.day) < (self.birth_date.month, self.birth_date.day))
+
+# Feed
+
+class Post(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name='posts',
+        null=True,
+        blank=True
+    )
+    caption = models.TextField(blank=True)
+    image = models.ImageField(upload_to='posts/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class Like(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='likes')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')
+
+class Comment(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='comments')
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+

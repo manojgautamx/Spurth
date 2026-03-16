@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import League, UserProfile
+from .models import League, Post, UserProfile, Comment
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -47,9 +48,13 @@ class LeagueSerializer(serializers.ModelSerializer):
     is_owner = serializers.SerializerMethodField()
     participant_count = serializers.SerializerMethodField()
     is_full = serializers.SerializerMethodField()
+    date_time = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S")
+    is_concluded = serializers.SerializerMethodField()
     
     # 1. Add this new field
     participants = serializers.SerializerMethodField()
+    cover_image = serializers.ImageField(required=False)
+
 
     class Meta:
         model = League
@@ -57,7 +62,7 @@ class LeagueSerializer(serializers.ModelSerializer):
             'id', 'name', 'sport', 'location', 'latitude', 'longitude',
             'date_time', 'league_type', 'max_players', 'price',
             'created_by', 'description', 'is_owner', 'joined', 
-            'is_full', 'participant_count', 'participants' # 2. Don't forget to add it to fields tuple
+            'is_full', 'participant_count', 'participants', 'cover_image', 'is_concluded', 'is_cancelled'
         )
         read_only_fields = ('created_by',)
 
@@ -72,6 +77,11 @@ class LeagueSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return obj.created_by_id == request.user.id
         return False
+    
+    def get_is_concluded(self, obj):
+        if not obj.date_time:
+            return False
+        return obj.date_time < timezone.now()
     
     # def get_participant_count(self, obj):
     #     return obj.participants.count()
@@ -155,3 +165,72 @@ class UserProfileSerializer(serializers.ModelSerializer):
             validated_data['favorite_sports'] = ','.join(favorite_sports)
         return super().create(validated_data)
     
+# Feed Serializers
+
+class PostSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.username', read_only=True)
+    likes_count = serializers.IntegerField(read_only=True)
+    comments_count = serializers.IntegerField(read_only=True)
+    is_liked = serializers.SerializerMethodField()
+    league_name = serializers.CharField(source='league.name', read_only=True)
+    cover_image = serializers.ImageField(source='league.cover_image', read_only=True)
+    league_creator_id = serializers.IntegerField(source='league.created_by.id', read_only=True)
+    league_is_concluded = serializers.SerializerMethodField()
+    league_is_cancelled = serializers.BooleanField(source='league.is_cancelled', read_only=True)
+    user_avatar = serializers.ImageField(source='user.profile.avatar', read_only=True)
+
+    class Meta:
+        model = Post
+        fields = [
+            'id',
+            'user',
+            'user_name',
+            'user_avatar',
+            'league',
+            'league_name',
+            'league_creator_id',
+            'cover_image',
+            'caption',
+            'image',
+            'created_at',
+            'likes_count',
+            'comments_count',
+            'is_liked',
+            'is_host',
+            'league_is_concluded',
+            'league_is_cancelled',   # ← add this
+        ]
+
+        read_only_fields = ['user', 'created_at']
+
+    def get_is_liked(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.likes.filter(user=request.user).exists()
+        return False
+    
+    is_host = serializers.SerializerMethodField()
+    
+    def get_is_host(self, obj):
+        return obj.league and obj.user_id == obj.league.created_by_id
+    
+    def get_league_is_concluded(self, obj):
+        if not obj.league or not obj.league.date_time:
+            return False
+        return obj.league.date_time < timezone.now()
+
+class CommentSerializer(serializers.ModelSerializer):
+    user_name = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = [
+            'id',
+            'user',
+            'user_name',
+            'post',
+            'text',
+            'created_at'
+        ]
+
+        read_only_fields = ['user', 'post', 'created_at']  # ✅ add this
