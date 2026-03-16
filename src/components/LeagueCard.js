@@ -24,48 +24,59 @@ const LeagueCard = ({ league }) => {
 
   const isOwner = user?.username === league.created_by?.username;
 
-  const leagueType = (league.league_type || '').toLowerCase();
-  const isComp =
-    leagueType === 'competitive' ||
-    leagueType === 'comp' ||
-    leagueType === 'pro';
+  // const leagueType = (league.league_type || '').toLowerCase();
+  // const isComp =
+  //   leagueType === 'competitive' ||
+  //   leagueType === 'comp' ||
+  //   leagueType === 'pro';
 
-  // --- NEW LOGIC START ---
+  // -------------------------------
+  // COVER IMAGE LOGIC
+  // -------------------------------
+  const getCoverImageSource = () => {
+    if (league.cover_image) {
+      const uri = league.cover_image.startsWith('http')
+        ? league.cover_image
+        : `${BASE_URL}${league.cover_image}`;
 
-  // 1. Helper to construct image URI
+      return { uri };
+    }
+
+    // fallback to sport default image
+    return { uri: getSportImage(league.sport) };
+  };
+
+  // -------------------------------
+  // PARTICIPANT AVATAR STACK
+  // -------------------------------
   const getAvatarSource = (avatarPath) => {
     if (!avatarPath) {
-        // Return a placeholder image from assets or a default URL if needed
-        return { uri: 'https://via.placeholder.com/150' }; 
+      return { uri: 'https://via.placeholder.com/150' };
     }
+
     const uri = avatarPath.startsWith('http')
       ? avatarPath
       : `${BASE_URL}${avatarPath}`;
+
     return { uri };
   };
 
-  // 2. Logic to determine which avatars to show
   const displayedParticipants = useMemo(() => {
-    // Check if participants array exists, default to empty array
-    const participants = league.participants || []; 
+    const participants = league.participants || [];
     const count = participants.length;
 
     if (count === 0) return [];
 
-    if (count <= 3) {
-      // If 3 or fewer, show everyone
-      return participants;
-    } else {
-      // If more than 3, shuffle and pick 3 random ones
-      // We use [...participants] to create a copy before sorting to avoid mutating props
-      return [...participants]
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-    }
-  }, [league.participants]); // Recalculate only when participants change
+    if (count <= 3) return participants;
 
-  // --- NEW LOGIC END ---
+    return [...participants]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, 3);
+  }, [league.participants]);
 
+  // -------------------------------
+  // NAVIGATION
+  // -------------------------------
   const handlePress = () => {
     navigation.navigate(
       isOwner ? 'LeagueOwnerScreen' : 'LeagueViewerScreen',
@@ -77,7 +88,7 @@ const LeagueCard = ({ league }) => {
     <TouchableOpacity style={styles.card} onPress={handlePress}>
       <View style={styles.imageWrap}>
         <Image
-          source={{ uri: getSportImage(league.sport) }}
+          source={getCoverImageSource()}
           style={styles.cardImage}
         />
 
@@ -86,7 +97,7 @@ const LeagueCard = ({ league }) => {
           <Text style={styles.distanceText}>4 Km Away</Text>
         </View>
 
-        <View
+        {/* <View
           style={[
             styles.typeBadge,
             isComp ? styles.compBadge : styles.casualBadge,
@@ -101,7 +112,7 @@ const LeagueCard = ({ league }) => {
           <Text style={styles.badgeText}>
             {isComp ? 'Comp' : 'Casual'}
           </Text>
-        </View>
+        </View> */}
       </View>
 
       <View style={styles.cardContent}>
@@ -132,18 +143,15 @@ const LeagueCard = ({ league }) => {
         </View>
 
         <View style={styles.joinedRow}>
-          {/* Dynamic Avatar Stack */}
           <View style={styles.avatarStack}>
             {displayedParticipants.map((participant, index) => (
               <Image
-                key={participant.id || index} // Prefer a unique ID from DB
+                key={participant.id || index}
                 source={getAvatarSource(participant.avatar)}
                 style={[
                   styles.avatar,
-                  // Add negative margin to everyone except the first one
                   index > 0 && { marginLeft: -10 },
-                  // Add a zIndex to make sure the first one is on top (optional, or flip order)
-                  { zIndex: 3 - index } 
+                  { zIndex: 3 - index },
                 ]}
               />
             ))}
@@ -262,7 +270,6 @@ const styles = StyleSheet.create({
 
   avatarStack: {
     flexDirection: 'row',
-    // No specific width/height here, let it grow with content
   },
 
   avatar: {
@@ -271,7 +278,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 2,
     borderColor: '#121212',
-    backgroundColor: '#555', // Fallback color while image loads
+    backgroundColor: '#555',
   },
 
   joinedText: {

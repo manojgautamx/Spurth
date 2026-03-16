@@ -3,8 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 import { navigate } from '../navigation/navigationRef';
 
+const BASE_URL = 'http://10.0.2.2:8000/api/';
+
 const axiosInstance = axios.create({
-  baseURL: 'http://10.0.2.2:8000/api/',
+  baseURL: BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 // Request: Attach access token

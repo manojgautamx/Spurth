@@ -6,7 +6,6 @@ import {
 import { launchImageLibrary } from 'react-native-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import MultiSelect from 'react-native-multiple-select';
 import axiosInstance from '../utils/axiosInstance';
 
 const BASE_URL = 'http://10.0.2.2:8000';

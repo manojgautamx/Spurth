@@ -14,7 +14,13 @@ const MapPickerScreen = ({ navigation }) => {
 
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+        {
+          headers: {
+            'User-Agent': 'StreetLeagueApp/1.0',
+            'Accept': 'application/json',
+          },
+        }
       );
       const json = await response.json();
       const displayName = json.display_name || 'Unnamed location';

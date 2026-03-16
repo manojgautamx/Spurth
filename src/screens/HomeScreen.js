@@ -68,19 +68,52 @@ const HomeScreen = () => {
     return unsub;
   }, [navigation]);
 
+  const isPastLeague = (l) => {
+    if (l.is_concluded !== undefined) return l.is_concluded;
+    return new Date(l.date_time) < new Date();
+  };
+
+  const isCancelledLeague = (l) => l.is_cancelled === true;
+
   const getActiveData = () => {
+
+    // Nearby → NEVER show cancelled
+    const upcomingNearby = otherLeagues.filter(
+      l => !isPastLeague(l) && !isCancelledLeague(l)
+    );
+
+    // Going → joined + upcoming only (exclude cancelled)
+    const upcomingJoined = joinedLeagues.filter(
+      l => !isPastLeague(l) && !isCancelledLeague(l)
+    );
+
+    // Past → joined + (past OR cancelled)
+    const pastJoined = joinedLeagues.filter(
+      l => isPastLeague(l) || isCancelledLeague(l)
+    );
+
+    // Created by you → SHOW EVERYTHING you created
+    const allCreated = myLeagues; // 🔥 no filtering
+
     switch (activeTab) {
+
       case 'Nearby':
-        return otherLeagues;
+        return upcomingNearby;
+
       case 'Going':
-        return joinedLeagues;
+        return upcomingJoined;
+
       case 'Created by you':
-        return myLeagues;
+        return allCreated;
+
+      case 'Past':
+        return pastJoined;
+
       default:
         return [];
     }
   };
-
+  
   useEffect(() => {
     const fetchProfile = async () => {
       try {
@@ -126,14 +159,14 @@ const HomeScreen = () => {
         {/* HERO */}
         <ImageBackground
           source={{
-            uri: 'https://images.unsplash.com/photo-1574629810360-7efbbe195018',
+            uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1770365798/young-travelers-with-backpacks-smiling-giving-highfive-walking-canyon_ruxoai.jpg',
           }}
           style={styles.heroCard}
           imageStyle={{ borderRadius: 18 }}
         >
           <View style={styles.heroOverlay}>
-            <Text style={styles.heroTitle}>Find a game. Jump in.</Text>
-            <Text style={styles.heroDate}>Join casual or competitive games nearby.</Text>
+            <Text style={styles.heroTitle}>Jump in. Connect.</Text>
+            <Text style={styles.heroDate}>Join or create a session of your interest.</Text>
             <TouchableOpacity style={styles.exploreBtn}>
               <Text style={styles.exploreText}>Explore</Text>
             </TouchableOpacity>
@@ -147,14 +180,14 @@ const HomeScreen = () => {
         >
           <View style={styles.createLeft}>
             <MaterialCommunityIcons
-              name="trophy-outline"
+              name="calendar-outline"
               size={28}
-              color="#65AEE2"
+              color="#BADD4F"
             />
             <View style={{ marginLeft: 12 }}>
-              <Text style={styles.createTitle}>Create your league</Text>
+              <Text style={styles.createTitle}>Create a Session</Text>
               <Text style={styles.createSubtitle}>
-                Organize your own league
+                Organize your own session
               </Text>
             </View>
           </View>
@@ -162,7 +195,7 @@ const HomeScreen = () => {
         </TouchableOpacity>
 
         {/* LEAGUES TITLE */}
-        <Text style={styles.leaguesTitle}>Leagues</Text>
+        <Text style={styles.leaguesTitle}>Events</Text>
 
         {/* PILLS */}
         <ScrollView
@@ -282,7 +315,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
   },
   exploreBtn: {
-    backgroundColor: '#31c1baff',
+    backgroundColor: '#4F95F1',
     paddingVertical: 8,
     paddingHorizontal: 24,
     borderRadius: 30,
@@ -337,7 +370,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1F1F',
     marginRight: 10,
   },
-  pillActive: { backgroundColor: '#36ACA6' },
+  pillActive: { backgroundColor: '#4F95F1' },
   pillText: {
     color: '#999',
     fontSize: 13,

@@ -18,6 +18,11 @@ const BottomNavbar = () => {
       label: 'Explore',
     },
     {
+      name: 'Activity',
+      iconName: 'pulse-outline',
+      label: 'Activity',
+    },
+    {
       name: 'Notification',
       iconName: 'notifications-outline',
       label: 'Notification',
@@ -28,6 +33,7 @@ const BottomNavbar = () => {
       label: 'Chat',
     },
   ];
+
 
   return (
     <View style={styles.container}>
@@ -46,7 +52,7 @@ const BottomNavbar = () => {
                 name={tab.iconName}
                 size={26}
                 // If active, use Pink. If inactive, use White.
-                color={isActive ? '#36ACA6' : '#FFFFFF'}
+                color={isActive ? '#5AA3FF' : '#FFFFFF'}
                 style={styles.icon}
               />
               <Text style={styles.tabLabel}>

@@ -13,7 +13,6 @@ import {
 import { launchImageLibrary } from 'react-native-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import MultiSelect from 'react-native-multiple-select';
 import axiosInstance from '../utils/axiosInstance'; // Make sure this is correct
 import { TextInput } from 'react-native';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
@@ -179,25 +178,41 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <Text style={styles.label}>Favorite Sports</Text>
-        <MultiSelect
-          items={sportsOptions}
-          uniqueKey="id"
-          onSelectedItemsChange={(selected) => setFavoriteSports(selected)}
-          selectedItems={favoriteSports}
-          selectText="Pick Sports"
-          searchInputPlaceholderText="Search sports..."
-          tagRemoveIconColor="#E81F89"
-          tagBorderColor="#E81F89"
-          tagTextColor="#E81F89"
-          selectedItemTextColor="#E81F89"
-          selectedItemIconColor="#E81F89"
-          itemTextColor="#000"
-          displayKey="name"
-          searchInputStyle={{ color: '#CCC' }}
-          submitButtonColor="#E81F89"
-          submitButtonText="Submit"
-          styleMainWrapper={styles.multiSelect}
-        />
+
+        <View style={styles.sportsContainer}>
+          {sportsOptions.map((sport) => {
+            const selected = favoriteSports.includes(sport.id);
+
+            return (
+              <TouchableOpacity
+                key={sport.id}
+                style={[
+                  styles.sportItem,
+                  selected && styles.sportItemSelected,
+                ]}
+                onPress={() => {
+                  if (selected) {
+                    setFavoriteSports(
+                      favoriteSports.filter((id) => id !== sport.id)
+                    );
+                  } else {
+                    setFavoriteSports([...favoriteSports, sport.id]);
+                  }
+                }}
+              >
+                <Text
+                  style={[
+                    styles.sportText,
+                    selected && styles.sportTextSelected,
+                  ]}
+                >
+                  {sport.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
 
         <TouchableOpacity onPress={handleSubmit} style={styles.submitButton} disabled={submitting}>
           <Text style={styles.submitText}>{submitting ? 'Saving...' : 'Save Profile'}</Text>
@@ -251,9 +266,35 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderRadius: 5,
   },
-  multiSelect: {
+  sportsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     marginBottom: 10,
   },
+
+  sportItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+
+  sportItemSelected: {
+    backgroundColor: '#E81F89',
+    borderColor: '#E81F89',
+  },
+
+  sportText: {
+    color: '#000',
+  },
+
+  sportTextSelected: {
+    color: '#fff',
+  },
+
   submitButton: {
     marginTop: 20,
     backgroundColor: '#E81F89',

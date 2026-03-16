@@ -1,8 +1,22 @@
-from django.urls import path
-from .views import PublicUserSearchView, register, CreateLeagueView, MyLeaguesView, PublicLeaguesView, join_league, joined_leagues, update_league, leave_league, league_status, delete_league, can_enter_chat, me, view_user_profile, UserProfileCreateView, ProfileStatusView, UpdateProfileView
+from django.urls import path, include
+from .views import PublicUserSearchView, register, CreateLeagueView, MyLeaguesView, PublicLeaguesView, join_league, joined_leagues, update_league, leave_league, league_status, delete_league, can_enter_chat, me, view_user_profile, cancel_league, league_detail, delete_post, remove_participant, UserProfileCreateView, ProfileStatusView, UpdateProfileView, CommentViewSet
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
+from rest_framework.routers import DefaultRouter
+from .views import PostViewSet
+
+router = DefaultRouter()
+router.register(r'posts', PostViewSet, basename='post')
+
+comment_list = CommentViewSet.as_view({
+    'get': 'list',
+    'post': 'create',
+})
+
+comment_detail = CommentViewSet.as_view({
+    'delete': 'destroy',
+})
 
 urlpatterns = [
     path('register/', register, name='register'),  # Ensure this is correct
@@ -27,5 +41,14 @@ urlpatterns = [
     path('profile/<int:user_id>/', view_user_profile),
     path('me/', me),
     path('users/', PublicUserSearchView.as_view(), name='user-search'),
+    path('', include(router.urls)),
+    path('posts/<int:post_pk>/comments/', comment_list, name='post-comments'),
+    path('comments/<int:pk>/', comment_detail, name='comment-detail'),
+    path('cancel-league/<int:pk>/', cancel_league),
+    path('league-detail/<int:league_id>/', league_detail, name='league-detail'),
+    path('delete-post/<int:post_id>/', delete_post, name='delete-post'),
+    path('remove-participant/<int:league_id>/<int:user_id>/', remove_participant, name='remove-participant'),
 ]
 
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

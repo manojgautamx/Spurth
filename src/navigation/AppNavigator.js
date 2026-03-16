@@ -25,6 +25,8 @@ import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import LeagueChatScreen from '../screens/LeagueChatScreen';
 import ParticipantsListScreen from '../screens/ParticipantsListScreen';
+import ActivityScreen from '../screens/ActivityScreen';
+import CommentsScreen from '../screens/CommentScreen';
 
 export const ProfileStatusContext = createContext();
 
@@ -59,6 +61,9 @@ function MainTabNavigator() {
             case 'Explore':
               iconName = 'search-outline';
               break;
+            case 'Activity':
+              iconName = 'pulse-outline';
+              break;
             case 'Notification':
               iconName = 'notifications-outline';
               break;
@@ -73,6 +78,7 @@ function MainTabNavigator() {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
+      <Tab.Screen name="Activity" component={ActivityScreen} />
       <Tab.Screen name="Notification" component={NotificationScreen} />
       <Tab.Screen name="Chat" component={ChatScreen} />
     </Tab.Navigator>
@@ -118,7 +124,7 @@ export default function AppNavigator() {
           backgroundColor: '#000',
         }}
       >
-        <ActivityIndicator size="large" color="#36ACA6" />
+        <ActivityIndicator size="large" color="#8336ac" />
       </View>
     );
   }
@@ -143,6 +149,7 @@ export default function AppNavigator() {
               <Stack.Screen name="ProfileEdit" component={ProfileEditScreen} />
               <Stack.Screen name="LeagueChatScreen" component={LeagueChatScreen} />
               <Stack.Screen name="ParticipantsList" component={ParticipantsListScreen} options={{ headerShown: false }} />
+              <Stack.Screen name="Comments" component={CommentsScreen} options={{ headerShown: false }} />
             </>
           ) : (
             <Stack.Screen name="Profile" component={ProfileScreen} />

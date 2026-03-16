@@ -5,16 +5,22 @@ from rest_framework.views import APIView
 from rest_framework import status, permissions
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.generics import ListAPIView
 import json
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from django.db.models import Count
 
+from django.utils import timezone
+from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
 
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import LeagueSerializer, UserProfileSerializer, PublicUserSerializer
-from .models import League, UserProfile
+from .serializers import CommentSerializer, LeagueSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer
+from .models import League, Like, Post, UserProfile, Comment
 
 # User Registration View
 @api_view(['POST'])
@@ -114,7 +120,12 @@ def join_league(request, league_id):
         league.participants.add(request.user)
 
         serializer = LeagueSerializer(league, context={'request': request})
+
+        if league.date_time < timezone.now():
+            raise ValidationError("This event has already concluded.")
+
         return Response(serializer.data, status=status.HTTP_200_OK)
+    
 
     except League.DoesNotExist:
         return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
@@ -151,9 +162,6 @@ def league_status(request, league_id):
 
     except League.DoesNotExist:
         return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-
-
 
 # List Joined Leagues
 @api_view(['GET'])
@@ -308,6 +316,19 @@ def me(request):
         "username": request.user.username
     })
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def cancel_league(request, pk):
+    league = get_object_or_404(League, pk=pk)
+
+    if league.created_by != request.user:
+        return Response({"detail": "Not allowed"}, status=403)
+
+    league.is_cancelled = True
+    league.save()
+
+    return Response({"success": True})
+
     
 
 class UpdateProfileView(APIView):
@@ -346,3 +367,125 @@ class PublicUserSearchView(ListAPIView):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+
+
+# Feed Views
+
+class PostViewSet(viewsets.ModelViewSet):
+    serializer_class = PostSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        queryset = (
+            Post.objects
+            .select_related('user', 'league')
+            .annotate(
+                likes_count=Count('likes', distinct=True),
+                comments_count=Count('comments', distinct=True)
+            )
+            .order_by('-created_at')
+        )
+
+        league_id = self.request.query_params.get('league')
+        if league_id:
+            queryset = queryset.filter(league_id=league_id)
+
+        return queryset
+
+
+    def perform_create(self, serializer):
+        league = serializer.validated_data['league']
+        user = self.request.user
+
+        # Allow only creator or participants to post
+        if league.created_by != user and not league.participants.filter(id=user.id).exists():
+            raise PermissionDenied("You are not a member of this league.")
+
+        serializer.save(user=user)
+
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        post = self.get_object()
+        user = request.user
+
+        like, created = Like.objects.get_or_create(user=user, post=post)
+
+        if not created:
+            like.delete()
+            return Response({'liked': False})
+
+        return Response({'liked': True})
+
+    @action(detail=True, methods=['get', 'post'])
+    def comments(self, request, pk=None):
+        post = self.get_object()
+
+        if request.method == 'GET':
+            comments = post.comments.all()
+            serializer = CommentSerializer(comments, many=True)
+            return Response(serializer.data)
+
+        if request.method == 'POST':
+            serializer = CommentSerializer(data=request.data)
+            if serializer.is_valid():
+                serializer.save(user=request.user, post=post)
+                return Response(serializer.data, status=201)
+            return Response(serializer.errors, status=400)
+        
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def league_detail(request, league_id):
+    try:
+        league = League.objects.get(id=league_id)
+    except League.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    from .serializers import LeagueSerializer  # use whatever serializer MyLeaguesView uses
+    serializer = LeagueSerializer(league, context={'request': request})
+    return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_post(request, post_id):
+    try:
+        post = Post.objects.get(id=post_id)
+        # Allow post owner OR league owner to delete
+        is_post_owner = request.user == post.user
+        is_league_owner = post.league and post.league.created_by == request.user
+        if not is_post_owner and not is_league_owner:
+            return Response({'detail': 'Permission denied.'}, status=403)
+        post.delete()
+        return Response(status=204)
+    except Post.DoesNotExist:
+        return Response({'detail': 'Post not found.'}, status=404)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def remove_participant(request, league_id, user_id):
+    User = get_user_model()
+    try:
+        league = League.objects.get(id=league_id)
+        if league.created_by != request.user:
+            return Response({'detail': 'Permission denied.'}, status=403)
+        participant = User.objects.get(id=user_id)
+        league.participants.remove(participant)
+        return Response(status=204)
+    except League.DoesNotExist:
+        return Response({'detail': 'League not found.'}, status=404)
+    except User.DoesNotExist:
+        return Response({'detail': 'User not found.'}, status=404)
+        
+
+# views.py
+class CommentViewSet(viewsets.ModelViewSet):
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Comment.objects.filter(post_id=self.kwargs['post_pk'])
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user, post_id=self.kwargs['post_pk'])
