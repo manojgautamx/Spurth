@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,17 +14,17 @@ import {
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 
 import axiosInstance from '../utils/axiosInstance';
 import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import { Fonts } from '../theme/fonts';
 import LeagueCard from '../components/LeagueCard';
-
-
-
-const BASE_URL = 'http://10.0.2.2:8000';
+import { LocationContext, filterLeaguesByDistance } from '../context/LocationContext';
+import { BASE_URL } from '../config';
+import { useDistance } from '../context/DistanceContext';
+import CreateIcon from '../assets/icons/CreateIcon';
 
 const HomeScreen = () => {
   const [myLeagues, setMyLeagues] = useState([]);
@@ -32,21 +32,40 @@ const HomeScreen = () => {
   const [joinedLeagues, setJoinedLeagues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Nearby');
+  const { location } = useContext(LocationContext);
 
-  const axios = useAxios();
+  const axios = axiosInstance;
   const navigation = useNavigation();
   const { user } = useContext(AuthContext);
   const [profile, setProfile] = useState(null);
+  const { distanceKm } = useDistance();
+  const [emailVerified, setEmailVerified] = useState(true); // default true to avoid flash
+  const [resending, setResending] = useState(false);
+
+  const rankByInterest = (leagues) => {
+    const interests = (profile?.favorite_sports || []).map(i => i.toLowerCase());
+    if (interests.length === 0) return leagues;
+
+    return [...leagues].sort((a, b) => {
+      const aMatch = interests.includes((a.sport || '').toLowerCase()) ? 1 : 0;
+      const bMatch = interests.includes((b.sport || '').toLowerCase()) ? 1 : 0;
+      return bMatch - aMatch; // matched ones float to top
+    });
+  };
 
   const fetchLeagues = async () => {
     try {
       setLoading(true);
 
       const [myRes, otherRes, joinedRes] = await Promise.all([
-        axios.get('http://10.0.2.2:8000/api/my-leagues/'),
-        axios.get('http://10.0.2.2:8000/api/public-leagues/'),
-        axios.get('http://10.0.2.2:8000/api/joined-leagues/'),
+        axios.get(`/my-leagues/`),
+        axios.get(`/public-leagues/`),
+        axios.get(`/joined-leagues/`),
       ]);
+
+      console.log('MY:', myRes.data);
+      console.log('OTHER:', otherRes.data);
+      console.log('JOINED:', joinedRes.data);
 
       const joinedIds = joinedRes.data.map(l => l.id);
       const filteredOther = otherRes.data.filter(
@@ -63,10 +82,31 @@ const HomeScreen = () => {
     }
   };
 
+  useFocusEffect(
+    useCallback(() => {
+      axiosInstance.get('me/')
+        .then(res => setEmailVerified(res.data.email_verified))
+        .catch(() => {});
+    }, [])
+  );
+
+
   useEffect(() => {
     const unsub = navigation.addListener('focus', fetchLeagues);
     return unsub;
   }, [navigation]);
+
+  const handleResend = async () => {
+    try {
+      setResending(true);
+      await axiosInstance.post('resend-verification/');
+      Alert.alert('Email Sent', 'Check your inbox for the verification link.');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Could not send email.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const isPastLeague = (l) => {
     if (l.is_concluded !== undefined) return l.is_concluded;
@@ -98,8 +138,14 @@ const HomeScreen = () => {
     switch (activeTab) {
 
       case 'Nearby':
-        return upcomingNearby;
-
+        const nearbyFiltered = filterLeaguesByDistance(
+          upcomingNearby,
+          location?.latitude,
+          location?.longitude,
+          distanceKm
+        );
+        return rankByInterest(nearbyFiltered); // ← wrap with ranker
+      
       case 'Going':
         return upcomingJoined;
 
@@ -126,17 +172,16 @@ const HomeScreen = () => {
     fetchProfile();
   }, []);
 
-  const getAvatarUri = () => {
-    if (!profile?.avatar) return null;
-    return profile.avatar.startsWith('http')
+  const avatarUri =
+    profile?.avatar &&
+    (profile.avatar.startsWith('http')
       ? profile.avatar
-      : `${BASE_URL}${profile.avatar}`;
-  };
+      : `${BASE_URL}${profile.avatar}`);
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#36ACA6" />
+        <ActivityIndicator size="large" color="#6C5CE7" />
       </View>
     );
   }
@@ -147,27 +192,43 @@ const HomeScreen = () => {
       <View style={styles.topHeader}>
         <Text style={styles.headerText}>Home</Text>
         <TouchableOpacity onPress={() => navigation.navigate('ProfileView')}>
-            {getAvatarUri() ? (
-              <Image source={{ uri: getAvatarUri() }} style={styles.profileImage} />
-            ) : (
-              <Ionicons name="user" size={24} color="#fff" />
-            )}
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={styles.profileImage} />
+              ) : (
+                <Ionicons name="person-circle-outline" size={36} color="#777" />
+              )}
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        {!emailVerified && (
+          <TouchableOpacity
+            style={styles.verifyBanner}
+            onPress={() => navigation.navigate('EmailVerification')}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="mail-outline" size={18} color="#fff" style={{ marginRight: 10 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyBannerTitle}>Verify your email</Text>
+              <Text style={styles.verifyBannerSub}>
+                {resending ? 'Sending...' : 'Tap to resend verification link'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
+        )}
         {/* HERO */}
         <ImageBackground
           source={{
-            uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1770365798/young-travelers-with-backpacks-smiling-giving-highfive-walking-canyon_ruxoai.jpg',
+            uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1780374905/ChatGPT_Image_Jun_2_2026_10_19_18_AM_hnh3k7.png',
           }}
           style={styles.heroCard}
           imageStyle={{ borderRadius: 18 }}
         >
           <View style={styles.heroOverlay}>
             <Text style={styles.heroTitle}>Jump in. Connect.</Text>
-            <Text style={styles.heroDate}>Join or create a session of your interest.</Text>
-            <TouchableOpacity style={styles.exploreBtn}>
+            <Text style={styles.heroDate}>Join or create an activity of your interest.</Text>
+            <TouchableOpacity style={styles.exploreBtn} onPress={() => navigation.navigate('Explore')}>
               <Text style={styles.exploreText}>Explore</Text>
             </TouchableOpacity>
           </View>
@@ -179,23 +240,17 @@ const HomeScreen = () => {
           onPress={() => navigation.navigate('CreateLeague')}
         >
           <View style={styles.createLeft}>
-            <MaterialCommunityIcons
-              name="calendar-outline"
-              size={28}
-              color="#BADD4F"
-            />
-            <View style={{ marginLeft: 12 }}>
-              <Text style={styles.createTitle}>Create a Session</Text>
-              <Text style={styles.createSubtitle}>
-                Organize your own session
-              </Text>
+            <CreateIcon size={38} color="#c365e2" />
+            <View style={{ marginLeft: 18 }}>
+              <Text style={styles.createTitle}>Create an Activity</Text>
+              <Text style={styles.createSubtitle}>Organize your own Activity</Text>
             </View>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#fff" />
         </TouchableOpacity>
 
         {/* LEAGUES TITLE */}
-        <Text style={styles.leaguesTitle}>Events</Text>
+        <Text style={styles.leaguesTitle}>Activities</Text>
 
         {/* PILLS */}
         <ScrollView
@@ -225,7 +280,7 @@ const HomeScreen = () => {
         </ScrollView>
 
         {/* FILTER */}
-        <View style={styles.filterRow}>
+        {/* <View style={styles.filterRow}>
           <TouchableOpacity style={styles.filterItem}>
             <Text style={styles.filterText}>Filter</Text>
             <Ionicons name="filter-outline" size={14} color="#999" />
@@ -235,7 +290,7 @@ const HomeScreen = () => {
             <Text style={styles.filterText}>Sort by</Text>
             <Ionicons name="chevron-down" size={14} color="#999" />
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         {/* LIST */}
         <FlatList
@@ -244,7 +299,7 @@ const HomeScreen = () => {
           renderItem={({ item }) => <LeagueCard league={item} />}
           scrollEnabled={false}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No leagues found.</Text>
+            <Text style={styles.emptyText}>No Activities here. How about you lead the way?</Text>
           }
           contentContainerStyle={{ paddingBottom: 100 }}
         />
@@ -315,7 +370,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
   },
   exploreBtn: {
-    backgroundColor: '#4F95F1',
+    backgroundColor: '#6C5CE7',
     paddingVertical: 8,
     paddingHorizontal: 24,
     borderRadius: 30,
@@ -370,14 +425,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#1F1F1F',
     marginRight: 10,
   },
-  pillActive: { backgroundColor: '#4F95F1' },
+  pillActive: { backgroundColor: '#ffffff' },
   pillText: {
     color: '#999',
     fontSize: 13,
     fontFamily: Fonts.medium,
   },
   pillTextActive: {
-    color: '#fff',
+    color: '#000000',
     fontFamily: Fonts.semibold,
   },
 
@@ -464,6 +519,26 @@ const styles = StyleSheet.create({
     marginTop: 40,
     fontSize: 14,
     fontFamily: 'Fonts.regular',
+  },
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e69c2d',
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 14,
+  },
+  verifyBannerTitle: {
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  verifyBannerSub: {
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
   },
 });
 

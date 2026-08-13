@@ -12,7 +12,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import dj_database_url
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
+BACKEND_BASE_URL = os.environ.get('BACKEND_BASE_URL', 'http://10.0.2.2:8000')
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,11 +29,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-!zjt7@tefg@0*cikgn5qowq9@qb7vbxi@)5^%1be8pvmh0ozd-'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']
 
@@ -43,10 +49,14 @@ INSTALLED_APPS = [
     'corsheaders',
     'api',
     'rest_framework_simplejwt',
+    'cloudinary',
+    'cloudinary_storage',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # add this second
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -145,14 +155,48 @@ REST_FRAMEWORK = {
 AUTH_USER_MODEL = 'api.User'
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),   # short access token lifetime
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),   # short access token lifetime
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # longer refresh token
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-import os
+
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'fallback-only-for-local-dev')
+
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'dppoa51hp'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY', '918269632671266'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'FUI7RDMpfRa8UA4nYxxOuXjCRfE'),
+}
+
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dppoa51hp'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY', '918269632671266'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET', 'FUI7RDMpfRa8UA4nYxxOuXjCRfE'),
+)
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+
+AUTHENTICATION_BACKENDS = [
+    'api.views.EmailOrUsernameBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# For development — prints to console
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.zoho.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'noreply@spurth.com')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = 'Spurth <noreply@spurth.com>'
+

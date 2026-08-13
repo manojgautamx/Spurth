@@ -27,8 +27,9 @@ import { getSportIcon } from '../utils/sportIcons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import PostCard from '../components/PostCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BASE_URL = 'http://10.0.2.2:8000';
+import { BASE_URL } from '../config';
+import { LocationContext, getDistanceKm } from '../context/LocationContext';
+import { Share } from 'react-native';
 
 const geocodeLocation = async (location) => {
   try {
@@ -75,11 +76,29 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
+  const { location } = useContext(LocationContext);
+
+  const distance = useMemo(() => {
+    if (!location?.latitude || !location?.longitude) return null;
+    if (!league?.latitude || !league?.longitude) return null;
+    return getDistanceKm(
+      location.latitude,
+      location.longitude,
+      league.latitude,
+      league.longitude
+    );
+  }, [location, league?.latitude, league?.longitude]);
+
+  const distanceLabel = distance === null
+    ? null
+    : distance < 1
+      ? `${Math.round(distance * 1000)} m away`
+      : `${distance.toFixed(1)} km away`;
 
   // ALL useEffects before early return
   useEffect(() => {
     if (!league && leagueId) {
-      axios.get(`http://10.0.2.2:8000/api/league-detail/${leagueId}/`)
+      axios.get(`${BASE_URL}/api/league-detail/${leagueId}/`)
         .then(res => setLeague(res.data))
         .catch(() => {
           Alert.alert('Error', 'Failed to load league.');
@@ -88,6 +107,17 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     }
   }, [leagueId]);
 
+  const handleShare = async () => {
+    setMenuVisible(false);
+    try {
+      await Share.share({
+        title: league.name,
+        message: `Check out "${league.name}" on Spurth!\n\nJoin this event: spurth://event/${league.id}\n\nWeb: https://spurth.com/event/${league.id}`,
+      });
+    } catch (err) {
+      console.warn('Share failed', err);
+    }
+  };
   useEffect(() => {
     if (!league) return;
     if (league.latitude && league.longitude) {
@@ -123,8 +153,8 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     let mounted = true;
     const fetchAll = async () => {
       try {
-        const statusRes = await axios.get(`http://10.0.2.2:8000/api/league-status/${league.id}/`);
-        const chatRes = await axios.get(`http://10.0.2.2:8000/api/can-enter-chat/${league.id}/`);
+        const statusRes = await axios.get(`${BASE_URL}/api/league-status/${league.id}/`);
+        const chatRes = await axios.get(`${BASE_URL}/api/can-enter-chat/${league.id}/`);
         if (!mounted) return;
         setIsJoined(statusRes.data.joined);
         setCanChat(chatRes.data.can_chat);
@@ -174,7 +204,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const handleJoin = async () => {
     try {
       setJoining(true);
-      await axios.post(`http://10.0.2.2:8000/api/join-league/${league.id}/`);
+      await axios.post(`${BASE_URL}/api/join-league/${league.id}/`);
       Alert.alert('Success', 'You joined the league!');
       setIsJoined(true);
       setCanChat(true);
@@ -194,7 +224,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
         onPress: async () => {
           try {
             setJoining(true);
-            await axios.post(`http://10.0.2.2:8000/api/leave-league/${league.id}/`);
+            await axios.post(`${BASE_URL}/api/leave-league/${league.id}/`);
             setIsJoined(false);
             setCanChat(false);
             Alert.alert('Left League', 'You have left the league.');
@@ -210,7 +240,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
   const deleteLeague = async () => {
     try {
-      await axios.delete(`http://10.0.2.2:8000/api/delete-league/${league.id}/`);
+      await axios.delete(`${BASE_URL}/api/delete-league/${league.id}/`);
       Alert.alert('Event Deleted', 'The league has been deleted successfully.');
       navigation.goBack();
     } catch (err) {
@@ -241,7 +271,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const handleReschedule = async () => {
     try {
       setRescheduling(true);
-      await axios.put(`http://10.0.2.2:8000/api/update-league/${league.id}/`, {
+      await axios.put(`${BASE_URL}/api/update-league/${league.id}/`, {
         date_time: newDate.toISOString(),
       });
       Alert.alert('Success', 'Event rescheduled!');
@@ -255,7 +285,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
   const cancelLeague = async () => {
     try {
-      await axios.put(`http://10.0.2.2:8000/api/cancel-league/${league.id}/`);
+      await axios.put(`${BASE_URL}/api/cancel-league/${league.id}/`);
       setLeague(prev => ({ ...prev, is_cancelled: true }));
       Alert.alert('Cancelled', 'Event has been cancelled.');
     } catch (err) {
@@ -382,19 +412,19 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                       <Ionicons name="pencil-outline" size={22} color="#fff" />
                     </TouchableOpacity>
                   )}
-                  {(isOwner || isJoined) && (
-                    <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
-                      <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
+                    <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+                  </TouchableOpacity>
                 </View>
               </View>
 
               <View style={styles.badgesRow}>
-                <View style={styles.distanceBadge}>
-                  <Ionicons name="navigate-outline" size={12} color="#fff" />
-                  <Text style={styles.badgeText}>4 Km Away</Text>
-                </View>
+                {distanceLabel && (
+                  <View style={styles.distanceBadge}>
+                    <Ionicons name="navigate-outline" size={12} color="#fff" />
+                    <Text style={styles.badgeText}>{distanceLabel}</Text>
+                  </View>
+                )}
                 <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                   <Text style={styles.badgeText}>{statusLabel}</Text>
                 </View>
@@ -605,15 +635,15 @@ const LeagueViewerScreen = ({ route, navigation }) => {
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuCard}>
+                {/* Share — visible to everyone */}
+                <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
+                  <Text style={styles.menuItemText}>Share Event</Text>
+                </TouchableOpacity>
+                <View style={styles.menuDivider} />
+
                 {isOwner && (
                   <>
-                    <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => {
-                        setMenuVisible(false);
-                        setRescheduleVisible(true);
-                      }}
-                    >
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setRescheduleVisible(true); }}>
                       <Text style={styles.menuItemText}>Reschedule</Text>
                     </TouchableOpacity>
                     <View style={styles.menuDivider} />
@@ -631,9 +661,12 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                   </>
                 )}
                 {!isOwner && isJoined && (
-                  <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); handleLeave(); }}>
-                    <Text style={[styles.menuItemText, styles.menuItemDestructive]}>Leave Event</Text>
-                  </TouchableOpacity>
+                  <>
+                    <View style={styles.menuDivider} />
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); handleLeave(); }}>
+                      <Text style={[styles.menuItemText, styles.menuItemDestructive]}>Leave Event</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </View>
             </TouchableWithoutFeedback>

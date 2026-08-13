@@ -18,7 +18,7 @@ const LeagueOwnerScreen = ({ route, navigation }) => {
         style: 'destructive',
         onPress: async () => {
           try {
-            await axios.delete(`http://10.0.2.2:8000/api/delete-league/${league.id}/`);
+            await axios.delete(`/api/delete-league/${league.id}/`);
             Alert.alert('Deleted', 'League has been deleted.');
             navigation.goBack();
           } catch (error) {

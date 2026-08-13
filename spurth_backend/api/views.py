@@ -1,3 +1,4 @@
+import uuid
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -8,6 +9,7 @@ from django.db.models import Q
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.generics import ListAPIView
 import json
+from django.http import HttpResponse, HttpResponseRedirect
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from django.db.models import Count
@@ -15,12 +17,73 @@ from django.db.models import Count
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+from firebase_admin import auth as firebase_auth
+import firebase_config  # triggers initialization
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+from django.core.mail import send_mail
+from django.conf import settings
+from .models import EmailVerificationToken
+from django.contrib.auth.backends import ModelBackend
 
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import CommentSerializer, LeagueSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer
-from .models import League, Like, Post, UserProfile, Comment
+from .serializers import CommentSerializer, LeagueSerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
+from .models import League, Like, Post, UserProfile, Comment, Notification
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_auth(request):
+    token = request.data.get('id_token')
+    try:
+        info = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            '23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com'
+        )
+        email = info['email']
+        name = info.get('name', '')
+        picture = info.get('picture', '')
+
+        # Generate a unique username from email
+        base_username = email.split('@')[0].replace('.', '_')
+        username = base_username
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f"{base_username}{counter}"
+            counter += 1
+
+        user, created = User.objects.get_or_create(email=email, defaults={'username': username})
+        if created or not user.email_verified:
+            user.email_verified = True  # Google already verified it
+            user.save()
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'is_new_user': created,
+        })
+    except Exception as e:
+        return Response({'detail': str(e)}, status=400)
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def set_username(request):
+    username = request.data.get('username', '').strip()
+    if not username:
+        return Response({'detail': 'Username required.'}, status=400)
+    if User.objects.filter(username=username).exclude(id=request.user.id).exists():
+        return Response({'detail': 'Username already taken.'}, status=400)
+    request.user.username = username
+    request.user.save()
+    return Response({'detail': 'Username updated.'})
+
 
 # User Registration View
 @api_view(['POST'])
@@ -42,10 +105,19 @@ def register(request):
     user = User.objects.create_user(username=username, email=email, password=password)
 
     refresh = RefreshToken.for_user(user)
+    send_verification_email(user)
     return Response({
         'access': str(refresh.access_token),
         'refresh': str(refresh),
     }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def firebase_token(request):
+    uid = str(request.user.id)  # matches userId you already use in chat
+    token = firebase_auth.create_custom_token(uid)
+    return Response({'firebase_token': token.decode('utf-8')})
 
 # Create League View
 class CreateLeagueView(APIView):
@@ -56,14 +128,47 @@ class CreateLeagueView(APIView):
 
         if serializer.is_valid():
             serializer.save(created_by=request.user)
-            return Response(LeagueSerializer(serializer.instance, context={'request': request}).data, status=status.HTTP_201_CREATED)
+            league = serializer.instance
 
+            # Notify users whose interests match the league sport
+            sport = (league.sport or '').lower()
+            interested_users = User.objects.filter(
+                profile__favorite_sports__icontains=sport
+            ).exclude(id=request.user.id)
 
-        # Print detailed errors for debugging
+            create_notifications(
+                recipients=list(interested_users),
+                notification_type='new_event',
+                title=f'🎉 New {league.sport} event near you',
+                body=f'{league.name} has been posted. Check it out!',
+                league=league,
+            )
+
+            return Response(
+                LeagueSerializer(league, context={'request': request}).data,
+                status=status.HTTP_201_CREATED
+            )
+
         print("Validation errors:", serializer.errors)
-        return Response(serializer.errors, status=status.HTfTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+#email or username authentication backend
+class EmailOrUsernameBackend(ModelBackend):
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        try:
+            # Allow either username or email in the username field
+            user = User.objects.get(
+                Q(username__iexact=username) | Q(email__iexact=username)
+            )
+        except User.DoesNotExist:
+            return None
+        except User.MultipleObjectsReturned:
+            user = User.objects.filter(email__iexact=username).first()
+
+        if user and user.check_password(password):
+            return user
+        return None
 
 # List My Leagues View
 class MyLeaguesView(APIView):
@@ -117,13 +222,12 @@ def join_league(request, league_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        league.participants.add(request.user)
-
-        serializer = LeagueSerializer(league, context={'request': request})
-
         if league.date_time < timezone.now():
             raise ValidationError("This event has already concluded.")
 
+        league.participants.add(request.user)
+
+        serializer = LeagueSerializer(league, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     
 
@@ -179,14 +283,28 @@ def update_league(request, league_id):
     try:
         league = League.objects.get(id=league_id)
 
-        # Ensure only the creator can update the league
         if league.created_by != request.user:
-            return Response({'detail': 'You do not have permission to edit this league.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
+        old_datetime = league.date_time
         serializer = LeagueSerializer(league, data=request.data, partial=True, context={'request': request})
 
         if serializer.is_valid():
-            serializer.save()  # `created_by` remains unchanged
+            serializer.save()
+
+            # Fire reschedule notification if date changed
+            new_datetime = serializer.instance.date_time
+            if 'date_time' in request.data and old_datetime != new_datetime:
+                participants = list(league.participants.all())
+                new_date_str = new_datetime.strftime('%d %b %Y at %I:%M %p')
+                create_notifications(
+                    recipients=participants,
+                    notification_type='reschedule',
+                    title=f'{league.name} rescheduled',
+                    body=f'The event has been moved to {new_date_str}.',
+                    league=league,
+                )
+
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -233,32 +351,18 @@ def can_enter_chat(request, league_id):
         return Response({"detail": "League not found"}, status=404)
 
 
-
-
 class UserProfileCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         user = request.user
-
-        # Get or create the user profile
         profile, created = UserProfile.objects.get_or_create(user=user)
-
-        data = request.data.copy()
-
-        # Decode favorite_sports JSON string if necessary
-        favorite_sports = request.data.getlist('favorite_sports')
-        if favorite_sports:
-            data['favorite_sports'] = ','.join(favorite_sports)
-
-
-        # Create the serializer with the current profile instance (for update)
-        serializer = UserProfileSerializer(profile, data=data, partial=True)
-
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save(user=user)
             return Response(serializer.data, status=status.HTTP_200_OK)
+        print("Profile errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def get(self, request):
@@ -294,6 +398,21 @@ def view_user_profile(request, user_id):
         return Response(serializer.data)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_leagues(request, user_id):
+    User = get_user_model()
+    try:
+        target = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'detail': 'User not found.'}, status=404)
+    created = League.objects.filter(created_by=target)
+    joined = League.objects.filter(participants=target).exclude(created_by=target)
+    return Response({
+        'created': LeagueSerializer(created, many=True, context={'request': request}).data,
+        'joined': LeagueSerializer(joined, many=True, context={'request': request}).data,
+    })
 
 # class UpdateProfileView(APIView):
 #     permission_classes = [IsAuthenticated]
@@ -311,9 +430,28 @@ def view_user_profile(request, user_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def me(request):
+    profile = getattr(request.user, 'profile', None)
+    avatar = None
+    location = ''
+    if profile and profile.avatar:
+        try:
+            avatar = profile.avatar.build_url(
+                width=200,
+                height=200,
+                crop='fill',
+                quality='auto',
+                fetch_format='auto'
+            )
+        except Exception:
+            avatar = None
     return Response({
         "id": request.user.id,
-        "username": request.user.username
+        "username": request.user.username,
+        'email': request.user.email,           # ← add this
+        'email_verified': request.user.email_verified,
+        "avatar": avatar,
+        'location': location,
+        'email_verified': request.user.email_verified,
     })
 
 @api_view(['PUT'])
@@ -327,8 +465,81 @@ def cancel_league(request, pk):
     league.is_cancelled = True
     league.save()
 
+    # Notify all participants
+    participants = list(league.participants.all())
+    create_notifications(
+        recipients=participants,
+        notification_type='cancel',
+        title=f'{league.name} cancelled',
+        body='This event has been cancelled by the host.',
+        league=league,
+    )
+
     return Response({"success": True})
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_invite(request):
+    invited_user_id = request.data.get('invited_user_id')
+    league_id       = request.data.get('league_id')
+
+    if not invited_user_id or not league_id:
+        return Response(
+            {'detail': 'invited_user_id and league_id are required.'},
+            status=400
+        )
+
+    try:
+        invited_user = User.objects.get(id=invited_user_id)
+        league       = League.objects.get(id=league_id)
+    except User.DoesNotExist:
+        return Response({'detail': 'User not found.'}, status=404)
+    except League.DoesNotExist:
+        return Response({'detail': 'Event not found.'}, status=404)
+
+    inviter = request.user
+
+    # Inviter must be the owner or a participant
+    is_member = (
+        league.created_by == inviter or
+        league.participants.filter(id=inviter.id).exists()
+    )
+    if not is_member:
+        return Response(
+            {'detail': 'You are not a member of this event.'},
+            status=403
+        )
+
+    # Don't invite someone already in the league
+    already_in = (
+        league.created_by == invited_user or
+        league.participants.filter(id=invited_user.id).exists()
+    )
+    if already_in:
+        return Response(
+            {'detail': 'This person has already joined the event.'},
+            status=400
+        )
+
+    # Don't send a duplicate pending invite
+    already_invited = Notification.objects.filter(
+        recipient=invited_user,
+        notification_type='invite',
+        league=league,
+        is_read=False,
+    ).exists()
+    if already_invited:
+        return Response({'detail': 'Invite already sent.'}, status=400)
+
+    Notification.objects.create(
+        recipient=invited_user,
+        notification_type='invite',
+        title='You have been invited',
+        body=f'@{inviter.username} invited you to "{league.name}"',
+        league=league,
+    )
+
+    return Response({'detail': 'Invite sent.'}, status=201)
     
 
 class UpdateProfileView(APIView):
@@ -489,3 +700,181 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user, post_id=self.kwargs['post_pk'])
+
+def create_notifications(recipients, notification_type, title, body, league=None):
+    """Bulk-create notifications for a list of users."""
+    notifications = [
+        Notification(
+            recipient=user,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            league=league,
+        )
+        for user in recipients
+        if user is not None
+    ]
+    Notification.objects.bulk_create(notifications)
+
+# ── Notification Views ──────────────────────────────────────────────────────
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_notifications(request):
+    notifications = Notification.objects.filter(recipient=request.user)
+    serializer = NotificationSerializer(notifications, many=True)
+    unread_count = notifications.filter(is_read=False).count()
+    return Response({'results': serializer.data, 'unread_count': unread_count})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_notification_read(request, notification_id):
+    try:
+        notif = Notification.objects.get(id=notification_id, recipient=request.user)
+        notif.is_read = True
+        notif.save()
+        return Response({'detail': 'Marked as read.'})
+    except Notification.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+
+#Email Verification Views
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_all_read(request):
+    Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
+    return Response({'detail': 'All marked as read.'})
+
+def send_verification_email(user):
+    token_obj, _ = EmailVerificationToken.objects.get_or_create(user=user)
+    # Regenerate token on resend
+    token_obj.token = uuid.uuid4()
+    token_obj.created_at = timezone.now()
+    token_obj.save()
+    
+    verify_url = f"{settings.BACKEND_BASE_URL}/api/verify-email-redirect/?token={token_obj.token}"
+    
+    send_mail(
+        subject='Verify your Spurth email',
+        message=f'Hi {user.username},\n\nYour Spurth verification code:\n\n{token_obj.token}\n\nOpen the Spurth app and enter this code to verify your email.\nExpires in 24 hours.',
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_email(request):
+    token = request.data.get('token')
+    if not token:
+        return Response({'detail': 'Token required.'}, status=400)
+    try:
+        token_obj = EmailVerificationToken.objects.get(token=token)
+        if token_obj.is_expired():
+            return Response({'detail': 'Token expired. Please request a new one.'}, status=400)
+        token_obj.user.email_verified = True
+        token_obj.user.save()
+        token_obj.delete()
+        return Response({'detail': 'Email verified successfully.'})
+    except EmailVerificationToken.DoesNotExist:
+        return Response({'detail': 'Invalid token.'}, status=400)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def resend_verification(request):
+    user = request.user
+    if user.email_verified:
+        return Response({'detail': 'Email already verified.'}, status=400)
+    try:
+        send_verification_email(user)
+        return Response({'detail': 'Verification email sent.'})
+    except Exception as e:
+        return Response({'detail': f'Failed to send email: {str(e)}'}, status=500)
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def verify_email_redirect(request):
+    token = request.GET.get('token')
+    if not token:
+        return HttpResponse('Invalid link.', status=400)
+    # Redirect to deep link — Android opens the app
+    return HttpResponseRedirect(f'spurth://verify-email?token={token}')
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+#forgot password view
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    email = request.data.get('email', '').strip()
+    if not email:
+        return Response({'detail': 'Email is required.'}, status=400)
+
+    try:
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist:
+        # Don't reveal whether email exists — always return success
+        return Response({'detail': 'If that email exists, a reset link has been sent.'})
+
+    # Reuse EmailVerificationToken model with a new token
+    token_obj, _ = EmailVerificationToken.objects.get_or_create(user=user)
+    token_obj.token = uuid.uuid4()
+    token_obj.created_at = timezone.now()
+    token_obj.save()
+
+    reset_url = f"{settings.BACKEND_BASE_URL}/api/password-reset-redirect/?token={token_obj.token}"
+
+    send_mail(
+        subject='Reset your Spurth password',
+        message=(
+            f'Hi {user.username},\n\n'
+            f'You requested a password reset for your Spurth account.\n\n'
+            f'Your reset code:\n\n{token_obj.token}\n\n'
+            f'Enter this code in the app to reset your password.\n'
+            f'This code expires in 24 hours.\n\n'
+            f'If you did not request this, ignore this email.'
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )
+
+    return Response({'detail': 'If that email exists, a reset link has been sent.'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    token = request.data.get('token', '').strip()
+    new_password = request.data.get('new_password', '').strip()
+    confirm_password = request.data.get('confirm_password', '').strip()
+
+    if not token or not new_password:
+        return Response({'detail': 'Token and new password are required.'}, status=400)
+
+    if new_password != confirm_password:
+        return Response({'detail': 'Passwords do not match.'}, status=400)
+
+    if len(new_password) < 8:
+        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+
+    try:
+        token_obj = EmailVerificationToken.objects.get(token=token)
+    except EmailVerificationToken.DoesNotExist:
+        return Response({'detail': 'Invalid or expired reset code.'}, status=400)
+
+    if token_obj.is_expired():
+        token_obj.delete()
+        return Response({'detail': 'Reset code has expired. Please request a new one.'}, status=400)
+
+    user = token_obj.user
+    user.set_password(new_password)
+    user.save()
+    token_obj.delete()
+
+    return Response({'detail': 'Password reset successfully. You can now log in.'})

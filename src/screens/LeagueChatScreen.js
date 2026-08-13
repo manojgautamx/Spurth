@@ -1,128 +1,636 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet } from 'react-native';
-import firestore from '@react-native-firebase/firestore';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  StyleSheet,
+  Image,
+  Modal,
+  ScrollView,
+  StatusBar,
+  Platform,
+  KeyboardAvoidingView,
+  Alert,
+} from 'react-native';
+import { db } from '../firebase/firebaseConfig';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+// ... other imports
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import useAxios from '../utils/useAxios';
+import { BASE_URL } from '../config';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const LeagueChatScreen = ({ route }) => {
+const getAvatarSource = (avatarPath) => {
+  if (!avatarPath) return require('../assets/avatar-placeholder.png');
+  if (avatarPath.startsWith('http')) return { uri: avatarPath };
+  return { uri: `${BASE_URL}${avatarPath}` };
+};
+
+const formatTime = (timestamp) => {
+  if (!timestamp) return '';
+  try {
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+};
+
+const formatDateLabel = (timestamp) => {
+  if (!timestamp) return '';
+  try {
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+};
+
+const isSameDay = (ts1, ts2) => {
+  if (!ts1 || !ts2) return false;
+  try {
+    const d1 = ts1.toDate ? ts1.toDate() : new Date(ts1);
+    const d2 = ts2.toDate ? ts2.toDate() : new Date(ts2);
+    return d1.toDateString() === d2.toDateString();
+  } catch {
+    return false;
+  }
+};
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+const LeagueChatScreen = ({ route, navigation }) => {
   const { leagueId, leagueName } = route.params;
 
-  const [messages, setMessages] = useState([]);
-  const [text, setText] = useState('');
-  const [userId, setUserId] = useState('');
-  const [username, setUsername] = useState('');
+  const [messages, setMessages]       = useState([]);
+  const [text, setText]               = useState('');
+  const [userId, setUserId]           = useState('');
+  const [username, setUsername]       = useState('');
+  const [userAvatar, setUserAvatar]   = useState('');
+  const [infoVisible, setInfoVisible] = useState(false);
+  const [league, setLeague]           = useState(null);
+  const [showAllMembers, setShowAllMembers] = useState(false);
+
+  const flatListRef = useRef(null);
   const axios = useAxios();
 
+  // Load current user
   useEffect(() => {
-    const unsubscribe = firestore()
-      .collection('leagues')
-      .doc(`league_${leagueId}`)
-      .collection('messages')
-      .orderBy('timestamp', 'asc')
-      .onSnapshot(snapshot => {
-        const msgs = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setMessages(msgs);
-      });
+    axios.get(`${BASE_URL}/api/me/`)
+      .then(res => {
+        setUserId(String(res.data.id));
+        setUsername(res.data.username);
+        setUserAvatar(res.data.avatar || '');
+      })
+      .catch(e => console.warn('Failed to load user', e));
+  }, []);
 
+  // Load league info for the info panel
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/league-detail/${leagueId}/`)
+      .then(res => setLeague(res.data))
+      .catch(e => console.warn('Failed to load league info', e));
+  }, [leagueId]);
+
+  // Subscribe to Firestore messages
+  useEffect(() => {
+    const messagesQuery = query(
+      collection(db, 'leagues', `league_${leagueId}`, 'messages'),
+      orderBy('timestamp', 'asc')
+    );
+    const unsubscribe = onSnapshot(messagesQuery, snapshot => {
+      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setMessages(msgs);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    });
     return () => unsubscribe();
   }, [leagueId]);
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const res = await axios.get('http://10.0.2.2:8000/api/me/');
-        setUserId(String(res.data.id));
-        setUsername(res.data.username);
-      } catch (e) {
-        console.log('Failed to load user', e);
-      }
-    };
-
-    loadUser();
-  }, []);
-
-
-
   const sendMessage = async () => {
     if (!text.trim()) return;
-
-    await firestore()
-      .collection('leagues')
-      .doc(`league_${leagueId}`)
-      .collection('messages')
-      .add({
-        text,
+    const msgText = text.trim();
+    setText('');
+    try {
+      await addDoc(collection(db, 'leagues', `league_${leagueId}`, 'messages'), {
+        text: msgText,
         senderId: userId,
         senderName: username,
-        timestamp: firestore.FieldValue.serverTimestamp()
+        senderAvatar: userAvatar,
+        timestamp: serverTimestamp()
       });
-
-    setText('');
+      console.log('Message sent successfully');
+    } catch (err) {
+      console.error('Firestore write failed:', err.message);
+    }
   };
+
+
+  const handleLeaveActivity = () => {
+    Alert.alert('Leave Activity', 'Are you sure you want to leave this league chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          setInfoVisible(false);
+          navigation.goBack();
+        },
+      },
+    ]);
+  };
+
+  // Build flat list items with date separators injected
+  const buildItems = useCallback(() => {
+    const items = [];
+    messages.forEach((msg, index) => {
+      const prev = messages[index - 1];
+      if (!prev || !isSameDay(prev.timestamp, msg.timestamp)) {
+        items.push({ type: 'date', id: `date_${index}`, timestamp: msg.timestamp });
+      }
+      const isMe = msg.senderId === userId;
+      const nextMsg = messages[index + 1];
+      const isLastInGroup =
+        !nextMsg ||
+        nextMsg.senderId !== msg.senderId ||
+        !isSameDay(msg.timestamp, nextMsg.timestamp);
+      const isFirstInGroup =
+        !prev ||
+        prev.senderId !== msg.senderId ||
+        !isSameDay(prev.timestamp, msg.timestamp);
+      items.push({
+        type: 'message',
+        ...msg,
+        isMe,
+        isFirstInGroup,
+        isLastInGroup,
+      });
+    });
+    return items;
+  }, [messages, userId]);
+
+  // ── Render Items ────────────────────────────────────────────────────────────
+
+  const renderItem = ({ item }) => {
+    if (item.type === 'date') {
+      return (
+        <View style={styles.dateSeparator}>
+          <Text style={styles.dateSeparatorText}>
+            {formatDateLabel(item.timestamp)}
+          </Text>
+        </View>
+      );
+    }
+
+    if (item.isMe) {
+      return (
+        <View style={styles.myMsgWrapper}>
+          <View style={[
+            styles.bubble,
+            styles.myBubble,
+            !item.isLastInGroup && styles.bubbleNoTailRight,
+          ]}>
+            <Text style={styles.bubbleText}>{item.text}</Text>
+            <Text style={styles.timestamp}>{formatTime(item.timestamp)}</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.otherMsgWrapper}>
+        {/* Avatar — only show on last message of a group */}
+        {item.isLastInGroup ? (
+          <Image
+            source={
+              item.senderAvatar
+                ? { uri: item.senderAvatar }
+                : require('../assets/avatar-placeholder.png')
+            }
+            style={styles.msgAvatar}
+          />
+        ) : (
+          <View style={styles.msgAvatarSpacer} />
+        )}
+        <View style={styles.otherBubbleCol}>
+          {item.isFirstInGroup && (
+            <Text style={styles.senderName}>@{item.senderName}</Text>
+          )}
+          <View style={[
+            styles.bubble,
+            styles.otherBubble,
+            !item.isLastInGroup && styles.bubbleNoTailLeft,
+          ]}>
+            <Text style={styles.bubbleText}>{item.text}</Text>
+            <Text style={[styles.timestamp, styles.timestampOther]}>
+              {formatTime(item.timestamp)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  // ── Info Panel Members ──────────────────────────────────────────────────────
+
+  const members = league?.participants || [];
+  const PREVIEW_COUNT = 6;
+  const displayedMembers = showAllMembers ? members : members.slice(0, PREVIEW_COUNT);
+  const remaining = members.length - PREVIEW_COUNT;
+
+  const coverUri = league?.cover_image
+    ? league.cover_image.startsWith('http')
+      ? league.cover_image
+      : `${BASE_URL}${league.cover_image}`
+    : null;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>{leagueName} Chat</Text>
+      <StatusBar barStyle="light-content" backgroundColor="#0D0D0D" />
 
-      <FlatList
-        data={messages}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={[
-            styles.message,
-            item.senderId === userId ? styles.myMessage : styles.otherMessage
-          ]}>
-            <Text style={styles.sender}>{item.senderName}</Text>
-            <Text style={styles.text}>{item.text}</Text>
-          </View>
-        )}
-      />
-
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type a message..."
-          placeholderTextColor="#888"
-        />
-        <TouchableOpacity style={styles.sendBtn} onPress={sendMessage}>
-          <Text style={styles.sendText}>Send</Text>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>{leagueName}</Text>
+        <TouchableOpacity onPress={() => setInfoVisible(true)} style={styles.infoBtn}>
+          <Ionicons name="information-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
       </View>
+      <View style={styles.headerDivider} />
+
+      {/* ── Messages ───────────────────────────────────────────────────────── */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={0}
+      >
+        <FlatList
+          ref={flatListRef}
+          data={buildItems()}
+          keyExtractor={item => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={styles.messageList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+        />
+
+        {/* ── Input Bar ──────────────────────────────────────────────────── */}
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            placeholder="Message..."
+            placeholderTextColor="#555"
+            multiline
+          />
+          <TouchableOpacity
+            style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
+            onPress={sendMessage}
+            disabled={!text.trim()}
+          >
+            <Ionicons name="send" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* ── Info Modal ─────────────────────────────────────────────────────── */}
+      <Modal
+        visible={infoVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInfoVisible(false)}
+      >
+        <View style={styles.infoModal}>
+          <StatusBar barStyle="light-content" />
+
+          {/* Info Header */}
+          <View style={styles.infoHeader}>
+            <TouchableOpacity onPress={() => setInfoVisible(false)} style={styles.infoBackBtn}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.infoMenuBtn}>
+              <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.infoScroll}>
+
+            {/* Cover Image */}
+            <View style={styles.infoCoverWrapper}>
+              {coverUri ? (
+                <Image source={{ uri: coverUri }} style={styles.infoCover} />
+              ) : (
+                <View style={[styles.infoCover, styles.infoCoverFallback]}>
+                  <Ionicons name="people" size={48} color="#444" />
+                </View>
+              )}
+            </View>
+
+            {/* Name + count */}
+            <Text style={styles.infoName}>{leagueName}</Text>
+            <Text style={styles.infoMemberCount}>
+              {league?.participant_count || members.length} Members
+            </Text>
+
+            {/* Members Section */}
+            <Text style={styles.infoSectionLabel}>Members</Text>
+
+            {displayedMembers.map(member => (
+              <TouchableOpacity
+                key={member.id}
+                style={styles.memberRow}
+                onPress={() => {
+                  setInfoVisible(false);
+                  navigation.navigate('ProfileView', { userId: member.id });
+                }}
+              >
+                <Image
+                  source={getAvatarSource(member.avatar)}
+                  style={styles.memberAvatar}
+                />
+                <Text style={styles.memberUsername}>@{member.username}</Text>
+              </TouchableOpacity>
+            ))}
+
+            {!showAllMembers && remaining > 0 && (
+              <TouchableOpacity onPress={() => setShowAllMembers(true)}>
+                <Text style={styles.viewAllText}>View All ({remaining} More)</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Leave Activity */}
+            <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveActivity}>
+              <Ionicons name="exit-outline" size={20} color="#E81F89" />
+              <Text style={styles.leaveText}>Leave Activity</Text>
+            </TouchableOpacity>
+
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#121212', padding: 16 },
-  header: { color: '#fff', fontSize: 20, textAlign: 'center', marginBottom: 10 },
-  message: { padding: 10, borderRadius: 10, marginVertical: 5, maxWidth: '80%' },
-  myMessage: { backgroundColor: '#E81F89', alignSelf: 'flex-end' },
-  otherMessage: { backgroundColor: '#1e1e1e', alignSelf: 'flex-start' },
-  sender: { color: '#aaa', fontSize: 12 },
-  text: { color: '#fff', fontSize: 16 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+
+  container: {
+    flex: 1,
+    backgroundColor: '#0D0D0D',
+  },
+
+  // ── Header ──────────────────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: (StatusBar.currentHeight || 44) + 8,
+    paddingBottom: 14,
+    backgroundColor: '#0D0D0D',
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+    letterSpacing: 0.2,
+  },
+  infoBtn: {
+    padding: 4,
+  },
+  headerDivider: {
+    height: 1,
+    backgroundColor: '#1E1E1E',
+  },
+
+  // ── Messages ─────────────────────────────────────────────────────────────
+  messageList: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    paddingBottom: 8,
+  },
+  dateSeparator: {
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+  dateSeparatorText: {
+    color: '#555',
+    fontSize: 13,
+  },
+
+  // My messages
+  myMsgWrapper: {
+    alignItems: 'flex-end',
+    marginBottom: 4,
+  },
+  myBubble: {
+    backgroundColor: '#2CB9B0',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+  },
+
+  // Other messages
+  otherMsgWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 4,
+  },
+  msgAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 8,
+    backgroundColor: '#2A2A2A',
+  },
+  msgAvatarSpacer: {
+    width: 36,
+  },
+  otherBubbleCol: {
+    maxWidth: '75%',
+  },
+  senderName: {
+    color: '#888',
+    fontSize: 12,
+    marginBottom: 3,
+    marginLeft: 2,
+  },
+  otherBubble: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 18,
+    borderBottomLeftRadius: 4,
+  },
+
+  // Shared bubble styles
+  bubble: {
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 6,
+    maxWidth: '80%',
+  },
+  bubbleNoTailRight: {
+    borderBottomRightRadius: 18,
+  },
+  bubbleNoTailLeft: {
+    borderBottomLeftRadius: 18,
+  },
+  bubbleText: {
+    color: '#fff',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  timestamp: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  timestampOther: {
+    textAlign: 'right',
+  },
+
+  // ── Input Bar ────────────────────────────────────────────────────────────
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
+    backgroundColor: '#0D0D0D',
+    gap: 10,
+  },
   input: {
     flex: 1,
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#1A1A1A',
     color: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    maxHeight: 120,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
   },
   sendBtn: {
-    backgroundColor: '#E81F89',
-    marginLeft: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#2CB9B0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sendText: { color: '#fff', fontWeight: 'bold' }
+  sendBtnDisabled: {
+    backgroundColor: '#222',
+  },
+
+  // ── Info Modal ───────────────────────────────────────────────────────────
+  infoModal: {
+    flex: 1,
+    backgroundColor: '#0D0D0D',
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: (StatusBar.currentHeight || 44) + 8,
+    paddingBottom: 12,
+  },
+  infoBackBtn: {
+    padding: 4,
+  },
+  infoMenuBtn: {
+    padding: 4,
+  },
+  infoScroll: {
+    paddingHorizontal: 24,
+    paddingBottom: 48,
+    alignItems: 'center',
+  },
+  infoCoverWrapper: {
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  infoCover: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: '#1A1A1A',
+  },
+  infoCoverFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  infoName: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  infoMemberCount: {
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 28,
+    textAlign: 'center',
+  },
+  infoSectionLabel: {
+    color: '#aaa',
+    fontSize: 14,
+    fontWeight: '600',
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    paddingVertical: 10,
+    gap: 14,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#2A2A2A',
+  },
+  memberUsername: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  viewAllText: {
+    color: '#2CB9B0',
+    fontSize: 14,
+    fontWeight: '600',
+    alignSelf: 'flex-start',
+    marginTop: 6,
+    marginBottom: 28,
+  },
+  leaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 10,
+    marginTop: 8,
+    paddingVertical: 8,
+  },
+  leaveText: {
+    color: '#E81F89',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });
 
 export default LeagueChatScreen;

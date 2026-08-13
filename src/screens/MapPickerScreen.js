@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
+import { MAP_PICKER_HTML } from '../assets/mapPickerHtml';
 
 const MapPickerScreen = ({ navigation }) => {
   const [selectedCoords, setSelectedCoords] = useState(null);
@@ -48,7 +49,11 @@ const MapPickerScreen = ({ navigation }) => {
   return (
     <View style={{ flex: 1 }}>
       <WebView
-        source={{ uri: 'file:///android_asset/map.html' }}
+        source={
+          Platform.OS === 'web'
+            ? { html: MAP_PICKER_HTML }
+            : { uri: 'file:///android_asset/map.html' }
+        }
         onMessage={handleMessage}
         originWhitelist={['*']}
         allowFileAccess

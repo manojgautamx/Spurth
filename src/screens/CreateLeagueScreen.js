@@ -6,22 +6,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Dimensions,
   ActivityIndicator,
   Alert,
   Image,
   SafeAreaView,
   StatusBar,
-  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { WebView } from 'react-native-webview';
 import axiosInstance from '../utils/axiosInstance';
+import { appendImageAsset } from '../utils/appendImageAsset';
 import * as ImagePicker from 'react-native-image-picker';
 import { Fonts } from '../theme/fonts';
-
-const { height } = Dimensions.get('window');
+import { BASE_URL } from '../config';
 
 const CATEGORIES = [
   'Music',
@@ -36,12 +36,16 @@ const CATEGORIES = [
   'Other',
 ];
 
+const TOTAL_STEPS = 3;
 
 const CreateLeagueScreen = ({ navigation, route }) => {
 
   // 🔥 Detect Edit Mode
   const editingLeague = route?.params?.league || null;
   const isEditing = !!editingLeague;
+
+  // 🔥 Step state
+  const [step, setStep] = useState(1);
 
   // 🔥 Form fields
   const [location, setLocation] = useState(editingLeague?.location || '');
@@ -50,15 +54,11 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   const [sport, setSport] = useState(editingLeague?.sport || '');
   const [leagueName, setLeagueName] = useState(editingLeague?.name || '');
   const [description, setDescription] = useState(editingLeague?.description || '');
-  const [categoryInput, setCategoryInput] = useState('');
+  const [categoryInput, setCategoryInput] = useState(editingLeague?.sport || '');
   const [filteredCategories, setFilteredCategories] = useState([]);
-
-  
-  // Defaulting to "Music" category style for the demo, but keeping logic generic
   const [isCasual, setIsCasual] = useState(
     editingLeague?.league_type === 'competitive' ? false : true
   );
-  
   const [maxPlayers, setMaxPlayers] = useState(
     editingLeague?.max_players?.toString() || ''
   );
@@ -73,12 +73,12 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   const initialTime = editingLeague?.date_time
     ? editingLeague.date_time.split('T')[1].slice(0, 5)
     : '';
-
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(initialTime);
 
-  // 🔥 Cover image
-  const [coverImage, setCoverImage] = useState(null);
+  const [coverImage, setCoverImage] = useState(
+    editingLeague?.cover_image ? { uri: editingLeague.cover_image } : null
+  );
 
   // UI states
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
@@ -100,37 +100,26 @@ const CreateLeagueScreen = ({ navigation, route }) => {
   };
 
   // 📍 Location autocomplete
-  // 📍 Location autocomplete (FIXED)
   useEffect(() => {
     const fetchSuggestions = async () => {
       if (!location || location.trim().length < 3) {
         setSuggestions([]);
         return;
       }
-
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(
-            location
-          )}`,
-          {
-            headers: {
-              'User-Agent': 'StreetLeagueApp/1.0',
-            },
-          }
+          `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(location)}`,
+          { headers: { 'User-Agent': 'StreetLeagueApp/1.0' } }
         );
-
         const data = await res.json();
         setSuggestions(data || []);
       } catch (err) {
         console.error('Location search failed:', err);
       }
     };
-
     const timeoutId = setTimeout(fetchSuggestions, 400);
     return () => clearTimeout(timeoutId);
   }, [location]);
-
 
   useEffect(() => {
     if (route.params?.selectedLocation) {
@@ -154,19 +143,41 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       setFilteredCategories([]);
       return;
     }
-
     const matches = CATEGORIES.filter(cat =>
       cat.toLowerCase().includes(categoryInput.toLowerCase())
     );
-
     setFilteredCategories(matches);
   }, [categoryInput]);
 
+  // 🔥 Step navigation
+  const handleBack = () => {
+    if (step === 1) {
+      navigation.goBack();
+    } else {
+      setStep(step - 1);
+    }
+  };
+
+  const handleContinueStep1 = () => {
+    if (!location) {
+      Alert.alert('Missing Field', 'Please enter a location.');
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleContinueStep2 = () => {
+    if (!leagueName || !sport || !date || !time) {
+      Alert.alert('Missing Fields', 'Please fill in all event details.');
+      return;
+    }
+    setStep(3);
+  };
 
   // 🔥 SUBMIT
   const handleSubmit = async () => {
-    if (!leagueName || !location || !sport || !date || !time || !maxPlayers) {
-      Alert.alert('Missing Fields', 'Please fill in all required fields.');
+    if (!maxPlayers) {
+      Alert.alert('Missing Fields', 'Please enter maximum joinees.');
       return;
     }
 
@@ -174,7 +185,6 @@ const CreateLeagueScreen = ({ navigation, route }) => {
     setError('');
 
     const formData = new FormData();
-
     formData.append('name', leagueName);
     formData.append('description', description);
     formData.append('sport', sport);
@@ -189,32 +199,46 @@ const CreateLeagueScreen = ({ navigation, route }) => {
       (!price || price.trim().toLowerCase() === 'free') ? 0 : price
     );
 
-    if (coverImage) {
-      formData.append('cover_image', {
-        uri: coverImage.uri,
-        name: coverImage.fileName || 'event.jpg',
-        type: coverImage.type,
-      });
-    }
+    appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
 
     try {
       if (isEditing) {
-        await axiosInstance.put(
-          `http://10.0.2.2:8000/api/update-league/${editingLeague.id}/`,
+        const res = await axiosInstance.put(
+          `${BASE_URL}/api/update-league/${editingLeague.id}/`,
           formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
-        Alert.alert("Success", "Event updated!");
+        Alert.alert('Success', 'Event updated!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'MainTabs' },  // ← replace with your actual home screen name
+                { name: 'LeagueViewerScreen', params: { league: res.data } },
+              ],
+            }),
+          },
+        ]);
       } else {
-        await axiosInstance.post(
-          'http://10.0.2.2:8000/api/create-league/',
+        const res = await axiosInstance.post(
+          `${BASE_URL}/api/create-league/`,
           formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
-        Alert.alert("Success", "Event created!");
+        Alert.alert('Success', 'Event created!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'MainTabs' },  // ← replace with your actual home screen name
+                { name: 'LeagueViewerScreen', params: { league: res.data } },
+              ],
+            }),
+          },
+        ]);
       }
-
-      navigation.navigate('Home', { refresh: true });
     } catch (err) {
       console.error(err);
       setError('Failed to save event.');
@@ -223,484 +247,664 @@ const CreateLeagueScreen = ({ navigation, route }) => {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      
-      {/* Header Row */}
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        
-        <Text style={styles.screenTitle}>
-          {isEditing ? "Edit Event" : "Create an Event"}
-        </Text>
-
-        {/* Location */}
-        <Text style={styles.label}>Where are you hosting?</Text>
-        <TextInput
-          style={styles.input}
-          value={location}
-          onChangeText={setLocation}
-          placeholder="Location"
-          placeholderTextColor="#666"
-        />
-
-        {suggestions.length > 0 && (
-          <View style={styles.suggestionsContainer}>
-             {suggestions.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.suggestionItem}
-                onPress={() => handleSuggestionPress(item)}
-              >
-                <Text style={{ color: '#fff' }}>{item.display_name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* Choose on Map Button */}
-        <TouchableOpacity
-          style={styles.mapBtn}
-          onPress={() => navigation.navigate('MapPicker')}
-        >
-          <Text style={styles.mapBtnText}>Choose on Map</Text>
-        </TouchableOpacity>
-
-        {/* Map Preview (Only if selected) */}
-        {latitude !== null && longitude !== null && (
-          <View style={styles.mapPreviewContainer}>
-             <WebView
-              source={{
-                html: `
-                  <html><body style="margin:0;">
-                    <div id="map" style="height:400px;width:100%"></div>
-                    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-                    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-                    <script>
-                      var map = L.map('map').setView([${latitude}, ${longitude}], 13);
-                      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                      L.marker([${latitude}, ${longitude}]).addTo(map);
-                    </script>
-                  </body></html>
-                `,
-              }}
-              style={{ flex: 1 }}
-              scrollEnabled={false}
-            />
-          </View>
-        )}
-
-        {/* Date & Time */}
-        <Text style={styles.label}>Time & Date</Text>
-        <View style={styles.row}>
-          <TouchableOpacity
+  // ── Step Dots ────────────────────────────────────────────────────────────
+  const StepDots = () => (
+    <View style={styles.dotsRow}>
+      {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+        const idx = i + 1;
+        const isActive = idx === step;
+        const isDone = idx < step;
+        return (
+          <View
+            key={idx}
             style={[
-              styles.dateTimeInput,
-              isEditing && { opacity: 0.5 }
+              styles.dot,
+              isActive && styles.dotActive,
+              isDone && styles.dotDone,
             ]}
-            onPress={() => {
-              if (!isEditing) setDatePickerVisibility(true);
-            }}
-            disabled={isEditing}
-          >
-            <Icon name="calendar-outline" size={18} color="#666" style={{marginRight: 8}} />
-            <Text style={[styles.dateTimeText, !date && styles.placeholderText]}>
-              {date || 'Select Date'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.dateTimeInput,
-              isEditing && { opacity: 0.5 }
-            ]}
-            onPress={() => {
-              if (!isEditing) setTimePickerVisibility(true);
-            }}
-            disabled={isEditing}
-          >
-            <Icon name="time-outline" size={18} color="#666" style={{marginRight: 8}} />
-            <Text style={[styles.dateTimeText, !time && styles.placeholderText]}>
-              {time || 'Select Time'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Name */}
-        <Text style={styles.label}>Name your Event</Text>
-        <TextInput
-          style={styles.input}
-          value={leagueName}
-          onChangeText={setLeagueName}
-          placeholder="eg. My Concert"
-          placeholderTextColor="#666"
-        />
-
-        {/* Category */}
-        <Text style={styles.label}>Category</Text>
-
-        <View>
-          <TextInput
-            style={styles.input}
-            value={categoryInput}
-            placeholder="Type category..."
-            placeholderTextColor="#666"
-            onChangeText={text => {
-              setCategoryInput(text);
-              setSport(text); // keeps backend field intact
-            }}
           />
+        );
+      })}
+    </View>
+  );
 
-          {filteredCategories.length > 0 && (
-            <View style={styles.suggestionsContainer}>
-              {filteredCategories.map(item => (
-                <TouchableOpacity
-                  key={item}
-                  style={styles.suggestionItem}
-                  onPress={() => {
-                    setCategoryInput(item);
-                    setSport(item);
-                    setFilteredCategories([]);
-                  }}
-                >
-                  <Text style={{ color: '#fff' }}>{item}</Text>
-                </TouchableOpacity>
-              ))}
+  // ── Shared header ────────────────────────────────────────────────────────
+  const Header = ({ title, subtitle }) => (
+    <>
+      <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+        <Icon name="arrow-back" size={22} color="#fff" />
+      </TouchableOpacity>
+      <StepDots />
+      <Text style={styles.stepTitle}>{title}</Text>
+      {subtitle ? <Text style={styles.stepSubtitle}>{subtitle}</Text> : null}
+    </>
+  );
+
+  // ════════════════════════════════════════════════════════════════════════
+  // STEP 1 — Location
+  // ════════════════════════════════════════════════════════════════════════
+  if (step === 1) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.stepContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Header
+              title={isEditing ? 'Edit Location' : 'Where are you\nhosting?'}
+              subtitle="Step 1 of 3"
+            />
+
+            {/* Location input */}
+            <Text style={styles.fieldLabel}>Location</Text>
+            <View style={styles.fieldInput}>
+              <Icon name="location-outline" size={16} color="#555" style={styles.fieldIcon} />
+              <TextInput
+                style={styles.fieldTextInput}
+                value={location}
+                onChangeText={setLocation}
+                placeholder="Search location..."
+                placeholderTextColor="#555"
+              />
             </View>
-          )}
-        </View>
 
+            {/* Suggestions */}
+            {suggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                {suggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionItem}
+                    onPress={() => handleSuggestionPress(item)}
+                  >
+                    <Icon name="location-outline" size={13} color="#555" style={{ marginRight: 8, marginTop: 1 }} />
+                    <Text style={styles.suggestionText} numberOfLines={2}>
+                      {item.display_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
-        {/* Max Joinees */}
-        <Text style={styles.label}>Maximum Joinees</Text>
-        <View style={styles.inputWithIcon}>
+            {/* Choose on Map */}
+            <TouchableOpacity
+              style={styles.mapBtn}
+              onPress={() => navigation.navigate('MapPicker')}
+            >
+              <Icon name="map-outline" size={14} color="#ce49d7" style={{ marginRight: 6 }} />
+              <Text style={styles.mapBtnText}>Choose on Map</Text>
+            </TouchableOpacity>
+
+            {/* Map preview */}
+            {latitude !== null && longitude !== null && (
+              <View style={styles.mapPreviewContainer}>
+                <WebView
+                  source={{
+                    html: `
+                      <html><body style="margin:0;">
+                        <div id="map" style="height:400px;width:100%"></div>
+                        <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+                        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+                        <script>
+                          var map = L.map('map').setView([${latitude}, ${longitude}], 13);
+                          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                          L.marker([${latitude}, ${longitude}]).addTo(map);
+                        </script>
+                      </body></html>
+                    `,
+                  }}
+                  style={{ flex: 1 }}
+                  scrollEnabled={false}
+                />
+              </View>
+            )}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          {/* Continue CTA */}
+          <View style={styles.bottomAction}>
+            <TouchableOpacity style={styles.continueBtn} onPress={handleContinueStep1}>
+              <Text style={styles.continueBtnText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // STEP 2 — Event Details (Name, Category, Date & Time, Type)
+  // ════════════════════════════════════════════════════════════════════════
+  if (step === 2) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.stepContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Header title="Event Details" subtitle="Step 2 of 3" />
+
+            {/* Event Name */}
+            <Text style={styles.fieldLabel}>Event Name</Text>
+            <View style={styles.fieldInput}>
+              <TextInput
+                style={styles.fieldTextInput}
+                value={leagueName}
+                onChangeText={setLeagueName}
+                placeholder="eg. My Concert"
+                placeholderTextColor="#555"
+              />
+            </View>
+
+            {/* Category */}
+            <Text style={styles.fieldLabel}>Category</Text>
+            <View style={styles.fieldInput}>
+              <Icon name="grid-outline" size={16} color="#555" style={styles.fieldIcon} />
+              <TextInput
+                style={styles.fieldTextInput}
+                value={categoryInput}
+                placeholder="Type or select a category..."
+                placeholderTextColor="#555"
+                onChangeText={text => {
+                  setCategoryInput(text);
+                  setSport(text);
+                }}
+              />
+            </View>
+
+            {filteredCategories.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                {filteredCategories.map(item => (
+                  <TouchableOpacity
+                    key={item}
+                    style={styles.suggestionItem}
+                    onPress={() => {
+                      setCategoryInput(item);
+                      setSport(item);
+                      setFilteredCategories([]);
+                    }}
+                  >
+                    <Text style={styles.suggestionText}>{item}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Category quick-tags */}
+            <View style={styles.tagsWrap}>
+              {CATEGORIES.map(cat => {
+                const selected = sport === cat;
+                return (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.tag, selected && styles.tagSelected]}
+                    onPress={() => {
+                      setSport(cat);
+                      setCategoryInput(cat);
+                      setFilteredCategories([]);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.tagText, selected && styles.tagTextSelected]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Date & Time */}
+            <Text style={styles.fieldLabel}>Date & Time</Text>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.fieldInput, { flex: 1 }, isEditing && { opacity: 0.5 }]}
+                onPress={() => { if (!isEditing) setDatePickerVisibility(true); }}
+                disabled={isEditing}
+              >
+                <Icon name="calendar-outline" size={16} color="#555" style={styles.fieldIcon} />
+                <Text style={[styles.fieldInputText, !date && styles.placeholderText]}>
+                  {date || 'Select Date'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.fieldInput, { flex: 1 }, isEditing && { opacity: 0.5 }]}
+                onPress={() => { if (!isEditing) setTimePickerVisibility(true); }}
+                disabled={isEditing}
+              >
+                <Icon name="time-outline" size={16} color="#555" style={styles.fieldIcon} />
+                <Text style={[styles.fieldInputText, !time && styles.placeholderText]}>
+                  {time || 'Select Time'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
+
+          <View style={styles.bottomAction}>
+            <TouchableOpacity style={styles.continueBtn} onPress={handleContinueStep2}>
+              <Text style={styles.continueBtnText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+
+          <DateTimePickerModal
+            isVisible={isDatePickerVisible}
+            mode="date"
+            onConfirm={(d) => {
+              setDate(d.toISOString().split('T')[0]);
+              setDatePickerVisibility(false);
+            }}
+            onCancel={() => setDatePickerVisibility(false)}
+          />
+          <DateTimePickerModal
+            isVisible={isTimePickerVisible}
+            mode="time"
+            onConfirm={(t) => {
+              setTime(t.toTimeString().slice(0, 5));
+              setTimePickerVisibility(false);
+            }}
+            onCancel={() => setTimePickerVisibility(false)}
+          />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // STEP 3 — Final Touches (Max Players, Price, Description, Cover Image)
+  // ════════════════════════════════════════════════════════════════════════
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.stepContainer}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Header title="Final Touches" subtitle="Step 3 of 3" />
+
+          {/* Max Players */}
+          <Text style={styles.fieldLabel}>Maximum Joinees</Text>
+          <View style={styles.fieldInput}>
+            <Icon name="people-outline" size={16} color="#555" style={styles.fieldIcon} />
             <TextInput
-            style={styles.flexInput}
-            value={maxPlayers}
-            onChangeText={setMaxPlayers}
-            placeholder="eg. 20"
-            keyboardType="numeric"
-            placeholderTextColor="#666"
+              style={styles.fieldTextInput}
+              value={maxPlayers}
+              onChangeText={setMaxPlayers}
+              placeholder="eg. 20"
+              keyboardType="numeric"
+              placeholderTextColor="#555"
             />
-            <Icon name="chevron-expand" size={20} color="#666" /> 
+          </View>
+
+          {/* Price */}
+          <Text style={styles.fieldLabel}>
+            Price{' '}
+            <Text style={styles.optionalLabel}>(leave empty if free)</Text>
+          </Text>
+          <View style={styles.fieldInput}>
+            <Icon name="pricetag-outline" size={16} color="#555" style={styles.fieldIcon} />
+            <TextInput
+              style={styles.fieldTextInput}
+              value={price}
+              onChangeText={setPrice}
+              placeholder="Free"
+              placeholderTextColor="#555"
+            />
+          </View>
+
+          {/* Description */}
+          <Text style={styles.fieldLabel}>Additional Info</Text>
+          <View style={[styles.fieldInput, styles.textAreaInput]}>
+            <TextInput
+              style={styles.textAreaTextInput}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Describe your event..."
+              placeholderTextColor="#555"
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+            />
+          </View>
+
+          {/* Cover Image */}
+          <Text style={styles.fieldLabel}>Cover Image</Text>
+          <TouchableOpacity style={styles.imageUploadBox} onPress={pickCoverImage}>
+            {coverImage ? (
+              <Image
+                source={{ uri: coverImage.uri }}
+                style={styles.coverPreview}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.imagePlaceholder}>
+                <Icon name="image-outline" size={28} color="#333" />
+                <Text style={styles.addImageText}>Add Cover Image</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={styles.bottomAction}>
+          <TouchableOpacity
+            style={[styles.continueBtn, styles.tealBtn]}
+            onPress={handleSubmit}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.continueBtnText}>
+                {isEditing ? 'Save Changes' : 'Create Activity'}
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
-
-        {/* Price */}
-        <Text style={styles.label}>Price <Text style={styles.subLabel}>(Leave empty if Free)</Text></Text>
-        <TextInput
-          style={styles.input}
-          value={price}
-          onChangeText={setPrice}
-          placeholder="Free"
-          placeholderTextColor="#666"
-        />
-
-        {/* Info */}
-        <Text style={styles.label}>Additional Info</Text>
-        <TextInput
-          style={styles.textArea}
-          value={description}
-          onChangeText={setDescription}
-          placeholder="Description"
-          placeholderTextColor="#666"
-          multiline
-        />
-
-        {/* Cover Image */}
-        <Text style={styles.label}>Cover Image</Text>
-        <TouchableOpacity
-          style={styles.imageUploadBox}
-          onPress={pickCoverImage}
-        >
-          {coverImage ? (
-            <Image
-              source={{ uri: coverImage.uri }}
-              style={styles.coverPreview}
-              resizeMode="cover"
-            />
-          ) : (
-            <Text style={styles.addImageText}>Add Image</Text>
-          )}
-        </TouchableOpacity>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={styles.createBtn}
-          onPress={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.createText}>
-              {isEditing ? "Save Changes" : "Create"}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Pickers */}
-        <DateTimePickerModal
-          isVisible={isDatePickerVisible}
-          mode="date"
-          onConfirm={(d) => {
-            // Format: Feb 24, 2026, Wednesday
-            const options = { year: 'numeric', month: 'short', day: 'numeric', weekday: 'long' };
-            // Store ISO for logic, but could format for display if needed. 
-            // For now keeping simple ISO split or custom format:
-            setDate(d.toISOString().split('T')[0]); 
-            setDatePickerVisibility(false);
-          }}
-          onCancel={() => setDatePickerVisibility(false)}
-        />
-
-        <DateTimePickerModal
-          isVisible={isTimePickerVisible}
-          mode="time"
-          onConfirm={(t) => {
-            // Format: 8:00 PM
-            setTime(t.toTimeString().slice(0, 5));
-            setTimePickerVisibility(false);
-          }}
-          onCancel={() => setTimePickerVisibility(false)}
-        />
-
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
 
+// ── Styles ────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
-  safeArea: {
+  root: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0A0A0A',
+  },
+  stepContainer: {
+    paddingHorizontal: 24,
+    paddingTop: (StatusBar.currentHeight || 44) + 8,
+    paddingBottom: 20,
   },
 
-  headerRow: {
-    paddingHorizontal: 16,
-    paddingTop: 40,
-    paddingBottom: 5,
+  // ── Nav & Steps ───────────────────────────────────────────────────────────
+  backBtn: {
+    marginBottom: 24,
+    width: 36,
   },
-
-  scrollContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
-
-  screenTitle: {
-    fontSize: 26,
-    color: '#fff',
-    marginTop: 10,
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 6,
     marginBottom: 20,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#222',
+  },
+  dotActive: {
+    width: 22,
+    borderRadius: 4,
+    backgroundColor: '#8575ff',
+  },
+  dotDone: {
+    backgroundColor: '#8575ff',
+  },
+
+  // ── Typography ────────────────────────────────────────────────────────────
+  stepTitle: {
+    color: '#fff',
+    fontSize: 26,
+    fontWeight: 'bold',
+    marginBottom: 6,
+    letterSpacing: 0.2,
     fontFamily: Fonts.bold,
   },
-
-  label: {
+  stepSubtitle: {
+    color: '#555',
+    fontSize: 13,
+    marginBottom: 28,
+    fontFamily: Fonts.regular,
+  },
+  fieldLabel: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
     marginTop: 20,
-    marginBottom: 10,
     fontFamily: Fonts.semibold,
   },
-
-  subLabel: {
+  optionalLabel: {
+    color: '#555',
     fontSize: 12,
-    color: '#888',
+    fontWeight: '400',
     fontFamily: Fonts.regular,
   },
 
-  input: {
-    backgroundColor: '#161616',
+  // ── Inputs ────────────────────────────────────────────────────────────────
+  fieldInput: {
+    backgroundColor: '#111',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    color: '#fff',
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-  },
-
-  inputWithIcon: {
+    borderColor: '#222',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    paddingHorizontal: 15,
   },
-
-  flexInput: {
-    flex: 1,
-    paddingVertical: 12,
-    color: '#fff',
+  fieldIcon: {
+    marginRight: 10,
+  },
+  fieldInputText: {
+    color: '#ccc',
     fontSize: 14,
+    flex: 1,
+    fontFamily: Fonts.regular,
+  },
+  fieldTextInput: {
+    color: '#ccc',
+    fontSize: 14,
+    flex: 1,
+    padding: 0,
+    fontFamily: Fonts.regular,
+  },
+  placeholderText: {
+    color: '#555',
+  },
+  textAreaInput: {
+    alignItems: 'flex-start',
+    paddingVertical: 14,
+  },
+  textAreaTextInput: {
+    color: '#ccc',
+    fontSize: 14,
+    minHeight: 120,
+    width: '100%',
+    padding: 0,
     fontFamily: Fonts.regular,
   },
 
+  // ── Suggestions ───────────────────────────────────────────────────────────
   suggestionsContainer: {
-    backgroundColor: '#1e1e1e',
-    borderRadius: 8,
-    marginTop: 5,
-    maxHeight: 150,
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden',
   },
-
   suggestionItem: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: '#1e1e1e',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  suggestionText: {
+    color: '#ccc',
+    fontSize: 13,
+    flex: 1,
+    fontFamily: Fonts.regular,
   },
 
+  // ── Map ───────────────────────────────────────────────────────────────────
   mapBtn: {
-    backgroundColor: '#2E7D32',
-    marginTop: 15,
-    paddingVertical: 8,
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2c0732',
+    marginTop: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: 20,
     alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#c54ace',
   },
-
   mapBtnText: {
-    color: '#fff',
+    color: '#D44FDD',
     fontSize: 13,
     fontFamily: Fonts.semibold,
   },
-
   mapPreviewContainer: {
-    height: 150,
-    marginTop: 15,
-    borderRadius: 10,
+    height: 160,
+    marginTop: 16,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#222',
   },
 
+  // ── Category Tags ─────────────────────────────────────────────────────────
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  tag: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#111',
+  },
+  tagSelected: {
+    backgroundColor: '#D44FDD',
+    borderColor: '#ce49d7',
+  },
+  tagText: {
+    color: '#666',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+  },
+  tagTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+    fontFamily: Fonts.semibold,
+  },
+
+  // ── Event Type Toggle ─────────────────────────────────────────────────────
   row: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
-
-  dateTimeInput: {
+  typeBtn: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#161616',
+    paddingVertical: 13,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderColor: '#222',
+    backgroundColor: '#111',
+    alignItems: 'center',
   },
-
-  dateTimeText: {
-    color: '#fff',
-    fontSize: 13,
+  typeBtnSelected: {
+    backgroundColor: '#D44FDD',
+    borderColor: '#ce49d7',
+  },
+  typeBtnText: {
+    color: '#555',
+    fontSize: 14,
     fontFamily: Fonts.medium ?? Fonts.regular,
   },
-
-  placeholderText: {
-    color: '#666',
-    fontFamily: Fonts.regular,
-  },
-
-  textArea: {
-    backgroundColor: '#161616',
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 8,
-    padding: 15,
-    height: 120,
-    textAlignVertical: 'top',
+  typeBtnTextSelected: {
     color: '#fff',
-    fontSize: 14,
-    fontFamily: Fonts.regular,
+    fontWeight: '600',
+    fontFamily: Fonts.semibold,
   },
 
+  // ── Cover Image ───────────────────────────────────────────────────────────
   imageUploadBox: {
-    height: 140,
-    backgroundColor: '#2A2A2A',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 5,
+    height: 150,
+    backgroundColor: '#111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden',
   },
-
+  imagePlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   addImageText: {
-    color: '#888',
-    fontSize: 14,
+    color: '#444',
+    fontSize: 13,
     fontFamily: Fonts.regular,
   },
-
   coverPreview: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
   },
 
-  createBtn: {
-    backgroundColor: '#4285F4',
-    paddingVertical: 16,
-    borderRadius: 30,
-    alignItems: 'center',
-    marginTop: 40,
-    width: '100%',
-  },
-
-  createText: {
-    color: '#fff',
-    fontSize: 18,
-    fontFamily: Fonts.bold,
-  },
-
+  // ── Error ─────────────────────────────────────────────────────────────────
   errorText: {
     color: '#ff5252',
-    marginTop: 15,
+    marginTop: 16,
     textAlign: 'center',
     fontFamily: Fonts.regular,
+    fontSize: 13,
   },
 
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-
-  categoryModal: {
-    backgroundColor: '#1C1C1E',
-    paddingTop: 20,
+  // ── Bottom CTA ────────────────────────────────────────────────────────────
+  bottomAction: {
+    paddingHorizontal: 24,
     paddingBottom: 30,
-    paddingHorizontal: 20,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    paddingTop: 12,
+    backgroundColor: '#0A0A0A',
   },
-
-  modalTitle: {
-    color: '#fff',
-    fontSize: 18,
-    marginBottom: 16,
-    fontFamily: Fonts.semibold,
+  continueBtn: {
+    backgroundColor: '#111',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 40,
+    paddingVertical: 16,
+    alignItems: 'center',
   },
-
-  categoryItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
+  tealBtn: {
+    backgroundColor: '#D44FDD',
+    borderColor: '#ce49d7',
   },
-
-  categoryText: {
+  continueBtnText: {
     color: '#fff',
     fontSize: 16,
-    fontFamily: Fonts.regular,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    fontFamily: Fonts.semibold,
   },
-
 });
-
 
 export default CreateLeagueScreen;

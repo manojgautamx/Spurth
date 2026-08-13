@@ -1,26 +1,53 @@
 {
   "project_info": {
-    "project_number": "803651203796",
-    "project_id": "spurth-chat",
-    "storage_bucket": "spurth-chat.firebasestorage.app"
+    "project_number": "23044304139",
+    "firebase_url": "https://spurthchat-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "spurthchat",
+    "storage_bucket": "spurthchat.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:803651203796:android:23d7987b6839e182490141",
+        "mobilesdk_app_id": "1:23044304139:android:0629bc4cd6c3830942460e",
         "android_client_info": {
           "package_name": "com.streetleague"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "23044304139-h1bdinqgqb9shi6cmnrhd55les41krme.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.streetleague",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "23044304139-lvbb90tet507213fqr0g698l2jt5blrb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.streetleague",
+            "certificate_hash": "39ce5d001560f158e4aa74807be3fae6c860dbfa"
+          }
+        },
+        {
+          "client_id": "23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyBSAHPrUCxWcNcFS2X3M1uORRgm1nV7mDc"
+          "current_key": "AIzaSyCrswMH-sy9qA9DqeEU08CY1Vk0yYWdf60"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

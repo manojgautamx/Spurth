@@ -1,29 +1,65 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Image,
-  ScrollView, Alert, Platform, KeyboardAvoidingView, TextInput
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  ScrollView,
+  Alert,
+  Platform,
+  KeyboardAvoidingView,
+  TextInput,
+  StatusBar,
+  ActivityIndicator,
 } from 'react-native';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
+import { appendImageAsset } from '../utils/appendImageAsset';
+import { BASE_URL } from '../config';
 
-const BASE_URL = 'http://10.0.2.2:8000';
+const CATEGORY_GROUPS = {
+  Sports: [
+    'Football', 'Soccer', 'Futsal', 'Cricket', 'Basketball',
+    'Volleyball', 'Badminton', 'Tennis', 'Table Tennis',
+    'Baseball', 'Rugby', 'Hockey',
+  ],
+  Fitness: [
+    'Gym', 'Fitness', 'Workout', 'Yoga', 'Pilates',
+    'Crossfit', 'Cardio', 'Zumba',
+  ],
+  Adventure: [
+    'Hiking', 'Trekking', 'Cycling', 'Biking', 'Running',
+    'Marathon', 'Climbing', 'Camping', 'Rafting',
+  ],
+  Gaming: [
+    'Esports', 'Gaming', 'Chess', 'Board Games', 'Poker',
+  ],
+  Arts: [
+    'Music', 'Concert', 'Dance', 'Painting', 'Photography', 'Art',
+  ],
+  Education: [
+    'Meetup', 'Workshop', 'Seminar', 'Networking', 'Study Group',
+  ],
+  Lifestyle: [
+    'Food', 'Cooking', 'Coffee', 'Wine', 'BBQ',
+  ],
+  Tech: [
+    'Startup', 'Tech', 'Coding', 'Hackathon', 'Business',
+  ],
+};
 
-const sportsOptions = [
-  { id: 'football', name: 'Football' },
-  { id: 'basketball', name: 'Basketball' },
-  { id: 'tennis', name: 'Tennis' },
-  { id: 'cricket', name: 'Cricket' },
-  { id: 'hockey', name: 'Hockey' },
-];
+const MAX_INTERESTS = 5;
 
 export default function ProfileEditScreen({ navigation }) {
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
   const [bio, setBio] = useState('');
-  const [favoriteSports, setFavoriteSports] = useState([]);
+  const [location, setLocation] = useState('');
+  const [interests, setInterests] = useState([]);
   const [avatar, setAvatar] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -34,14 +70,22 @@ export default function ProfileEditScreen({ navigation }) {
     const fetchProfile = async () => {
       try {
         const res = await axiosInstance.get('profile/');
-        const profile = res.data;
-        setFullName(profile.full_name || '');
-        setGender(profile.gender || '');
-        setBirthDate(new Date(profile.birth_date));
-        setBio(profile.bio || '');
-        setFavoriteSports(profile.favorite_sports || []);
-        if (profile.avatar) {
-          setAvatarUrl(profile.avatar.startsWith('http') ? profile.avatar : `${BASE_URL}${profile.avatar}`);
+        const p = res.data;
+        setFullName(p.full_name || '');
+        setGender(p.gender || '');
+        if (p.birth_date) setBirthDate(new Date(p.birth_date));
+        setBio(p.bio || '');
+        setLocation(p.location || '');
+        if (p.favorite_sports) {
+          // stored as comma-separated string or array
+          const parsed = Array.isArray(p.favorite_sports)
+            ? p.favorite_sports
+            : p.favorite_sports.split(',').map(s => s.trim()).filter(Boolean);
+          // Capitalise first letter to match CATEGORY_GROUPS keys
+          setInterests(parsed.map(s => s.charAt(0).toUpperCase() + s.slice(1)));
+        }
+        if (p.avatar) {
+          setAvatarUrl(p.avatar.startsWith('http') ? p.avatar : `${BASE_URL}${p.avatar}`);
         }
       } catch (err) {
         console.error('Failed to load profile:', err);
@@ -53,56 +97,55 @@ export default function ProfileEditScreen({ navigation }) {
     fetchProfile();
   }, []);
 
-  const pickImage = () => {
-    launchImageLibrary(
+  const showPhotoPicker = () => {
+    Alert.alert('Upload Photo', null, [
       {
-        mediaType: 'photo',
-        includeBase64: false,
-        maxHeight: 600,
-        maxWidth: 600,
+        text: 'Camera', onPress: () => {
+          launchCamera({ mediaType: 'photo', maxHeight: 800, maxWidth: 800 }, res => {
+            if (res.assets?.[0]) { setAvatar(res.assets[0]); setAvatarUrl(null); }
+          });
+        },
       },
-      (response) => {
-        if (response.didCancel) return;
-        if (response.errorCode) {
-          Alert.alert('Image Picker Error', response.errorMessage || 'Unknown error');
-          return;
-        }
-        if (response.assets && response.assets.length > 0) {
-          setAvatar(response.assets[0]);
-          setAvatarUrl(null); // Clear existing URL when new image is picked
-        }
+      {
+        text: 'Gallery', onPress: () => {
+          launchImageLibrary({ mediaType: 'photo', maxHeight: 800, maxWidth: 800 }, res => {
+            if (res.assets?.[0]) { setAvatar(res.assets[0]); setAvatarUrl(null); }
+          });
+        },
+      },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const toggleInterest = (item) => {
+    if (interests.includes(item)) {
+      setInterests(interests.filter(i => i !== item));
+    } else {
+      if (interests.length >= MAX_INTERESTS) {
+        Alert.alert('Limit reached', `You can only pick ${MAX_INTERESTS} interests.`);
+        return;
       }
-    );
+      setInterests([...interests, item]);
+    }
   };
 
   const handleSubmit = async () => {
-    if (!fullName || !gender || !birthDate || favoriteSports.length === 0) {
-      Alert.alert('Incomplete', 'Please fill in all fields');
+    if (!fullName || !gender || !birthDate) {
+      Alert.alert('Incomplete', 'Please fill in full name, gender and date of birth');
       return;
     }
-
     try {
       setSubmitting(true);
       const formData = new FormData();
 
-      if (avatar) {
-        const uri = avatar.uri;
-        const name = uri.split('/').pop();
-        const type = avatar.type || 'image/jpeg';
-        formData.append('avatar', {
-          uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-          name,
-          type,
-        });
-      }
+      appendImageAsset(formData, 'avatar', avatar);
 
       formData.append('full_name', fullName);
       formData.append('gender', gender);
       formData.append('birth_date', birthDate.toISOString().split('T')[0]);
       formData.append('bio', bio);
-      favoriteSports.forEach((sport) => {
-        formData.append('favorite_sports', sport);
-      });
+      formData.append('location', location);
+      interests.forEach(i => formData.append('favorite_sports', i.toLowerCase()));
 
       await axiosInstance.put('profile/update/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -111,8 +154,9 @@ export default function ProfileEditScreen({ navigation }) {
       Alert.alert('Success', 'Profile updated!');
       navigation.goBack();
     } catch (err) {
-      console.error('Update failed:', err.response?.data || err.message);
-      Alert.alert('Error', 'Could not update profile');
+      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+      console.error('Update failed:', detail);
+      Alert.alert('Error', `Could not update profile: ${detail}`);
     } finally {
       setSubmitting(false);
     }
@@ -121,129 +165,385 @@ export default function ProfileEditScreen({ navigation }) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
+        <ActivityIndicator size="large" color="#2CB9B0" />
       </View>
     );
   }
 
+  const avatarSource = avatar
+    ? { uri: avatar.uri }
+    : avatarUrl
+    ? { uri: avatarUrl }
+    : null;
+
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Edit Profile</Text>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
 
-        <TouchableOpacity onPress={pickImage} style={styles.avatarContainer}>
-          {avatar ? (
-            <Image source={{ uri: avatar.uri }} style={styles.avatar} />
-          ) : avatarUrl ? (
-            <Image source={{ uri: avatarUrl }} style={styles.avatar} />
-          ) : (
-            <Text style={styles.avatarText}>Upload Avatar</Text>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <View style={{ width: 36 }} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+
+          {/* Avatar */}
+          <TouchableOpacity style={styles.avatarWrapper} onPress={showPhotoPicker} activeOpacity={0.8}>
+            {avatarSource ? (
+              <Image source={avatarSource} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarFallback}>
+                <Ionicons name="person" size={40} color="#444" />
+              </View>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="camera" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Full Name */}
+          <Text style={styles.fieldLabel}>Full Name</Text>
+          <View style={styles.fieldInput}>
+            <TextInput
+              style={styles.fieldTextInput}
+              placeholder="Enter your full name"
+              placeholderTextColor="#555"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+          </View>
+
+          {/* Gender */}
+          <Text style={styles.fieldLabel}>Gender</Text>
+          <View style={styles.genderRow}>
+            {['male', 'female', 'other'].map(g => (
+              <TouchableOpacity
+                key={g}
+                style={[styles.genderBtn, gender === g && styles.genderBtnSelected]}
+                onPress={() => setGender(g)}
+              >
+                <Text style={[styles.genderBtnText, gender === g && styles.genderBtnTextSelected]}>
+                  {g.charAt(0).toUpperCase() + g.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Date of Birth */}
+          <Text style={styles.fieldLabel}>Date of Birth</Text>
+          <TouchableOpacity style={styles.fieldInput} onPress={() => setShowDatePicker(true)}>
+            <Ionicons name="calendar-outline" size={18} color="#888" style={styles.fieldIcon} />
+            <Text style={styles.fieldInputText}>
+              {birthDate.toLocaleDateString('en-US', {
+                month: 'long', day: 'numeric', year: 'numeric', weekday: 'long',
+              })}
+            </Text>
+          </TouchableOpacity>
+          {showDatePicker && (
+            <DateTimePicker
+              value={birthDate}
+              mode="date"
+              display="default"
+              maximumDate={new Date()}
+              onChange={(_, date) => {
+                setShowDatePicker(false);
+                if (date) setBirthDate(date);
+              }}
+            />
           )}
-        </TouchableOpacity>
 
-        <Text style={styles.label}>Full Name</Text>
-        <TextInput style={styles.input} value={fullName} onChangeText={setFullName} />
+          {/* Location */}
+          <Text style={styles.fieldLabel}>Location</Text>
+          <View style={styles.fieldInput}>
+            <TextInput
+              style={styles.fieldTextInput}
+              placeholder="Where are you based?"
+              placeholderTextColor="#555"
+              value={location}
+              onChangeText={setLocation}
+            />
+          </View>
 
-        <Text style={styles.label}>Gender</Text>
-        <Picker selectedValue={gender} onValueChange={setGender} style={styles.picker}>
-          <Picker.Item label="Select Gender" value="" />
-          <Picker.Item label="Male" value="male" />
-          <Picker.Item label="Female" value="female" />
-          <Picker.Item label="Other" value="other" />
-        </Picker>
+          {/* Bio */}
+          <Text style={styles.fieldLabel}>Bio</Text>
+          <View style={[styles.fieldInput, styles.bioInput]}>
+            <TextInput
+              style={styles.bioTextInput}
+              placeholder="What's your line?"
+              placeholderTextColor="#555"
+              value={bio}
+              onChangeText={setBio}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
+            />
+          </View>
 
-        <Text style={styles.label}>Birth Date</Text>
-        <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePicker}>
-          <Text>{birthDate.toDateString()}</Text>
-        </TouchableOpacity>
-        {showDatePicker && (
-          <DateTimePicker
-            value={birthDate}
-            mode="date"
-            display="default"
-            onChange={(event, selectedDate) => {
-              setShowDatePicker(false);
-              if (selectedDate) setBirthDate(selectedDate);
-            }}
-            maximumDate={new Date()}
-          />
-        )}
+          {/* Interests */}
+          <View style={styles.interestHeader}>
+            <Text style={styles.fieldLabel}>Interests</Text>
+            <Text style={styles.interestCount}>{interests.length}/{MAX_INTERESTS}</Text>
+          </View>
 
-        <Text style={styles.label}>Bio</Text>
-        <TextInput
-          style={[styles.input, styles.bioInput]}
-          value={bio}
-          onChangeText={setBio}
-          multiline
-        />
+          {Object.entries(CATEGORY_GROUPS).map(([category, items]) => (
+            <View key={category} style={styles.categorySection}>
+              <Text style={styles.categoryLabel}>{category}</Text>
+              <View style={styles.tagsWrap}>
+                {items.map(item => {
+                  const selected = interests.includes(item);
+                  return (
+                    <TouchableOpacity
+                      key={item}
+                      style={[styles.tag, selected && styles.tagSelected]}
+                      onPress={() => toggleInterest(item)}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={[styles.tagText, selected && styles.tagTextSelected]}>
+                        {item}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
 
-        <Text style={styles.label}>Favorite Sports</Text>
-        <MultiSelect
-          items={sportsOptions}
-          uniqueKey="id"
-          onSelectedItemsChange={setFavoriteSports}
-          selectedItems={favoriteSports}
-          selectText="Pick Sports"
-          searchInputPlaceholderText="Search sports..."
-          tagRemoveIconColor="#E81F89"
-          tagBorderColor="#E81F89"
-          tagTextColor="#E81F89"
-          selectedItemTextColor="#E81F89"
-          selectedItemIconColor="#E81F89"
-          itemTextColor="#000"
-          displayKey="name"
-          submitButtonColor="#E81F89"
-          submitButtonText="Submit"
-        />
+          {/* Save Button */}
+          <TouchableOpacity
+            style={[styles.saveBtn, submitting && styles.saveBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting}
+          >
+            <Text style={styles.saveBtnText}>
+              {submitting ? 'Saving...' : 'Save Changes'}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.submitButton} onPress={handleSubmit} disabled={submitting}>
-          <Text style={styles.submitText}>{submitting ? 'Saving...' : 'Save Changes'}</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
+  root: {
+    flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   loadingContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    backgroundColor: '#0A0A0A',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 24, fontWeight: 'bold', textAlign: 'center', marginBottom: 20,
+
+  // ── Header ───────────────────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: (StatusBar.currentHeight || 44) + 8,
+    paddingBottom: 14,
   },
-  avatarContainer: {
-    alignSelf: 'center', marginBottom: 20,
-    borderRadius: 75, backgroundColor: '#f0f0f0',
-    height: 150, width: 150, justifyContent: 'center', alignItems: 'center',
+  backBtn: {
+    width: 36,
+  },
+  headerTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+
+  // ── Scroll ───────────────────────────────────────────────────────────────
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+
+  // ── Avatar ───────────────────────────────────────────────────────────────
+  avatarWrapper: {
+    alignSelf: 'center',
+    marginBottom: 32,
   },
   avatar: {
-    height: 150, width: 150, borderRadius: 75,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
   },
-  avatarText: {
-    color: '#888',
+  avatarFallback: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#1A1A1A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
   },
-  label: {
-    fontWeight: 'bold', marginTop: 10, marginBottom: 5,
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#2CB9B0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  input: {
-    backgroundColor: '#f2f2f2', padding: 10, borderRadius: 5, marginBottom: 10,
+
+  // ── Fields ───────────────────────────────────────────────────────────────
+  fieldLabel: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 20,
   },
-  picker: {
-    backgroundColor: '#f2f2f2', marginBottom: 10,
+  fieldInput: {
+    backgroundColor: '#111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  datePicker: {
-    padding: 12, backgroundColor: '#f2f2f2', marginBottom: 10, borderRadius: 5,
+  fieldIcon: {
+    marginRight: 10,
+  },
+  fieldInputText: {
+    color: '#ccc',
+    fontSize: 14,
+    flex: 1,
+  },
+  fieldTextInput: {
+    color: '#ccc',
+    fontSize: 14,
+    flex: 1,
+    padding: 0,
   },
   bioInput: {
-    minHeight: 80, textAlignVertical: 'top',
+    alignItems: 'flex-start',
+    paddingVertical: 14,
   },
-  submitButton: {
-    backgroundColor: '#E81F89', padding: 12, borderRadius: 8, marginTop: 20,
+  bioTextInput: {
+    color: '#ccc',
+    fontSize: 14,
+    minHeight: 120,
+    width: '100%',
+    padding: 0,
   },
-  submitText: {
-    color: '#fff', textAlign: 'center', fontWeight: 'bold',
+
+  // ── Gender ───────────────────────────────────────────────────────────────
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  genderBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#222',
+    backgroundColor: '#111',
+    alignItems: 'center',
+  },
+  genderBtnSelected: {
+    backgroundColor: '#2CB9B0',
+    borderColor: '#2CB9B0',
+  },
+  genderBtnText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  genderBtnTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  // ── Interests ────────────────────────────────────────────────────────────
+  interestHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    marginBottom: 4,
+  },
+  interestCount: {
+    color: '#888',
+    fontSize: 13,
+    marginTop: 6,
+  },
+  categorySection: {
+    marginTop: 16,
+  },
+  categoryLabel: {
+    color: '#aaa',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  tagsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#111',
+  },
+  tagSelected: {
+    backgroundColor: '#2CB9B0',
+    borderColor: '#2CB9B0',
+  },
+  tagText: {
+    color: '#888',
+    fontSize: 13,
+  },
+  tagTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+
+  // ── Save Button ───────────────────────────────────────────────────────────
+  saveBtn: {
+    marginTop: 32,
+    backgroundColor: '#2CB9B0',
+    borderRadius: 40,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  saveBtnDisabled: {
+    opacity: 0.6,
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
   },
 });

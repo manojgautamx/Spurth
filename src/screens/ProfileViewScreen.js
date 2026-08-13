@@ -9,6 +9,12 @@ import {
   TouchableOpacity,
   Alert,
   StatusBar,
+  Modal,
+  FlatList,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Share,                     // ← ADD 1: import Share
 } from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -16,22 +22,46 @@ import { AuthContext } from '../context/AuthContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { getSportImage } from '../utils/getSportImage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import PostCard from '../components/PostCard';
+import { BASE_URL } from '../config';
 
-const BASE_URL = 'http://10.0.2.2:8000';
+const getCoverSource = (item) => {
+  if (item.cover_image) {
+    const uri = item.cover_image.startsWith('http')
+      ? item.cover_image
+      : `${BASE_URL}${item.cover_image}`;
+    return { uri };
+  }
+  return { uri: getSportImage(item.sport) };
+};
 
 export default function ProfileViewScreen({ route }) {
   const navigation = useNavigation();
   const { logout, user } = useContext(AuthContext);
 
-  // ✅ userId passed when clicking host
   const userId = route?.params?.userId || null;
-
   const isMyProfile = !userId || user?.user_id === userId;
 
   const [myLeagues, setMyLeagues] = useState([]);
   const [joinedLeagues, setJoinedLeagues] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [commentModalVisible, setCommentModalVisible] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentText, setCommentText] = useState('');
+
+  // ── ADD 2: Invite state ─────────────────────────────────────────────────────
+  // myOwnLeagues = the *current user's* leagues (created + joined), used to pick
+  // which event to invite the viewed user to. Only populated when !isMyProfile.
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [myOwnLeagues, setMyOwnLeagues] = useState([]);
+  const [inviting, setInviting] = useState(false);
+  // ───────────────────────────────────────────────────────────────────────────
 
   useFocusEffect(
     useCallback(() => {
@@ -41,28 +71,38 @@ export default function ProfileViewScreen({ route }) {
         try {
           setLoading(true);
 
-          // ✅ PROFILE (works for self + others)
           const profileRes = await axiosInstance.get(
             isMyProfile ? 'profile/' : `profile/${userId}/`
           );
-
           if (!active) return;
           setProfile(profileRes.data);
 
-          // ✅ ONLY fetch leagues for own profile
           if (isMyProfile) {
             const [myRes, joinedRes] = await Promise.all([
               axiosInstance.get('my-leagues/'),
               axiosInstance.get('joined-leagues/'),
             ]);
-
             if (!active) return;
             setMyLeagues(myRes.data);
             setJoinedLeagues(joinedRes.data);
           } else {
-            // viewing someone else → empty but valid
-            setMyLeagues([]);
-            setJoinedLeagues([]);
+            // Fetch the viewed user's leagues for display
+            const res = await axiosInstance.get(`user-leagues/${userId}/`);
+            if (!active) return;
+            setMyLeagues(res.data.created || []);
+            setJoinedLeagues(res.data.joined || []);
+
+            // ── ADD 3: Also fetch the CURRENT user's own leagues for the
+            //    invite picker. We need to show leagues the inviter belongs to.
+            const [ownCreated, ownJoined] = await Promise.all([
+              axiosInstance.get('my-leagues/'),
+              axiosInstance.get('joined-leagues/'),
+            ]);
+            if (!active) return;
+            setMyOwnLeagues([
+              ...(ownCreated.data || []),
+              ...(ownJoined.data || []),
+            ]);
           }
         } catch (err) {
           console.log('Profile fetch error:', err);
@@ -73,9 +113,84 @@ export default function ProfileViewScreen({ route }) {
       };
 
       fetchProfile();
+      fetchUserPosts();
       return () => (active = false);
     }, [userId])
   );
+
+  const fetchUserPosts = async () => {
+    try {
+      setPostsLoading(true);
+      const token = await AsyncStorage.getItem('accessToken');
+      const targetId = isMyProfile ? user?.user_id : userId;
+      const res = await fetch(`${BASE_URL}/api/posts/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const normalized = (data.results || data)
+        .filter(p => String(p.user) === String(targetId))
+        .map(p => ({
+          ...p,
+          league_id: p.league_id || p.league,
+          event_name: p.league_name,
+          is_host: p.is_host === true,
+        }));
+      setPosts(normalized);
+    } catch (err) {
+      console.warn('Failed to fetch user posts', err);
+    } finally {
+      setPostsLoading(false);
+    }
+  };
+
+  const handleLike = async (postId) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      await fetch(`${BASE_URL}/api/posts/${postId}/like/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      fetchUserPosts();
+    } catch (err) {
+      console.warn('Like failed', err);
+    }
+  };
+
+  const openComments = async (post) => {
+    setSelectedPost(post);
+    setComments([]);
+    setCommentModalVisible(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const res = await fetch(`${BASE_URL}/api/posts/${post.id}/comments/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setComments(data);
+    } catch (err) {
+      console.warn('Fetch comments error', err);
+    }
+  };
+
+  const createComment = async () => {
+    if (!commentText.trim() || !selectedPost) return;
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      await fetch(`${BASE_URL}/api/posts/${selectedPost.id}/comments/`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: commentText }),
+      });
+      setCommentText('');
+      openComments(selectedPost);
+      fetchUserPosts();
+    } catch (err) {
+      console.warn('Create comment error', err);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure?', [
@@ -83,6 +198,46 @@ export default function ProfileViewScreen({ route }) {
       { text: 'Logout', style: 'destructive', onPress: logout },
     ]);
   };
+
+  // ── ADD 4a: Share profile ───────────────────────────────────────────────────
+  const handleShareProfile = async () => {
+    try {
+      await Share.share({
+        title: profile?.full_name,
+        message:
+          `Check out ${profile?.full_name}'s profile on Spurth!\n\n` +
+          `spurth://profile/${profile?.user_id || userId}\n\n` +
+          `https://spurth.com/profile/${profile?.user_id || userId}`,
+      });
+    } catch (err) {
+      console.warn('Share profile failed', err);
+    }
+  };
+
+  // ── ADD 4b: Send invite ─────────────────────────────────────────────────────
+  // Called when the current user picks a league from the invite picker.
+  // Backend should create a notification of type 'invite' for the invited user,
+  // with league_id set so tapping the notification opens LeagueViewerScreen.
+  const handleSendInvite = async (league) => {
+    try {
+      setInviting(true);
+      await axiosInstance.post('invite/', {
+        invited_user_id: userId,       // the profile being viewed
+        league_id: league.id,
+      });
+      setInviteModalVisible(false);
+      Alert.alert(
+        'Invite sent!',
+        `${profile?.full_name} has been invited to "${league.name}".`
+      );
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Failed to send invite';
+      Alert.alert('Error', msg);
+    } finally {
+      setInviting(false);
+    }
+  };
+  // ───────────────────────────────────────────────────────────────────────────
 
   const avatarUri =
     profile?.avatar &&
@@ -114,25 +269,38 @@ export default function ProfileViewScreen({ route }) {
         contentContainerStyle={{ paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* HEADER */}
+        {/* HEADER
+            — My profile:      back | edit  settings
+            — Other profile:   back | share invite        */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
 
-          {/* ❌ Hide edit/settings for other users */}
-          {isMyProfile && (
-            <View style={{ flexDirection: 'row', gap: 20 }}>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('ProfileEdit', { profile })}
-              >
-                <Ionicons name="create-outline" size={24} color="#fff" />
+          <View style={{ flexDirection: 'row', gap: 20 }}>
+            {/* Share button visible for everyone */}
+            <TouchableOpacity onPress={handleShareProfile}>
+              <Ionicons name="share-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+
+            {isMyProfile ? (
+              <>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('ProfileEdit', { profile })}
+                >
+                  <Ionicons name="create-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+
+                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                  <Ionicons name="settings-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity onPress={() => setInviteModalVisible(true)}>
+                <Ionicons name="person-add-outline" size={24} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity>
-                <Ionicons name="settings-outline" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          )}
+            )}
+          </View>
         </View>
 
         {/* PROFILE CARD */}
@@ -150,35 +318,21 @@ export default function ProfileViewScreen({ route }) {
 
           <View style={styles.locationRow}>
             <Ionicons name="location" size={14} color="#888" />
-            <Text style={styles.locationText}>
-              {profile.location || '—'}
-            </Text>
+            <Text style={styles.locationText}>{profile.location || '—'}</Text>
           </View>
 
-          {/* STATS */}
           <View style={styles.statsRow}>
             <StatBox label="Age" value={profile.age} />
-            <StatBox
-              label="Joined Plays"
-              value={profile.leagues_joined}
-            />
-            <StatBox
-              label="Created Plays"
-              value={profile.leagues_created}
-            />
+            <StatBox label="Joined" value={profile.leagues_joined} />
+            <StatBox label="Organized" value={profile.leagues_created} />
           </View>
         </View>
 
-        {/* BIO */}
         <Section title="Bio">
           <Text style={styles.bioText}>{profile.bio || '—'}</Text>
         </Section>
 
-        {/* FAVORITE SPORTS */}
-        <Section
-          title="Favourite Sports"
-          count={profile.favorite_sports?.length || 0}
-        >
+        <Section title="Interests" count={profile.favorite_sports?.length || 0}>
           <View style={styles.chipsWrap}>
             {profile.favorite_sports?.map((sport) => (
               <View key={sport} style={styles.chip}>
@@ -188,32 +342,169 @@ export default function ProfileViewScreen({ route }) {
           </View>
         </Section>
 
-        {/* ORGANIZER – only show for self */}
-        {isMyProfile && (
-          <Section title="Organizer" count={myLeagues.length}>
-            <ListCard data={myLeagues} />
-          </Section>
-        )}
+        <Section title="Organizer" count={myLeagues.length}>
+          <ListCard data={myLeagues} navigation={navigation} />
+        </Section>
 
-        {/* JOINED – only show for self */}
-        {isMyProfile && (
-          <Section title="Joined" count={joinedLeagues.length}>
-            <ListCard data={joinedLeagues} />
-          </Section>
-        )}
+        <Section title="Joined" count={joinedLeagues.length}>
+          <ListCard data={joinedLeagues} navigation={navigation} />
+        </Section>
 
-        {/* LOGOUT – only for self */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Activity</Text>
+            {posts.length > 0 && (
+              <Text style={styles.sectionCount}>{posts.length}</Text>
+            )}
+          </View>
+
+          {postsLoading ? (
+            <ActivityIndicator color="#36ACA6" style={{ marginTop: 16 }} />
+          ) : posts.length === 0 ? (
+            <View style={styles.listCard}>
+              <Text style={{ color: '#777', textAlign: 'center' }}>No posts yet</Text>
+            </View>
+          ) : (
+            posts.map((post) => (
+              <PostCard
+                key={post.id.toString()}
+                post={post}
+                onLike={handleLike}
+                onCommentPress={openComments}
+                onPostDeleted={fetchUserPosts}
+                navigation={navigation}
+                compact={true}
+                hideUsername={true}
+                isLeagueOwner={false}
+              />
+            ))
+          )}
+        </View>
+
         {isMyProfile && (
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* COMMENT MODAL */}
+      <Modal
+        visible={commentModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCommentModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.commentModalOverlay}
+          activeOpacity={1}
+          onPress={() => setCommentModalVisible(false)}
+        />
+        <KeyboardAvoidingView
+          style={styles.commentModalSheet}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.commentHandle} />
+          <Text style={styles.commentSheetTitle}>Comments</Text>
+
+          <FlatList
+            data={comments}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
+            renderItem={({ item }) => (
+              <View style={styles.commentItem}>
+                <Text style={styles.commentUsername}>@{item.user_name}</Text>
+                <Text style={styles.commentBody}>{item.text}</Text>
+              </View>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.noPostsText}>No comments yet. Be the first!</Text>
+            }
+          />
+
+          <View style={styles.commentInputRow}>
+            <TextInput
+              placeholder="Write a comment..."
+              placeholderTextColor="#555"
+              style={styles.commentInput}
+              value={commentText}
+              onChangeText={setCommentText}
+            />
+            <TouchableOpacity style={styles.commentPostBtn} onPress={createComment}>
+              <Text style={styles.commentPostText}>Post</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── ADD: INVITE PICKER MODAL ───────────────────────────────────────────
+          Shows the current user's own leagues. Tapping one sends an invite to
+          the profile being viewed. Duplicate invites should be rejected server-side. */}
+      <Modal
+        visible={inviteModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setInviteModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.commentModalOverlay}
+          activeOpacity={1}
+          onPress={() => setInviteModalVisible(false)}
+        />
+        <View style={styles.commentModalSheet}>
+          <View style={styles.commentHandle} />
+
+          <Text style={styles.commentSheetTitle}>
+            Invite {profile?.full_name?.split(' ')[0]} to…
+          </Text>
+
+          {myOwnLeagues.length === 0 ? (
+            <View style={{ padding: 32, alignItems: 'center' }}>
+              <Text style={{ color: '#555', textAlign: 'center' }}>
+                You haven't created or joined any events yet.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={myOwnLeagues}
+              keyExtractor={(item) => item.id.toString()}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 1, backgroundColor: '#1A1A1A' }} />
+              )}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.inviteLeagueRow}
+                  activeOpacity={0.75}
+                  disabled={inviting}
+                  onPress={() => handleSendInvite(item)}
+                >
+                  <Image source={getCoverSource(item)} style={styles.inviteLeagueCover} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inviteLeagueName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.inviteLeagueDate}>
+                      {new Date(item.date_time).toLocaleDateString('en-GB')}
+                    </Text>
+                  </View>
+                  {inviting ? (
+                    <ActivityIndicator size="small" color="#36ACA6" />
+                  ) : (
+                    <Ionicons name="paper-plane-outline" size={18} color="#36ACA6" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          )}
+        </View>
+      </Modal>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
     </View>
   );
 }
 
-/* HELPERS (unchanged UI) */
+/* ── Helpers ─────────────────────────────────────────────────────────────────── */
 
 const Section = ({ title, count, children }) => (
   <View style={styles.section}>
@@ -234,49 +525,44 @@ const StatBox = ({ label, value }) => (
   </View>
 );
 
-const ListCard = ({ data = [] }) => {
+const ListCard = ({ data = [], navigation }) => {
   if (data.length === 0) {
     return (
       <View style={styles.listCard}>
-        <Text style={{ color: '#777', textAlign: 'center' }}>
-          No plays found
-        </Text>
+        <Text style={{ color: '#777', textAlign: 'center' }}>No plays found</Text>
       </View>
     );
   }
-
   return (
     <View style={styles.listCard}>
       {data.map((item) => (
-        <View key={item.id} style={styles.listItem}>
-          <Image
-            source={{ uri: getSportImage(item.sport) }}
-            style={styles.listImage}
-          />
+        <TouchableOpacity
+          key={item.id}
+          style={styles.listItem}
+          onPress={() =>
+            navigation.navigate('LeagueViewerScreen', { league: item })
+          }
+          activeOpacity={0.75}
+        >
+          <Image source={getCoverSource(item)} style={styles.listImage} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.listTitle} numberOfLines={1}>
-              {item.name}
-            </Text>
+            <Text style={styles.listTitle} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.listDate}>
               {new Date(item.date_time).toLocaleDateString('en-GB')}
             </Text>
           </View>
-        </View>
+          <Ionicons name="chevron-forward" size={16} color="#444" />
+        </TouchableOpacity>
       ))}
     </View>
   );
 };
 
-/* STYLES */
+/* ── Styles ──────────────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  safe: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#000000' },
+  safe: { flex: 1 },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -291,12 +577,11 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   profileCard: {
-    backgroundColor: '#041211',
+    backgroundColor: '#222222',
     margin: 20,
     borderRadius: 35,
     alignItems: 'center',
     padding: 24,
-    // Subtle shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
@@ -309,83 +594,52 @@ const styles = StyleSheet.create({
     borderRadius: 65,
     marginBottom: 16,
   },
-  name: {
-    color: '#fff',
-    fontSize: 22,
-    fontFamily: Fonts.semibold,
-  },
+  name: { color: '#fff', fontSize: 22, fontFamily: Fonts.semibold },
   username: {
     color: '#888',
     fontSize: 14,
     fontFamily: Fonts.regular,
     marginTop: 2,
   },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
+  locationRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   locationText: {
     color: '#888',
     marginLeft: 6,
     fontSize: 13,
     fontFamily: Fonts.regular,
   },
-  statsRow: {
-    flexDirection: 'row',
-    marginTop: 25,
-    gap: 10,
-  },
+  statsRow: { flexDirection: 'row', marginTop: 25, gap: 10 },
   statBox: {
-    backgroundColor: '#071F1E',
+    backgroundColor: 'rgb(19, 19, 19)',
     borderRadius: 20,
     paddingVertical: 18,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statValue: {
-    color: '#fff',
-    fontSize: 24,
-    fontFamily: Fonts.semibold,
-  },
+  statValue: { color: '#fff', fontSize: 24, fontFamily: Fonts.semibold },
   statLabel: {
     color: '#888',
     fontSize: 11,
     marginTop: 4,
     fontFamily: Fonts.regular,
   },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 30,
-  },
+  section: { paddingHorizontal: 20, marginTop: 30 },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'baseline',
     marginBottom: 15,
     gap: 10,
   },
-  sectionTitle: {
-    color: '#fff',
-    fontSize: 20,
-    fontFamily: Fonts.semibold,
-  },
-  sectionCount: {
-    color: '#444',
-    fontSize: 16,
-    fontFamily: Fonts.regular,
-  },
+  sectionTitle: { color: '#fff', fontSize: 20, fontFamily: Fonts.semibold },
+  sectionCount: { color: '#444', fontSize: 16, fontFamily: Fonts.regular },
   bioText: {
     color: '#fff',
     lineHeight: 22,
     fontSize: 15,
     fontFamily: Fonts.regular,
   },
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
     borderWidth: 1,
     borderColor: '#222',
@@ -394,33 +648,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     backgroundColor: 'transparent',
   },
-  chipText: {
-    color: '#fff',
-    fontSize: 18,
-    fontFamily: Fonts.medium,
-  },
+  chipText: { color: '#fff', fontSize: 18, fontFamily: Fonts.medium },
   listCard: {
-    backgroundColor: '#181818ff',
+    backgroundColor: '#181818',
     borderRadius: 25,
     padding: 16,
     gap: 20,
   },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 15,
-  },
+  listItem: { flexDirection: 'row', alignItems: 'center', gap: 15 },
   listImage: {
     width: 50,
     height: 50,
     borderRadius: 25,
     backgroundColor: '#222',
   },
-  listTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontFamily: Fonts.semibold,
-  },
+  listTitle: { color: '#fff', fontSize: 15, fontFamily: Fonts.semibold },
   listDate: {
     color: '#666',
     fontSize: 12,
@@ -436,9 +678,111 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     alignItems: 'center',
   },
-  logoutText: {
-    color: '#C90000',
-    fontSize: 16,
+  logoutText: { color: '#C90000', fontSize: 16, fontFamily: Fonts.semibold },
+
+  // ── Comment Modal ─────────────────────────────────────────────────────────
+  commentModalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  commentModalSheet: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    height: '65%',
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  commentHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#555',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  commentSheetTitle: {
+    color: '#fff',
+    fontSize: 17,
     fontFamily: Fonts.semibold,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+  },
+  commentItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  commentUsername: {
+    color: '#36ACA6',
+    fontSize: 13,
+    fontFamily: Fonts.semibold,
+    marginBottom: 3,
+  },
+  commentBody: { color: '#ccc', fontSize: 14, fontFamily: Fonts.regular },
+  commentInputRow: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1A',
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2A',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  commentInput: {
+    flex: 1,
+    backgroundColor: '#252525',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  commentPostBtn: {
+    backgroundColor: '#36ACA6',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 22,
+  },
+  commentPostText: { color: '#fff', fontSize: 14, fontFamily: Fonts.semibold },
+  noPostsText: {
+    color: '#555',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
+  inviteLeagueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  inviteLeagueCover: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#1A1A1A',
+  },
+  inviteLeagueName: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
+    marginBottom: 3,
+  },
+  inviteLeagueDate: {
+    color: '#555',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
   },
 });

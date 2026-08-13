@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const BASE_URL = 'http://10.0.2.2:8000';
+import { BASE_URL } from '../config';
 
 const ParticipantsListScreen = ({ route, navigation }) => {
   const { participants: initialParticipants = [], leagueName, isOwner = false, leagueId } = route.params;
