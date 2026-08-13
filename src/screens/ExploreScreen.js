@@ -24,6 +24,8 @@ import { AuthContext } from '../context/AuthContext';
 import LeagueCard from '../components/LeagueCard';
 import { Fonts } from '../theme/fonts';
 import { getMainCategory } from '../utils/categoryMapper';
+import { BASE_URL } from '../config';
+import { LocationContext, filterLeaguesByDistance, getDistanceKm } from '../context/LocationContext';
 
 const DATE_FILTERS = ['Upcoming', 'Today', 'Tomorrow', 'This Week', 'This Weekend'];
 dayjs.extend(isBetween);
@@ -75,11 +77,12 @@ const ExploreScreen = () => {
   const axios = useAxios();
   const navigation = useNavigation();
   const { user } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
 
   const fetchLeagues = async () => {
     try {
       setLoading(true);
-      const res = await axios.get('http://10.0.2.2:8000/api/public-leagues/');
+      const res = await axios.get(`${BASE_URL}/api/public-leagues/`);
 
       const processed = res.data.map(item => ({
         ...item,
@@ -104,10 +107,12 @@ const ExploreScreen = () => {
       const searchUsers = async () => {
         try {
           setSearchingUsers(true);
-          const res = await axios.get(
-            `http://10.0.2.2:8000/api/users/?search=${searchQuery}`
-          );
-          setUserResults(res.data);
+          const res = await axios.get(`${BASE_URL}/api/users/?search=${searchQuery}`);
+          
+          // Fix: Check if data is in .results (paginated) or just the array
+          const data = res.data.results || res.data; 
+          setUserResults(Array.isArray(data) ? data : []);
+          
         } catch (e) {
           console.log('User search error', e);
           setUserResults([]);
@@ -167,15 +172,22 @@ const ExploreScreen = () => {
     });
 
     // CATEGORY FILTER
-    if (activeCategory !== 'All Categories') {
-      data = data.filter(item => {
-        const derived = getMainCategory(item.sport);
-        return derived === activeCategory;
-      });
+    if (
+      activeCategory === 'All Categories' &&
+      activeDate === 'Upcoming' &&
+      searchQuery.length === 0
+    ) {
+      // default view — filter by distance
+      data = filterLeaguesByDistance(
+        data,
+        location?.latitude,
+        location?.longitude,
+        50
+      );
     }
 
     return data;
-  }, [leagues, activeDate, activeCategory, searchQuery]);
+  }, [leagues, activeDate, activeCategory, searchQuery, location]);
 
 
   if (loading) {
@@ -312,7 +324,7 @@ const ExploreScreen = () => {
             style={{ marginLeft: 10 }}
           />
           <TextInput
-            placeholder="Search events or people"
+            placeholder="Search Activities or People"
             placeholderTextColor="#666"
             style={styles.searchInput}
             value={searchQuery}
@@ -329,9 +341,13 @@ const ExploreScreen = () => {
             </TouchableOpacity>
           )}
         </View>
-        {/* <TouchableOpacity style={styles.filterButton}>
-          <Ionicons name="options-outline" size={24} color="#fff" />
-        </TouchableOpacity> */}
+        <TouchableOpacity
+          style={styles.mapToggleBtn}
+          onPress={() => navigation.navigate('ExploreMap', { leagues: filteredLeagues })}
+        >
+          <Ionicons name="map-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.mapToggleText}>Map</Text>
+        </TouchableOpacity>
       </View>
 
       <FlatList
@@ -360,7 +376,7 @@ const ExploreScreen = () => {
                 <Text style={styles.emptyText}>
                   {searchQuery.length > 0
                     ? 'No matches found.'
-                    : 'No events found.'}
+                    : 'No Activities found.'}
                 </Text>
               </>
             )}
@@ -443,8 +459,8 @@ const styles = StyleSheet.create({
     borderColor: '#333'
   },
   datePillActive: {
-    backgroundColor: '#2CB9B0',
-    borderColor: '#2CB9B0'
+    backgroundColor: '#6C5CE7',
+    borderColor: '#4738c0'
   },
   dateText: { color: '#aaa', fontSize: 13, fontWeight: '500' },
   dateTextActive: { color: '#fff', fontWeight: '700' },
@@ -487,7 +503,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontFamily: Fonts.regular
-  }
+  },
+  mapToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1C1C1E',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  mapToggleText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
+  },
 });
 
 export default ExploreScreen;

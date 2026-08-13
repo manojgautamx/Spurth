@@ -11,72 +11,79 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 
 import { AuthContext } from '../context/AuthContext';
+import { LocationContext, getDistanceKm } from '../context/LocationContext';
 import { Fonts } from '../theme/fonts';
 import { getSportIcon } from '../utils/sportIcons';
 import { getSportImage } from '../utils/getSportImage';
+import { BASE_URL } from '../config';
 
-// Define your Base URL here (or import it from your config file)
-const BASE_URL = 'http://10.0.2.2:8000';
+const formatDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return { date: '', time: '' };
+  const date = new Date(dateTimeStr);
+  const formattedDate = date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const formattedTime = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return { date: formattedDate, time: formattedTime };
+};
+
+const formatDistance = (km) => {
+  if (km === null || km === undefined) return null;
+  if (km < 1) return `${Math.round(km * 1000)} m away`;
+  return `${km.toFixed(1)} km away`;
+};
 
 const LeagueCard = ({ league }) => {
   const navigation = useNavigation();
   const { user } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
 
   const isOwner = user?.username === league.created_by?.username;
 
-  // const leagueType = (league.league_type || '').toLowerCase();
-  // const isComp =
-  //   leagueType === 'competitive' ||
-  //   leagueType === 'comp' ||
-  //   leagueType === 'pro';
+  const distance = useMemo(() => {
+    if (!location?.latitude || !location?.longitude) return null;
+    if (!league.latitude || !league.longitude) return null;
+    return getDistanceKm(
+      location.latitude,
+      location.longitude,
+      league.latitude,
+      league.longitude
+    );
+  }, [location, league.latitude, league.longitude]);
 
-  // -------------------------------
-  // COVER IMAGE LOGIC
-  // -------------------------------
+  const distanceLabel = formatDistance(distance);
+
   const getCoverImageSource = () => {
     if (league.cover_image) {
       const uri = league.cover_image.startsWith('http')
         ? league.cover_image
         : `${BASE_URL}${league.cover_image}`;
-
       return { uri };
     }
-
-    // fallback to sport default image
     return { uri: getSportImage(league.sport) };
   };
 
-  // -------------------------------
-  // PARTICIPANT AVATAR STACK
-  // -------------------------------
   const getAvatarSource = (avatarPath) => {
-    if (!avatarPath) {
-      return { uri: 'https://via.placeholder.com/150' };
-    }
-
+    if (!avatarPath) return { uri: 'https://via.placeholder.com/150' };
     const uri = avatarPath.startsWith('http')
       ? avatarPath
       : `${BASE_URL}${avatarPath}`;
-
     return { uri };
   };
 
   const displayedParticipants = useMemo(() => {
     const participants = league.participants || [];
-    const count = participants.length;
-
-    if (count === 0) return [];
-
-    if (count <= 3) return participants;
-
-    return [...participants]
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 3);
+    if (participants.length === 0) return [];
+    if (participants.length <= 3) return participants;
+    return [...participants].sort(() => 0.5 - Math.random()).slice(0, 3);
   }, [league.participants]);
 
-  // -------------------------------
-  // NAVIGATION
-  // -------------------------------
   const handlePress = () => {
     navigation.navigate(
       isOwner ? 'LeagueOwnerScreen' : 'LeagueViewerScreen',
@@ -87,42 +94,21 @@ const LeagueCard = ({ league }) => {
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress}>
       <View style={styles.imageWrap}>
-        <Image
-          source={getCoverImageSource()}
-          style={styles.cardImage}
-        />
+        <Image source={getCoverImageSource()} style={styles.cardImage} />
 
-        <View style={styles.distancePill}>
-          <Ionicons name="navigate-outline" size={12} color="#fff" />
-          <Text style={styles.distanceText}>4 Km Away</Text>
-        </View>
-
-        {/* <View
-          style={[
-            styles.typeBadge,
-            isComp ? styles.compBadge : styles.casualBadge,
-          ]}
-        >
-          <Ionicons
-            name={isComp ? 'trophy-outline' : 'person-outline'}
-            size={12}
-            color="#fff"
-            style={{ marginRight: 4 }}
-          />
-          <Text style={styles.badgeText}>
-            {isComp ? 'Comp' : 'Casual'}
-          </Text>
-        </View> */}
-      </View>
+        {/* Only show distance pill if we have a real distance */}
+        {distanceLabel && (
+          <View style={styles.distancePill}>
+            <Ionicons name="navigate-outline" size={12} color="#fff" />
+            <Text style={styles.distanceText}>{distanceLabel}</Text>
+          </View>
+        )}
+      </View> 
 
       <View style={styles.cardContent}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>{league.name}</Text>
-          <Ionicons
-            name="information-circle-outline"
-            size={18}
-            color="#999"
-          />
+          <Ionicons name="information-circle-outline" size={18} color="#999" />
         </View>
 
         <View style={styles.infoRow}>
@@ -132,7 +118,12 @@ const LeagueCard = ({ league }) => {
 
         <View style={styles.infoRow}>
           <Ionicons name="calendar-outline" size={14} color="#ccc" />
-          <Text style={styles.infoText}>{league.date_time}</Text>
+          <Text style={styles.infoText}>{formatDateTime(league.date_time).date}</Text>
+        </View>
+
+        <View style={styles.infoRow}>
+          <Ionicons name="time-outline" size={14} color="#ccc" />
+          <Text style={styles.infoText}>{formatDateTime(league.date_time).time}</Text>
         </View>
 
         <View style={styles.infoRow}>
@@ -156,7 +147,6 @@ const LeagueCard = ({ league }) => {
               />
             ))}
           </View>
-
           <Text style={styles.joinedText}>
             {league.participant_count}/{league.max_players || '∞'} Joined
           </Text>
@@ -178,100 +168,63 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#262626',
   },
-
   imageWrap: {
     position: 'relative',
   },
-
   cardImage: {
     width: '100%',
     height: 140,
   },
-
   distancePill: {
     position: 'absolute',
     left: 12,
     top: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2CB9B0',
+    backgroundColor: '#3CC884',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
     gap: 4,
   },
-
   distanceText: {
     color: '#fff',
     fontSize: 12,
     fontFamily: Fonts.medium,
   },
-
-  typeBadge: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-
-  compBadge: {
-    backgroundColor: '#F2994A',
-  },
-
-  casualBadge: {
-    backgroundColor: '#27AE60',
-  },
-
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontFamily: Fonts.medium,
-  },
-
   cardContent: {
     padding: 14,
   },
-
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
   },
-
   title: {
     color: '#fff',
     fontSize: 18,
     fontFamily: Fonts.semibold,
   },
-
   infoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 6,
     gap: 6,
   },
-
   infoText: {
     color: '#ccc',
     fontSize: 13,
     fontFamily: Fonts.regular,
   },
-
   joinedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 12,
   },
-
   avatarStack: {
     flexDirection: 'row',
   },
-
   avatar: {
     width: 22,
     height: 22,
@@ -280,7 +233,6 @@ const styles = StyleSheet.create({
     borderColor: '#121212',
     backgroundColor: '#555',
   },
-
   joinedText: {
     marginLeft: 10,
     color: '#aaa',

@@ -16,7 +16,7 @@ import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-const BASE_URL = 'http://10.0.2.2:8000';
+import { BASE_URL } from '../config';
 
 export default function Navbar() {
   const [menuVisible, setMenuVisible] = useState(false);
