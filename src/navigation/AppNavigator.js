@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, createContext, useRef } from 'react';
-import { ActivityIndicator, View, Alert, Linking } from 'react-native';
+import { ActivityIndicator, View, Alert, Linking, Platform } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -31,6 +31,7 @@ import ExperienceScreen from '../screens/ExperienceScreen';
 import CommentsScreen from '../screens/CommentScreen';
 import ExploreMapScreen from '../screens/ExploreMapScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
+import LandingScreen from '../screens/LandingScreen';
 import GoogleUsernameScreen from '../screens/GoogleUsernameScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import { BASE_URL } from '../config';
@@ -310,7 +311,10 @@ export default function AppNavigator() {
           stretching to fill the viewport, which breaks every screen's
           internal ScrollView bounding and makes the whole page scroll
           instead of just that screen's own scrollable content. */}
-      <Stack.Navigator screenOptions={{ headerShown: false, cardStyle: { flex: 1 } }}>
+      <Stack.Navigator
+        screenOptions={{ headerShown: false, cardStyle: { flex: 1 } }}
+        initialRouteName={!userToken && Platform.OS === 'web' ? 'Landing' : undefined}
+      >
         {userToken ? (
           profileComplete ? (
             <>
@@ -335,6 +339,7 @@ export default function AppNavigator() {
         ) : (
           <>
             <Stack.Screen name="Welcome"        component={WelcomeScreen} />
+            <Stack.Screen name="Landing"        component={LandingScreen} />
             <Stack.Screen name="Login"          component={LoginScreen} />
             <Stack.Screen name="Signup"         component={SignupScreen} />
             <Stack.Screen name="GoogleUsername" component={GoogleUsernameScreen} />
