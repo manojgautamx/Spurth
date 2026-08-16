@@ -35,6 +35,12 @@ jobs:
       - name: Add custom domain file
         run: echo "spurth.com" > web-build/CNAME
 
+      - name: Add legal pages
+        run: |
+          mkdir -p web-build/terms web-build/privacy
+          cp web/terms.html web-build/terms/index.html
+          cp web/privacy.html web-build/privacy/index.html
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web-build
