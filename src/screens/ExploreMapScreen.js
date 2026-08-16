@@ -12,22 +12,22 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 
 const ExploreMapScreen = ({ navigation, route }) => {
-  const { leagues = [], userLocation = null } = route.params;
+  const { activities = [], userLocation = null } = route.params;
   const webRef = useRef(null);
-  
+
 
   // Build markers JS to inject after map loads
-  const validLeagues = leagues.filter(
-    l => l.latitude && l.longitude
+  const validActivities = activities.filter(
+    a => a.latitude && a.longitude
   );
 
   const markersJson = JSON.stringify(
-    validLeagues.map(l => ({
-      lat: l.latitude,
-      lon: l.longitude,
-      name: l.name,
-      sport: l.sport,
-      id: l.id,
+    validActivities.map(a => ({
+      lat: a.latitude,
+      lon: a.longitude,
+      name: a.name,
+      activityType: a.activity_type,
+      id: a.id,
     }))
   );
 
@@ -63,7 +63,7 @@ const ExploreMapScreen = ({ navigation, route }) => {
           color: #fff;
           margin-bottom: 4px;
         }
-        .popup-sport {
+        .popup-activity-type {
           font-size: 12px;
           color: #2CB9B0;
         }
@@ -100,8 +100,8 @@ const ExploreMapScreen = ({ navigation, route }) => {
 
             marker.bindPopup(
               '<div class="popup-name">' + m.name + '</div>' +
-              '<div class="popup-sport">' + m.sport + '</div>' +
-              '<button class="popup-btn" onclick="selectLeague(' + m.id + ')">View Event</button>'
+              '<div class="popup-activity-type">' + m.activityType + '</div>' +
+              '<button class="popup-btn" onclick="selectActivity(' + m.id + ')">View Event</button>'
             );
 
             bounds.push([m.lat, m.lon]);
@@ -129,8 +129,8 @@ const ExploreMapScreen = ({ navigation, route }) => {
           }
         }
 
-        function selectLeague(id) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ leagueId: id }));
+        function selectActivity(id) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ activityId: id }));
         }
       </script>
     </body>
@@ -140,10 +140,10 @@ const ExploreMapScreen = ({ navigation, route }) => {
   const handleMessage = (event) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      if (data.leagueId) {
-        const league = validLeagues.find(l => l.id === data.leagueId);
-        if (league) {
-          navigation.navigate('LeagueViewerScreen', { league });
+      if (data.activityId) {
+        const activity = validActivities.find(a => a.id === data.activityId);
+        if (activity) {
+          navigation.navigate('ActivityViewerScreen', { activity });
         }
       }
     } catch (e) {
@@ -162,12 +162,12 @@ const ExploreMapScreen = ({ navigation, route }) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Events Near You</Text>
         <View style={styles.countBadge}>
-          <Text style={styles.countText}>{validLeagues.length}</Text>
+          <Text style={styles.countText}>{validActivities.length}</Text>
         </View>
       </View>
 
       {/* Map */}
-      {validLeagues.length === 0 ? (
+      {validActivities.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="map-outline" size={54} color="#333" />
           <Text style={styles.emptyText}>No events with location data</Text>

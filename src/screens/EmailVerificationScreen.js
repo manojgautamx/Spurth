@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, StatusBar, ActivityIndicator,
@@ -11,10 +11,31 @@ export default function EmailVerificationScreen({ navigation }) {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [email, setEmail] = useState('');
+  const [sending, setSending] = useState(true); // initial auto-send on entry
+
+  // Entering this screen is the "click to verify" action — it immediately
+  // sends a fresh code and shows which address it went to, rather than
+  // requiring a separate tap first.
+  useEffect(() => {
+    axiosInstance.get('me/').then(res => setEmail(res.data.email)).catch(() => {});
+    sendCode(true);
+  }, []);
+
+  const sendCode = async (initial = false) => {
+    try {
+      if (initial) setSending(true); else setResending(true);
+      await axiosInstance.post('resend-verification/');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Could not send code.');
+    } finally {
+      if (initial) setSending(false); else setResending(false);
+    }
+  };
 
   const handleVerify = async () => {
-    if (!token.trim()) {
-      Alert.alert('Required', 'Please paste your verification code.');
+    if (token.trim().length !== 6) {
+      Alert.alert('Invalid code', 'Enter the 6-digit code from your email.');
       return;
     }
     try {
@@ -33,18 +54,6 @@ export default function EmailVerificationScreen({ navigation }) {
     }
   };
 
-  const handleResend = async () => {
-    try {
-      setResending(true);
-      await axiosInstance.post('resend-verification/');
-      Alert.alert('Sent', 'Check your inbox for a new verification code.');
-    } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Could not resend.');
-    } finally {
-      setResending(false);
-    }
-  };
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
@@ -60,23 +69,27 @@ export default function EmailVerificationScreen({ navigation }) {
 
         <Text style={styles.title}>Verify your email</Text>
         <Text style={styles.subtitle}>
-          We sent a verification code to your email address. Copy and paste it below.
+          {sending
+            ? 'Sending a 6-digit code…'
+            : email
+              ? `We sent a 6-digit code to ${email}.`
+              : 'We sent a 6-digit code to your email.'}
         </Text>
 
         <TextInput
           style={styles.input}
           value={token}
-          onChangeText={setToken}
-          placeholder="Paste verification code"
+          onChangeText={(t) => setToken(t.replace(/\D/g, '').slice(0, 6))}
+          placeholder="Enter 6-digit code"
           placeholderTextColor="#444"
-          autoCapitalize="none"
-          autoCorrect={false}
+          keyboardType="number-pad"
+          maxLength={6}
         />
 
         <TouchableOpacity
-          style={[styles.btn, loading && styles.btnDisabled]}
+          style={[styles.btn, (loading || sending) && styles.btnDisabled]}
           onPress={handleVerify}
-          disabled={loading}
+          disabled={loading || sending}
         >
           {loading
             ? <ActivityIndicator color="#fff" />
@@ -85,8 +98,8 @@ export default function EmailVerificationScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.resendBtn}
-          onPress={handleResend}
-          disabled={resending}
+          onPress={() => sendCode(false)}
+          disabled={resending || sending}
         >
           <Text style={styles.resendText}>
             {resending ? 'Sending...' : "Didn't receive it? Resend"}
@@ -111,7 +124,8 @@ const styles = StyleSheet.create({
   input: {
     backgroundColor: '#111', borderRadius: 14, borderWidth: 1,
     borderColor: '#222', paddingHorizontal: 16, height: 54,
-    color: '#fff', fontSize: 15, marginBottom: 16,
+    color: '#fff', fontSize: 22, marginBottom: 16,
+    textAlign: 'center', letterSpacing: 8, fontFamily: Fonts.semibold,
   },
   btn: {
     backgroundColor: '#6E35B7', borderRadius: 14,

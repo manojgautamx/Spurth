@@ -1,4 +1,4 @@
-export const SPORT_IMAGES = {
+export const ACTIVITY_TYPE_IMAGES = {
   Football:
     'https://res.cloudinary.com/dppoa51hp/image/upload/myykrfke65yrta6vsn4l',
 

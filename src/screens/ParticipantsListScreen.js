@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
 
 const ParticipantsListScreen = ({ route, navigation }) => {
-  const { participants: initialParticipants = [], leagueName, isOwner = false, leagueId } = route.params;
+  const { participants: initialParticipants = [], activityName, isOwner = false, activityId } = route.params;
 
   // Local state so list updates instantly after removal
   const [participants, setParticipants] = useState(initialParticipants);
@@ -19,7 +19,7 @@ const ParticipantsListScreen = ({ route, navigation }) => {
   const handleRemove = (item) => {
     Alert.alert(
       'Remove Participant',
-      `Remove @${item.username} from ${leagueName}?`,
+      `Remove @${item.username} from ${activityName}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -29,7 +29,7 @@ const ParticipantsListScreen = ({ route, navigation }) => {
             try {
               const token = await AsyncStorage.getItem('accessToken');
               const res = await fetch(
-                `${BASE_URL}/api/remove-participant/${leagueId}/${item.id}/`,
+                `${BASE_URL}/api/remove-participant/${activityId}/${item.id}/`,
                 {
                   method: 'DELETE',
                   headers: { Authorization: `Bearer ${token}` },
@@ -91,7 +91,7 @@ const ParticipantsListScreen = ({ route, navigation }) => {
       </View>
 
       <Text style={styles.subHeader}>
-        {participants.length} {participants.length === 1 ? 'person' : 'people'} joined in {leagueName}
+        {participants.length} {participants.length === 1 ? 'person' : 'people'} joined in {activityName}
       </Text>
 
       <FlatList

@@ -21,10 +21,12 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
-import { getSportImage } from '../utils/getSportImage';
+import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PostCard from '../components/PostCard';
 import { BASE_URL } from '../config';
+import { useIsWideWeb } from '../utils/responsive';
+import WebSidebar from '../components/web/WebSidebar';
 
 const getCoverSource = (item) => {
   if (item.cover_image) {
@@ -33,18 +35,19 @@ const getCoverSource = (item) => {
       : `${BASE_URL}${item.cover_image}`;
     return { uri };
   }
-  return { uri: getSportImage(item.sport) };
+  return { uri: getActivityTypeImage(item.activity_type) };
 };
 
 export default function ProfileViewScreen({ route }) {
   const navigation = useNavigation();
+  const isWideWeb = useIsWideWeb();
   const { logout, user } = useContext(AuthContext);
 
   const userId = route?.params?.userId || null;
   const isMyProfile = !userId || user?.user_id === userId;
 
-  const [myLeagues, setMyLeagues] = useState([]);
-  const [joinedLeagues, setJoinedLeagues] = useState([]);
+  const [myActivities, setMyActivities] = useState([]);
+  const [joinedActivities, setJoinedActivities] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -56,10 +59,10 @@ export default function ProfileViewScreen({ route }) {
   const [commentText, setCommentText] = useState('');
 
   // ── ADD 2: Invite state ─────────────────────────────────────────────────────
-  // myOwnLeagues = the *current user's* leagues (created + joined), used to pick
-  // which event to invite the viewed user to. Only populated when !isMyProfile.
+  // myOwnActivities = the *current user's* activities (created + joined), used to
+  // pick which event to invite the viewed user to. Only populated when !isMyProfile.
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
-  const [myOwnLeagues, setMyOwnLeagues] = useState([]);
+  const [myOwnActivities, setMyOwnActivities] = useState([]);
   const [inviting, setInviting] = useState(false);
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -79,27 +82,27 @@ export default function ProfileViewScreen({ route }) {
 
           if (isMyProfile) {
             const [myRes, joinedRes] = await Promise.all([
-              axiosInstance.get('my-leagues/'),
-              axiosInstance.get('joined-leagues/'),
+              axiosInstance.get('my-activities/'),
+              axiosInstance.get('joined-activities/'),
             ]);
             if (!active) return;
-            setMyLeagues(myRes.data);
-            setJoinedLeagues(joinedRes.data);
+            setMyActivities(myRes.data);
+            setJoinedActivities(joinedRes.data);
           } else {
-            // Fetch the viewed user's leagues for display
-            const res = await axiosInstance.get(`user-leagues/${userId}/`);
+            // Fetch the viewed user's activities for display
+            const res = await axiosInstance.get(`user-activities/${userId}/`);
             if (!active) return;
-            setMyLeagues(res.data.created || []);
-            setJoinedLeagues(res.data.joined || []);
+            setMyActivities(res.data.created || []);
+            setJoinedActivities(res.data.joined || []);
 
-            // ── ADD 3: Also fetch the CURRENT user's own leagues for the
-            //    invite picker. We need to show leagues the inviter belongs to.
+            // ── ADD 3: Also fetch the CURRENT user's own activities for the
+            //    invite picker. We need to show activities the inviter belongs to.
             const [ownCreated, ownJoined] = await Promise.all([
-              axiosInstance.get('my-leagues/'),
-              axiosInstance.get('joined-leagues/'),
+              axiosInstance.get('my-activities/'),
+              axiosInstance.get('joined-activities/'),
             ]);
             if (!active) return;
-            setMyOwnLeagues([
+            setMyOwnActivities([
               ...(ownCreated.data || []),
               ...(ownJoined.data || []),
             ]);
@@ -131,8 +134,8 @@ export default function ProfileViewScreen({ route }) {
         .filter(p => String(p.user) === String(targetId))
         .map(p => ({
           ...p,
-          league_id: p.league_id || p.league,
-          event_name: p.league_name,
+          activity_id: p.activity,
+          event_name: p.activity_name,
           is_host: p.is_host === true,
         }));
       setPosts(normalized);
@@ -215,20 +218,20 @@ export default function ProfileViewScreen({ route }) {
   };
 
   // ── ADD 4b: Send invite ─────────────────────────────────────────────────────
-  // Called when the current user picks a league from the invite picker.
+  // Called when the current user picks an activity from the invite picker.
   // Backend should create a notification of type 'invite' for the invited user,
-  // with league_id set so tapping the notification opens LeagueViewerScreen.
-  const handleSendInvite = async (league) => {
+  // with activity_id set so tapping the notification opens ActivityViewerScreen.
+  const handleSendInvite = async (activity) => {
     try {
       setInviting(true);
       await axiosInstance.post('invite/', {
         invited_user_id: userId,       // the profile being viewed
-        league_id: league.id,
+        activity_id: activity.id,
       });
       setInviteModalVisible(false);
       Alert.alert(
         'Invite sent!',
-        `${profile?.full_name} has been invited to "${league.name}".`
+        `${profile?.full_name} has been invited to "${activity.name}".`
       );
     } catch (err) {
       const msg = err.response?.data?.detail || 'Failed to send invite';
@@ -264,6 +267,11 @@ export default function ProfileViewScreen({ route }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      {/* Wide web: sidebar + centered profile column, matching Settings —
+          no right rail here, just nav + content with space on both sides. */}
+      <View style={styles.webRow}>
+      {isWideWeb && <WebSidebar />}
+      <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
       <ScrollView
         style={styles.safe}
         contentContainerStyle={{ paddingBottom: 60 }}
@@ -303,51 +311,81 @@ export default function ProfileViewScreen({ route }) {
           </View>
         </View>
 
-        {/* PROFILE CARD */}
-        <View style={styles.profileCard}>
-          <Image
-            source={
-              avatarUri
-                ? { uri: avatarUri }
-                : require('../assets/avatar-placeholder.png')
-            }
-            style={styles.avatar}
-          />
-          <Text style={styles.name}>{profile.full_name}</Text>
-          <Text style={styles.username}>@{profile.username}</Text>
+        {/* PROFILE CARD — wide web uses a horizontal layout (avatar | info |
+            stats) that actually fills the wider column, instead of the
+            mobile card's vertically-centered layout stretched thin. */}
+        {isWideWeb ? (
+          <View style={styles.profileCardWide}>
+            <Image
+              source={
+                avatarUri
+                  ? { uri: avatarUri }
+                  : require('../assets/avatar-placeholder.png')
+              }
+              style={styles.avatarWide}
+            />
 
-          <View style={styles.locationRow}>
-            <Ionicons name="location" size={14} color="#888" />
-            <Text style={styles.locationText}>{profile.location || '—'}</Text>
-          </View>
+            <View style={styles.profileCardWideInfo}>
+              <Text style={styles.name}>{profile.full_name}</Text>
+              <Text style={styles.username}>@{profile.username}</Text>
+              <View style={styles.locationRow}>
+                <Ionicons name="location" size={14} color="#888" />
+                <Text style={styles.locationText}>{profile.location || '—'}</Text>
+              </View>
+            </View>
 
-          <View style={styles.statsRow}>
-            <StatBox label="Age" value={profile.age} />
-            <StatBox label="Joined" value={profile.leagues_joined} />
-            <StatBox label="Organized" value={profile.leagues_created} />
+            <View style={styles.statsRowWide}>
+              <StatBox label="Age" value={profile.age} />
+              <StatBox label="Joined" value={profile.activities_joined} />
+              <StatBox label="Organized" value={profile.activities_created} />
+            </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.profileCard}>
+            <Image
+              source={
+                avatarUri
+                  ? { uri: avatarUri }
+                  : require('../assets/avatar-placeholder.png')
+              }
+              style={styles.avatar}
+            />
+            <Text style={styles.name}>{profile.full_name}</Text>
+            <Text style={styles.username}>@{profile.username}</Text>
+
+            <View style={styles.locationRow}>
+              <Ionicons name="location" size={14} color="#888" />
+              <Text style={styles.locationText}>{profile.location || '—'}</Text>
+            </View>
+
+            <View style={styles.statsRow}>
+              <StatBox label="Age" value={profile.age} />
+              <StatBox label="Joined" value={profile.activities_joined} />
+              <StatBox label="Organized" value={profile.activities_created} />
+            </View>
+          </View>
+        )}
 
         <Section title="Bio">
           <Text style={styles.bioText}>{profile.bio || '—'}</Text>
         </Section>
 
-        <Section title="Interests" count={profile.favorite_sports?.length || 0}>
+        <Section title="Interests" count={profile.interests?.length || 0}>
           <View style={styles.chipsWrap}>
-            {profile.favorite_sports?.map((sport) => (
-              <View key={sport} style={styles.chip}>
-                <Text style={styles.chipText}>{sport}</Text>
+            {profile.interests?.map((interest) => (
+              <View key={interest} style={styles.chip}>
+                <Text style={styles.chipText}>{interest}</Text>
               </View>
             ))}
           </View>
         </Section>
 
-        <Section title="Organizer" count={myLeagues.length}>
-          <ListCard data={myLeagues} navigation={navigation} />
+        <Section title="Organizer" count={myActivities.length}>
+          <ListCard data={myActivities} navigation={navigation} />
         </Section>
 
-        <Section title="Joined" count={joinedLeagues.length}>
-          <ListCard data={joinedLeagues} navigation={navigation} />
+        <Section title="Joined" count={joinedActivities.length}>
+          <ListCard data={joinedActivities} navigation={navigation} />
         </Section>
 
         <View style={styles.section}>
@@ -375,7 +413,7 @@ export default function ProfileViewScreen({ route }) {
                 navigation={navigation}
                 compact={true}
                 hideUsername={true}
-                isLeagueOwner={false}
+                isActivityOwner={false}
               />
             ))
           )}
@@ -387,6 +425,8 @@ export default function ProfileViewScreen({ route }) {
           </TouchableOpacity>
         )}
       </ScrollView>
+      </View>
+      </View>
 
       {/* COMMENT MODAL */}
       <Modal
@@ -438,7 +478,7 @@ export default function ProfileViewScreen({ route }) {
       </Modal>
 
       {/* ── ADD: INVITE PICKER MODAL ───────────────────────────────────────────
-          Shows the current user's own leagues. Tapping one sends an invite to
+          Shows the current user's own activities. Tapping one sends an invite to
           the profile being viewed. Duplicate invites should be rejected server-side. */}
       <Modal
         visible={inviteModalVisible}
@@ -458,7 +498,7 @@ export default function ProfileViewScreen({ route }) {
             Invite {profile?.full_name?.split(' ')[0]} to…
           </Text>
 
-          {myOwnLeagues.length === 0 ? (
+          {myOwnActivities.length === 0 ? (
             <View style={{ padding: 32, alignItems: 'center' }}>
               <Text style={{ color: '#555', textAlign: 'center' }}>
                 You haven't created or joined any events yet.
@@ -466,7 +506,7 @@ export default function ProfileViewScreen({ route }) {
             </View>
           ) : (
             <FlatList
-              data={myOwnLeagues}
+              data={myOwnActivities}
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
               ItemSeparatorComponent={() => (
@@ -474,17 +514,17 @@ export default function ProfileViewScreen({ route }) {
               )}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.inviteLeagueRow}
+                  style={styles.inviteActivityRow}
                   activeOpacity={0.75}
                   disabled={inviting}
                   onPress={() => handleSendInvite(item)}
                 >
-                  <Image source={getCoverSource(item)} style={styles.inviteLeagueCover} />
+                  <Image source={getCoverSource(item)} style={styles.inviteActivityCover} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.inviteLeagueName} numberOfLines={1}>
+                    <Text style={styles.inviteActivityName} numberOfLines={1}>
                       {item.name}
                     </Text>
-                    <Text style={styles.inviteLeagueDate}>
+                    <Text style={styles.inviteActivityDate}>
                       {new Date(item.date_time).toLocaleDateString('en-GB')}
                     </Text>
                   </View>
@@ -540,7 +580,7 @@ const ListCard = ({ data = [], navigation }) => {
           key={item.id}
           style={styles.listItem}
           onPress={() =>
-            navigation.navigate('LeagueViewerScreen', { league: item })
+            navigation.navigate('ActivityViewerScreen', { activity: item })
           }
           activeOpacity={0.75}
         >
@@ -561,13 +601,40 @@ const ListCard = ({ data = [], navigation }) => {
 /* ── Styles ──────────────────────────────────────────────────────────────────── */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000000' },
+  // #0F0F0F matches WebSidebar's own background and the color other
+  // sidebar-adjacent screens (Home, MainTabNavigator) use — keeps the
+  // sidebar and content reading as one seamless surface instead of two
+  // different shades of black.
+  container: { flex: 1, backgroundColor: '#0F0F0F', overflow: 'hidden' },
   safe: { flex: 1 },
+
+  /* ───────── WIDE WEB: sidebar + centered column, no rail ─────────
+     overflow:'hidden' keeps the sidebar pinned to the viewport — without
+     it, content taller than the available height bubbles up and makes the
+     whole page scroll instead of just the ScrollView inside webCol. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webCol: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  // 680+360 matches the same total block width (sidebar + 1040) used by
+  // Home/Explore/ActivityViewer's center+rail budget — there's no rail
+  // here, so the profile column gets that whole allowance to itself. Using
+  // the same total keeps the sidebar at the exact same on-screen position
+  // across every page instead of jumping around per-screen.
+  webColWide: {
+    maxWidth: 680 + 360,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000',
+    backgroundColor: '#0F0F0F',
   },
   header: {
     flexDirection: 'row',
@@ -594,6 +661,40 @@ const styles = StyleSheet.create({
     borderRadius: 65,
     marginBottom: 16,
   },
+
+  // ── Wide web: horizontal card (avatar | name/username/location | stats) —
+  // fills the wider column instead of stretching the mobile card's
+  // vertically-centered layout thin across it.
+  profileCardWide: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#222222',
+    margin: 20,
+    borderRadius: 35,
+    padding: 32,
+    gap: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 5,
+  },
+  avatarWide: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  profileCardWideInfo: {
+    flex: 1,
+  },
+  // Fixed width instead of flex:1 across the whole card — otherwise the 3
+  // stat boxes would stretch into oversized tiles on a 1040px-wide card.
+  statsRowWide: {
+    flexDirection: 'row',
+    gap: 12,
+    width: 300,
+  },
+
   name: { color: '#fff', fontSize: 22, fontFamily: Fonts.semibold },
   username: {
     color: '#888',
@@ -638,6 +739,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontSize: 15,
     fontFamily: Fonts.regular,
+    // Capped so bio text doesn't stretch into uncomfortably long line
+    // lengths on the wider web column — harmless on mobile, which is
+    // already narrower than this.
+    maxWidth: 640,
   },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   chip: {
@@ -762,25 +867,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 24,
   },
-  inviteLeagueRow: {
+  inviteActivityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     gap: 12,
   },
-  inviteLeagueCover: {
+  inviteActivityCover: {
     width: 44,
     height: 44,
     borderRadius: 8,
     backgroundColor: '#1A1A1A',
   },
-  inviteLeagueName: {
+  inviteActivityName: {
     color: '#fff',
     fontSize: 14,
     fontFamily: Fonts.semibold,
     marginBottom: 3,
   },
-  inviteLeagueDate: {
+  inviteActivityDate: {
     color: '#555',
     fontSize: 12,
     fontFamily: Fonts.regular,

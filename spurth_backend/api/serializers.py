@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import League, Notification, Post, UserProfile, Comment
+from .models import Activity, Notification, Post, UserProfile, Comment, Poll, PollChoice
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.db.models import Q
@@ -55,8 +55,8 @@ class PublicUserSerializer(serializers.ModelSerializer):
         return None
 
 
-# 🏆 LEAGUE
-class LeagueSerializer(serializers.ModelSerializer):
+# 🏆 ACTIVITY
+class ActivitySerializer(serializers.ModelSerializer):
     created_by = PublicUserSerializer(read_only=True)
     joined = serializers.SerializerMethodField()
     is_owner = serializers.SerializerMethodField()
@@ -71,10 +71,10 @@ class LeagueSerializer(serializers.ModelSerializer):
     date_time = serializers.DateTimeField(format="%Y-%m-%dT%H:%M:%S")
 
     class Meta:
-        model = League
+        model = Activity
         fields = (
-            'id', 'name', 'sport', 'location', 'latitude', 'longitude',
-            'date_time', 'league_type', 'max_players', 'price',
+            'id', 'name', 'activity_type', 'location', 'latitude', 'longitude',
+            'date_time', 'format', 'max_players', 'price',
             'created_by', 'description', 'is_owner', 'joined',
             'is_full', 'participant_count', 'participants',
             'cover_image', 'cover_image_url', 'is_concluded', 'is_cancelled'
@@ -148,23 +148,24 @@ class UserProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(required=True)
     username = serializers.CharField(source='user.username', read_only=True)
     age = serializers.SerializerMethodField()
-    leagues_joined = serializers.SerializerMethodField()
-    leagues_created = serializers.SerializerMethodField()
-    favorite_sports = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
-    favorite_sports_display = serializers.SerializerMethodField()
+    activities_joined = serializers.SerializerMethodField()
+    activities_created = serializers.SerializerMethodField()
+    interests = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+    interests_display = serializers.SerializerMethodField()
     avatar = serializers.ImageField(required=False, allow_null=True)
     # ── ADD: read-only field for Cloudinary URL ──
     avatar_url = serializers.SerializerMethodField()
+    phone_verified = serializers.BooleanField(source='user.phone_verified', read_only=True)
 
     class Meta:
         model = UserProfile
         fields = [
             'id', 'full_name', 'username', 'avatar', 'age', 'bio',
-            'favorite_sports', 'favorite_sports_display',
-            'gender', 'leagues_joined', 'leagues_created',
-            'birth_date', 'location', 'avatar_url'
+            'interests', 'interests_display',
+            'gender', 'activities_joined', 'activities_created',
+            'birth_date', 'location', 'avatar_url', 'phone_verified'
         ]
-        read_only_fields = ['user', 'age', 'leagues_joined', 'leagues_created', 'favorite_sports_display']
+        read_only_fields = ['user', 'age', 'activities_joined', 'activities_created', 'interests_display', 'phone_verified']
 
     def get_avatar_url(self, obj):
         if obj.avatar:
@@ -181,37 +182,32 @@ class UserProfileSerializer(serializers.ModelSerializer):
         rep = super().to_representation(instance)
         # Replace avatar (raw file) with avatar_url (Cloudinary URL) for frontend
         rep['avatar'] = rep.pop('avatar_url', None)
-        rep.pop('favorite_sports', None)
-        rep['favorite_sports'] = rep.pop('favorite_sports_display', [])
+        rep.pop('interests', None)
+        rep['interests'] = rep.pop('interests_display', [])
         return rep
 
     def get_age(self, obj):
         return obj.calculate_age()
 
-    def get_leagues_joined(self, obj):
-        return obj.user.joined_leagues.exclude(created_by=obj.user).count()
+    def get_activities_joined(self, obj):
+        return obj.user.joined_activities.exclude(created_by=obj.user).count()
 
-    def get_leagues_created(self, obj):
-        return obj.user.created_leagues.count()
+    def get_activities_created(self, obj):
+        return obj.user.created_activities.count()
 
-    def get_favorite_sports_display(self, obj):
-        return obj.favorite_sports.split(',') if obj.favorite_sports else []
-
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        rep['favorite_sports'] = rep.pop('favorite_sports_display')
-        return rep
+    def get_interests_display(self, obj):
+        return obj.interests.split(',') if obj.interests else []
 
     def update(self, instance, validated_data):
-        fav = validated_data.pop('favorite_sports', None)
-        if fav is not None:
-            validated_data['favorite_sports'] = ','.join(fav)
+        interests = validated_data.pop('interests', None)
+        if interests is not None:
+            validated_data['interests'] = ','.join(interests)
         return super().update(instance, validated_data)
 
     def create(self, validated_data):
-        fav = validated_data.pop('favorite_sports', None)
-        if fav is not None:
-            validated_data['favorite_sports'] = ','.join(fav)
+        interests = validated_data.pop('interests', None)
+        if interests is not None:
+            validated_data['interests'] = ','.join(interests)
         return super().create(validated_data)
 
     def get_avatar(self, obj):
@@ -230,31 +226,81 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 # 📰 POSTS
+class PollChoiceSerializer(serializers.ModelSerializer):
+    votes_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PollChoice
+        fields = ['id', 'text', 'votes_count']
+
+    def get_votes_count(self, obj):
+        return obj.votes.count()
+
+
+class PollSerializer(serializers.ModelSerializer):
+    choices = PollChoiceSerializer(many=True, read_only=True)
+    total_votes = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    has_voted = serializers.SerializerMethodField()
+    user_choice_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Poll
+        fields = ['id', 'expires_at', 'is_expired', 'total_votes', 'has_voted', 'user_choice_id', 'choices']
+
+    def get_total_votes(self, obj):
+        return obj.votes.count()
+
+    def get_is_expired(self, obj):
+        return obj.expires_at < timezone.now()
+
+    def _user_vote(self, obj):
+        request = self.context.get('request')
+        if not (request and request.user.is_authenticated):
+            return None
+        return obj.votes.filter(user=request.user).first()
+
+    def get_has_voted(self, obj):
+        return self._user_vote(obj) is not None
+
+    def get_user_choice_id(self, obj):
+        vote = self._user_vote(obj)
+        return vote.choice_id if vote else None
+
+
 class PostSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
     likes_count = serializers.IntegerField(read_only=True)
     comments_count = serializers.IntegerField(read_only=True)
     is_liked = serializers.SerializerMethodField()
-    league_name = serializers.CharField(source='league.name', read_only=True)
+    activity_name = serializers.CharField(source='activity.name', read_only=True)
     cover_image = serializers.SerializerMethodField()
-    league_creator_id = serializers.IntegerField(source='league.created_by.id', read_only=True)
-    league_is_concluded = serializers.SerializerMethodField()
-    league_is_cancelled = serializers.BooleanField(source='league.is_cancelled', read_only=True)
+    activity_creator_id = serializers.IntegerField(source='activity.created_by.id', read_only=True)
+    activity_is_concluded = serializers.SerializerMethodField()
+    activity_is_cancelled = serializers.BooleanField(source='activity.is_cancelled', read_only=True)
     user_avatar = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False, allow_null=True)  # ← writable
     is_host = serializers.SerializerMethodField()
+    poll = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'user_name', 'user_avatar',
-            'league', 'league_name', 'league_creator_id',
-            'cover_image', 'caption', 'image',
+            'activity', 'activity_name', 'activity_creator_id',
+            'cover_image', 'caption', 'image', 'poll',
             'created_at', 'likes_count', 'comments_count',
             'is_liked', 'is_host',
-            'league_is_concluded', 'league_is_cancelled',
+            'activity_is_concluded', 'activity_is_cancelled',
         ]
         read_only_fields = ['user', 'created_at']
+
+    def get_poll(self, obj):
+        try:
+            poll = obj.poll
+        except Poll.DoesNotExist:
+            return None
+        return PollSerializer(poll, context=self.context).data
 
     def to_representation(self, instance):
         rep = super().to_representation(instance)
@@ -276,15 +322,15 @@ class PostSerializer(serializers.ModelSerializer):
         return request and request.user.is_authenticated and obj.likes.filter(user=request.user).exists()
 
     def get_is_host(self, obj):
-        return obj.league and obj.user_id == obj.league.created_by_id
+        return obj.activity and obj.user_id == obj.activity.created_by_id
 
-    def get_league_is_concluded(self, obj):
-        return obj.league and obj.league.date_time and obj.league.date_time < timezone.now()
+    def get_activity_is_concluded(self, obj):
+        return obj.activity and obj.activity.date_time and obj.activity.date_time < timezone.now()
 
     def get_cover_image(self, obj):
-        if obj.league and obj.league.cover_image:
+        if obj.activity and obj.activity.cover_image:
             try:
-                return obj.league.cover_image.build_url(
+                return obj.activity.cover_image.build_url(
                     width=500,
                     height=300,
                     crop='fill',
@@ -292,7 +338,7 @@ class PostSerializer(serializers.ModelSerializer):
                     fetch_format='auto'
                 )
             except Exception:
-                return obj.league.cover_image.url
+                return obj.activity.cover_image.url
         return None
 
     def get_user_avatar(self, obj):
@@ -333,14 +379,14 @@ class CommentSerializer(serializers.ModelSerializer):
         read_only_fields = ['user', 'post', 'created_at']
 
 class NotificationSerializer(serializers.ModelSerializer):
-    league_name = serializers.CharField(source='league.name', read_only=True)
-    league_id = serializers.IntegerField(source='league.id', read_only=True)
+    activity_name = serializers.CharField(source='activity.name', read_only=True)
+    activity_id = serializers.IntegerField(source='activity.id', read_only=True)
 
     class Meta:
         model = Notification
         fields = [
             'id', 'notification_type', 'title', 'body',
-            'league_id', 'league_name', 'is_read', 'created_at',
+            'activity_id', 'activity_name', 'is_read', 'created_at',
         ]
 
 

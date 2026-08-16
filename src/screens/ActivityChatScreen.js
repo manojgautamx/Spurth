@@ -70,8 +70,8 @@ const isSameDay = (ts1, ts2) => {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-const LeagueChatScreen = ({ route, navigation }) => {
-  const { leagueId, leagueName } = route.params;
+const ActivityChatScreen = ({ route, navigation }) => {
+  const { activityId, activityName } = route.params;
 
   const [messages, setMessages]       = useState([]);
   const [text, setText]               = useState('');
@@ -79,7 +79,7 @@ const LeagueChatScreen = ({ route, navigation }) => {
   const [username, setUsername]       = useState('');
   const [userAvatar, setUserAvatar]   = useState('');
   const [infoVisible, setInfoVisible] = useState(false);
-  const [league, setLeague]           = useState(null);
+  const [activity, setActivity]       = useState(null);
   const [showAllMembers, setShowAllMembers] = useState(false);
 
   const flatListRef = useRef(null);
@@ -96,17 +96,21 @@ const LeagueChatScreen = ({ route, navigation }) => {
       .catch(e => console.warn('Failed to load user', e));
   }, []);
 
-  // Load league info for the info panel
+  // Load activity info for the info panel
   useEffect(() => {
-    axios.get(`${BASE_URL}/api/league-detail/${leagueId}/`)
-      .then(res => setLeague(res.data))
-      .catch(e => console.warn('Failed to load league info', e));
-  }, [leagueId]);
+    axios.get(`${BASE_URL}/api/activity-detail/${activityId}/`)
+      .then(res => setActivity(res.data))
+      .catch(e => console.warn('Failed to load activity info', e));
+  }, [activityId]);
 
   // Subscribe to Firestore messages
+  // NOTE: the Firestore collection path ('leagues'/'league_<id>') is kept
+  // as-is even though everything else here is now "activity" — these chat
+  // threads already exist in Firestore under that path, and changing it
+  // would orphan existing message history instead of just renaming a term.
   useEffect(() => {
     const messagesQuery = query(
-      collection(db, 'leagues', `league_${leagueId}`, 'messages'),
+      collection(db, 'leagues', `league_${activityId}`, 'messages'),
       orderBy('timestamp', 'asc')
     );
     const unsubscribe = onSnapshot(messagesQuery, snapshot => {
@@ -115,14 +119,14 @@ const LeagueChatScreen = ({ route, navigation }) => {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
     return () => unsubscribe();
-  }, [leagueId]);
+  }, [activityId]);
 
   const sendMessage = async () => {
     if (!text.trim()) return;
     const msgText = text.trim();
     setText('');
     try {
-      await addDoc(collection(db, 'leagues', `league_${leagueId}`, 'messages'), {
+      await addDoc(collection(db, 'leagues', `league_${activityId}`, 'messages'), {
         text: msgText,
         senderId: userId,
         senderName: username,
@@ -137,7 +141,7 @@ const LeagueChatScreen = ({ route, navigation }) => {
 
 
   const handleLeaveActivity = () => {
-    Alert.alert('Leave Activity', 'Are you sure you want to leave this league chat?', [
+    Alert.alert('Leave Activity', 'Are you sure you want to leave this activity chat?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
@@ -243,15 +247,15 @@ const LeagueChatScreen = ({ route, navigation }) => {
 
   // ── Info Panel Members ──────────────────────────────────────────────────────
 
-  const members = league?.participants || [];
+  const members = activity?.participants || [];
   const PREVIEW_COUNT = 6;
   const displayedMembers = showAllMembers ? members : members.slice(0, PREVIEW_COUNT);
   const remaining = members.length - PREVIEW_COUNT;
 
-  const coverUri = league?.cover_image
-    ? league.cover_image.startsWith('http')
-      ? league.cover_image
-      : `${BASE_URL}${league.cover_image}`
+  const coverUri = activity?.cover_image
+    ? activity.cover_image.startsWith('http')
+      ? activity.cover_image
+      : `${BASE_URL}${activity.cover_image}`
     : null;
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -262,7 +266,7 @@ const LeagueChatScreen = ({ route, navigation }) => {
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{leagueName}</Text>
+        <Text style={styles.headerTitle}>{activityName}</Text>
         <TouchableOpacity onPress={() => setInfoVisible(true)} style={styles.infoBtn}>
           <Ionicons name="information-circle-outline" size={26} color="#fff" />
         </TouchableOpacity>
@@ -338,9 +342,9 @@ const LeagueChatScreen = ({ route, navigation }) => {
             </View>
 
             {/* Name + count */}
-            <Text style={styles.infoName}>{leagueName}</Text>
+            <Text style={styles.infoName}>{activityName}</Text>
             <Text style={styles.infoMemberCount}>
-              {league?.participant_count || members.length} Members
+              {activity?.participant_count || members.length} Members
             </Text>
 
             {/* Members Section */}
@@ -633,4 +637,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LeagueChatScreen;
+export default ActivityChatScreen;

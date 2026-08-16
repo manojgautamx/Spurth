@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,10 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -17,6 +21,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Fonts } from '../theme/fonts';
 import { useDistance } from '../context/DistanceContext';
 import axiosInstance from '../utils/axiosInstance';
+import { AuthContext } from '../context/AuthContext';
+import { useIsWideWeb } from '../utils/responsive';
 
 const DISTANCE_KEY = 'user_distance_km';
 
@@ -29,11 +35,22 @@ const SettingRow = ({ label, onPress }) => (
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const isWideWeb = useIsWideWeb();
+  const { logout } = useContext(AuthContext);
   const { distanceKm, setDistanceKm } = useDistance();
   const [localDistance, setLocalDistance] = useState(distanceKm);
   const [email, setEmail] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
+
+  // Change password
+  const [changePasswordVisible, setChangePasswordVisible] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [changePasswordError, setChangePasswordError] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     axiosInstance.get('me/')
@@ -55,9 +72,45 @@ export default function SettingsScreen() {
     navigation.navigate('EmailVerification');
   };
 
+  const openChangePassword = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setChangePasswordError('');
+    setShowPasswords(false);
+    setChangePasswordVisible(true);
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setChangePasswordError('Please fill in all fields.');
+      return;
+    }
+    setChangingPassword(true);
+    setChangePasswordError('');
+    try {
+      await axiosInstance.post('change-password/', {
+        current_password: currentPassword,
+        new_password: newPassword,
+        confirm_password: confirmPassword,
+      });
+      setChangePasswordVisible(false);
+      Alert.alert('Success', 'Your password has been changed.');
+    } catch (err) {
+      setChangePasswordError(err.response?.data?.detail || 'Failed to change password.');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+
+      {/* Wide web: cap content to the same column width as Home/Explore
+          instead of letting cards stretch edge-to-edge. */}
+      <View style={styles.webRow}>
+      <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
 
       {/* Header */}
       <View style={styles.header}>
@@ -100,6 +153,8 @@ export default function SettingsScreen() {
               )}
             </View>
           )}
+          <View style={styles.divider} />
+          <SettingRow label="Change Password" onPress={openChangePassword} />
         </View>
 
         {/* Distance Preferences */}
@@ -161,7 +216,7 @@ export default function SettingsScreen() {
               {
                 text: 'Log Out',
                 style: 'destructive',
-                onPress: () => navigation.navigate('Welcome'),
+                onPress: logout,
               },
             ])
           }
@@ -170,12 +225,125 @@ export default function SettingsScreen() {
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </View>
+
+      </View>
+      </View>
+
+      {/* Change Password Modal */}
+      <Modal
+        visible={changePasswordVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChangePasswordVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={styles.modalCardWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Change Password</Text>
+
+              <Text style={styles.fieldLabel}>Current Password</Text>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor="#555"
+                secureTextEntry={!showPasswords}
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.fieldLabel}>New Password</Text>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor="#555"
+                secureTextEntry={!showPasswords}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                autoCapitalize="none"
+              />
+
+              <Text style={styles.fieldLabel}>Confirm New Password</Text>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="••••••••"
+                placeholderTextColor="#555"
+                secureTextEntry={!showPasswords}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                autoCapitalize="none"
+              />
+
+              <TouchableOpacity
+                style={styles.showPasswordsRow}
+                onPress={() => setShowPasswords(v => !v)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={showPasswords ? 'eye-off-outline' : 'eye-outline'}
+                  size={16}
+                  color="#888"
+                />
+                <Text style={styles.showPasswordsText}>
+                  {showPasswords ? 'Hide passwords' : 'Show passwords'}
+                </Text>
+              </TouchableOpacity>
+
+              {!!changePasswordError && (
+                <Text style={styles.modalErrorText}>{changePasswordError}</Text>
+              )}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setChangePasswordVisible(false)}
+                  disabled={changingPassword}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSaveBtn, changingPassword && { opacity: 0.6 }]}
+                  onPress={handleChangePassword}
+                  disabled={changingPassword}
+                >
+                  {changingPassword ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
+  root: { flex: 1, backgroundColor: '#0A0A0A', overflow: 'hidden' },
+
+  /* ───────── WIDE WEB: cap width, center like Home/Explore ─────────
+     overflow:'hidden' keeps the sidebar pinned to the viewport — without
+     it, content taller than the available height bubbles up and makes the
+     whole page scroll instead of just the ScrollView inside webCol. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webCol: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  webColWide: {
+    maxWidth: 680,
+  },
 
   header: {
     flexDirection: 'row',
@@ -321,5 +489,93 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: Fonts.semibold,
     fontWeight: '600',
+  },
+
+  // ── Change Password Modal ─────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCardWrap: {
+    width: '100%',
+    maxWidth: 360,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: '#1A1A1A',
+    padding: 22,
+    borderRadius: 16,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: Fonts.semibold,
+    marginBottom: 18,
+  },
+  fieldLabel: {
+    color: '#999',
+    fontSize: 12,
+    fontFamily: Fonts.medium,
+    marginBottom: 6,
+    marginTop: 12,
+  },
+  passwordInput: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+  },
+  showPasswordsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 14,
+  },
+  showPasswordsText: {
+    color: '#888',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+  },
+  modalErrorText: {
+    color: '#FF6B6B',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    marginTop: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 22,
+    gap: 20,
+  },
+  modalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  modalCancelText: {
+    color: '#888',
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+  },
+  modalSaveBtn: {
+    backgroundColor: '#6E35B7',
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 20,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  modalSaveText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.semibold,
   },
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useContext, useCallback } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   FlatList,
   TouchableOpacity,
@@ -20,16 +21,19 @@ import axiosInstance from '../utils/axiosInstance';
 import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import { Fonts } from '../theme/fonts';
-import LeagueCard from '../components/LeagueCard';
-import { LocationContext, filterLeaguesByDistance } from '../context/LocationContext';
+import ActivityCard from '../components/ActivityCard';
+import { LocationContext, filterActivitiesByDistance } from '../context/LocationContext';
 import { BASE_URL } from '../config';
 import { useDistance } from '../context/DistanceContext';
 import CreateIcon from '../assets/icons/CreateIcon';
+import { useIsWideWeb } from '../utils/responsive';
+import PostsRail from '../components/web/PostsRail';
 
 const HomeScreen = () => {
-  const [myLeagues, setMyLeagues] = useState([]);
-  const [otherLeagues, setOtherLeagues] = useState([]);
-  const [joinedLeagues, setJoinedLeagues] = useState([]);
+  const isWideWeb = useIsWideWeb();
+  const [myActivities, setMyActivities] = useState([]);
+  const [otherActivities, setOtherActivities] = useState([]);
+  const [joinedActivities, setJoinedActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Nearby');
   const { location } = useContext(LocationContext);
@@ -40,41 +44,46 @@ const HomeScreen = () => {
   const [profile, setProfile] = useState(null);
   const { distanceKm } = useDistance();
   const [emailVerified, setEmailVerified] = useState(true); // default true to avoid flash
-  const [resending, setResending] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verifyExpanded, setVerifyExpanded] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifySending, setVerifySending] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState('');
 
-  const rankByInterest = (leagues) => {
-    const interests = (profile?.favorite_sports || []).map(i => i.toLowerCase());
-    if (interests.length === 0) return leagues;
+  const rankByInterest = (activities) => {
+    const interests = (profile?.interests || []).map(i => i.toLowerCase());
+    if (interests.length === 0) return activities;
 
-    return [...leagues].sort((a, b) => {
-      const aMatch = interests.includes((a.sport || '').toLowerCase()) ? 1 : 0;
-      const bMatch = interests.includes((b.sport || '').toLowerCase()) ? 1 : 0;
+    return [...activities].sort((a, b) => {
+      const aMatch = interests.includes((a.activity_type || '').toLowerCase()) ? 1 : 0;
+      const bMatch = interests.includes((b.activity_type || '').toLowerCase()) ? 1 : 0;
       return bMatch - aMatch; // matched ones float to top
     });
   };
 
-  const fetchLeagues = async () => {
+  const fetchActivities = async () => {
     try {
       setLoading(true);
 
       const [myRes, otherRes, joinedRes] = await Promise.all([
-        axios.get(`/my-leagues/`),
-        axios.get(`/public-leagues/`),
-        axios.get(`/joined-leagues/`),
+        axios.get(`/my-activities/`),
+        axios.get(`/public-activities/`),
+        axios.get(`/joined-activities/`),
       ]);
 
       console.log('MY:', myRes.data);
       console.log('OTHER:', otherRes.data);
       console.log('JOINED:', joinedRes.data);
 
-      const joinedIds = joinedRes.data.map(l => l.id);
+      const joinedIds = joinedRes.data.map(a => a.id);
       const filteredOther = otherRes.data.filter(
-        l => !joinedIds.includes(l.id)
+        a => !joinedIds.includes(a.id)
       );
 
-      setMyLeagues(myRes.data);
-      setJoinedLeagues(joinedRes.data);
-      setOtherLeagues(filteredOther);
+      setMyActivities(myRes.data);
+      setJoinedActivities(joinedRes.data);
+      setOtherActivities(filteredOther);
     } catch (e) {
       console.log('Fetch error', e);
     } finally {
@@ -85,60 +94,89 @@ const HomeScreen = () => {
   useFocusEffect(
     useCallback(() => {
       axiosInstance.get('me/')
-        .then(res => setEmailVerified(res.data.email_verified))
+        .then(res => {
+          setEmailVerified(res.data.email_verified);
+          setVerifyEmail(res.data.email);
+        })
         .catch(() => {});
     }, [])
   );
 
-
-  useEffect(() => {
-    const unsub = navigation.addListener('focus', fetchLeagues);
-    return unsub;
-  }, [navigation]);
-
-  const handleResend = async () => {
+  const openVerify = async () => {
+    setVerifyExpanded(true);
+    setVerifyCode('');
+    setVerifyError('');
+    setVerifySending(true);
     try {
-      setResending(true);
       await axiosInstance.post('resend-verification/');
-      Alert.alert('Email Sent', 'Check your inbox for the verification link.');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.detail || 'Could not send email.');
+      setVerifyError(err.response?.data?.detail || 'Could not send code.');
     } finally {
-      setResending(false);
+      setVerifySending(false);
     }
   };
 
-  const isPastLeague = (l) => {
-    if (l.is_concluded !== undefined) return l.is_concluded;
-    return new Date(l.date_time) < new Date();
+  const closeVerify = () => {
+    setVerifyExpanded(false);
+    setVerifyCode('');
+    setVerifyError('');
   };
 
-  const isCancelledLeague = (l) => l.is_cancelled === true;
+  const submitVerify = async () => {
+    if (verifyCode.trim().length !== 6) {
+      setVerifyError('Enter the 6-digit code from your email.');
+      return;
+    }
+    setVerifyLoading(true);
+    setVerifyError('');
+    try {
+      await axiosInstance.post('verify-email/', { token: verifyCode.trim() });
+      setEmailVerified(true);
+      setVerifyExpanded(false);
+    } catch (err) {
+      setVerifyError(err.response?.data?.detail || 'Invalid or expired code.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', fetchActivities);
+    return unsub;
+  }, [navigation]);
+
+  const isPastActivity = (a) => {
+    if (a.is_concluded !== undefined) return a.is_concluded;
+    return new Date(a.date_time) < new Date();
+  };
+
+  const isCancelledActivity = (a) => a.is_cancelled === true;
 
   const getActiveData = () => {
 
     // Nearby → NEVER show cancelled
-    const upcomingNearby = otherLeagues.filter(
-      l => !isPastLeague(l) && !isCancelledLeague(l)
+    const upcomingNearby = otherActivities.filter(
+      a => !isPastActivity(a) && !isCancelledActivity(a)
     );
 
     // Going → joined + upcoming only (exclude cancelled)
-    const upcomingJoined = joinedLeagues.filter(
-      l => !isPastLeague(l) && !isCancelledLeague(l)
+    const upcomingJoined = joinedActivities.filter(
+      a => !isPastActivity(a) && !isCancelledActivity(a)
     );
 
     // Past → joined + (past OR cancelled)
-    const pastJoined = joinedLeagues.filter(
-      l => isPastLeague(l) || isCancelledLeague(l)
+    const pastJoined = joinedActivities.filter(
+      a => isPastActivity(a) || isCancelledActivity(a)
     );
 
     // Created by you → SHOW EVERYTHING you created
-    const allCreated = myLeagues; // 🔥 no filtering
+    const allCreated = myActivities; // 🔥 no filtering
 
     switch (activeTab) {
 
       case 'Nearby':
-        const nearbyFiltered = filterLeaguesByDistance(
+        const nearbyFiltered = filterActivitiesByDistance(
           upcomingNearby,
           location?.latitude,
           location?.longitude,
@@ -186,131 +224,221 @@ const HomeScreen = () => {
     );
   }
 
+  const activeData = getActiveData();
+
+  // Desktop: guide a new user toward a next action instead of a dead end.
+  // Mobile is left exactly as it was.
+  const activitiesEmptyState = isWideWeb ? (
+    <View style={styles.activitiesEmptyState}>
+      <Text style={styles.activitiesEmptyTitle}>Nothing nearby yet</Text>
+      <Text style={styles.activitiesEmptySubtitle}>
+        Be the first — create your own and invite others to join.
+      </Text>
+    </View>
+  ) : (
+    <Text style={styles.emptyText}>No Activities here. How about you lead the way?</Text>
+  );
+
+  // Shared between the mobile and wide-web layouts.
+  const centerContent = (
+    <>
+      {!emailVerified && !verifyExpanded && (
+        <TouchableOpacity
+          style={[styles.verifyBanner, isWideWeb && styles.verifyBannerWeb]}
+          onPress={openVerify}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="mail-outline" size={isWideWeb ? 14 : 18} color="#fff" style={{ marginRight: isWideWeb ? 8 : 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.verifyBannerTitle, isWideWeb && styles.verifyBannerTitleWeb]}>
+              Verify your email
+            </Text>
+            {!isWideWeb && (
+              <Text style={styles.verifyBannerSub}>
+                Tap to verify with a code
+              </Text>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={isWideWeb ? 13 : 16} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
+      )}
+
+      {!emailVerified && verifyExpanded && (
+        <View style={[styles.verifyCard, isWideWeb && styles.verifyCardWeb]}>
+          <View style={styles.verifyCardHeader}>
+            <Ionicons name="mail-outline" size={16} color="#e69c2d" style={{ marginRight: 8 }} />
+            <Text style={styles.verifyCardTitle}>Verify your email</Text>
+            <TouchableOpacity onPress={closeVerify} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={18} color="#888" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.verifyCardSub}>
+            {verifySending
+              ? 'Sending a 6-digit code…'
+              : verifyEmail
+                ? `We sent a 6-digit code to ${verifyEmail}.`
+                : 'We sent a 6-digit code to your email.'}
+          </Text>
+
+          {!!verifyError && <Text style={styles.verifyCardError}>{verifyError}</Text>}
+
+          <View style={styles.verifyCardRow}>
+            <TextInput
+              style={styles.verifyCardInput}
+              value={verifyCode}
+              onChangeText={(t) => setVerifyCode(t.replace(/\D/g, '').slice(0, 6))}
+              placeholder="6-digit code"
+              placeholderTextColor="#555"
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+            <TouchableOpacity
+              style={[styles.verifyCardBtn, (verifyLoading || verifySending) && styles.verifyCardBtnDisabled]}
+              onPress={submitVerify}
+              disabled={verifyLoading || verifySending}
+            >
+              {verifyLoading
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={styles.verifyCardBtnText}>Verify</Text>}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity onPress={openVerify} disabled={verifySending || verifyLoading} style={{ marginTop: 10 }}>
+            <Text style={styles.verifyCardResend}>
+              {verifySending ? 'Sending...' : "Didn't receive it? Resend"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* HERO */}
+      <ImageBackground
+        source={{
+          uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1780374905/ChatGPT_Image_Jun_2_2026_10_19_18_AM_hnh3k7.png',
+        }}
+        style={styles.heroCard}
+        imageStyle={{ borderRadius: 18 }}
+      >
+        <View style={styles.heroOverlay}>
+          <Text style={styles.heroTitle}>Jump in. Connect.</Text>
+          <Text style={styles.heroDate}>Join or create an activity of your interest.</Text>
+          <TouchableOpacity style={styles.exploreBtn} onPress={() => navigation.navigate('Explore')}>
+            <Text style={styles.exploreText}>Explore</Text>
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
+
+      {/* CREATE ACTIVITY — kept, but visually secondary to Activities on web */}
+      <TouchableOpacity
+        style={[styles.createCard, isWideWeb && styles.createCardWeb]}
+        onPress={() => navigation.navigate('CreateActivity')}
+      >
+        <View style={styles.createLeft}>
+          <CreateIcon size={isWideWeb ? 26 : 38} color="#c365e2" />
+          <View style={{ marginLeft: isWideWeb ? 12 : 18 }}>
+            <Text style={[styles.createTitle, isWideWeb && styles.createTitleWeb]}>Create an Activity</Text>
+            <Text style={[styles.createSubtitle, isWideWeb && styles.createSubtitleWeb]}>Organize your own Activity</Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={isWideWeb ? 16 : 22} color="#fff" />
+      </TouchableOpacity>
+
+      {/* ACTIVITIES TITLE */}
+      <Text style={styles.activitiesTitle}>Activities</Text>
+
+      {/* PILLS */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScroll}
+      >
+        {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
+          <TouchableOpacity
+            key={tab}
+            style={[
+              styles.pill,
+              activeTab === tab && styles.pillActive,
+            ]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text
+              style={[
+                styles.pillText,
+                activeTab === tab && styles.pillTextActive,
+              ]}
+            >
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* LIST */}
+      <FlatList
+        data={activeData}
+        keyExtractor={item => item.id.toString()}
+        renderItem={({ item }) => <ActivityCard activity={item} />}
+        scrollEnabled={false}
+        ListEmptyComponent={activitiesEmptyState}
+        contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
+      />
+
+      {isWideWeb && activeData.length > 0 && (
+        <TouchableOpacity
+          style={styles.exploreMoreBtn}
+          onPress={() => navigation.navigate('Explore')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.exploreMoreText}>Explore more activities</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  // Mobile only — on web this is redundant (the sidebar already shows "Home"
+  // as the active item, and has its own Profile entry) so it's just skipped
+  // entirely there rather than left as blank padded space.
+  const header = (
+    <View style={styles.topHeader}>
+      <Text style={styles.headerText}>Home</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('ProfileView')}>
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.profileImage} />
+        ) : (
+          <Ionicons name="person-circle-outline" size={36} color="#777" />
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (isWideWeb) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <ScrollView style={styles.webCenter} showsVerticalScrollIndicator={false}>
+              {centerContent}
+            </ScrollView>
+            <PostsRail />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* HEADER */}
-      <View style={styles.topHeader}>
-        <Text style={styles.headerText}>Home</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('ProfileView')}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.profileImage} />
-              ) : (
-                <Ionicons name="person-circle-outline" size={36} color="#777" />
-              )}
-        </TouchableOpacity>
-      </View>
-
+      {header}
       <ScrollView showsVerticalScrollIndicator={false}>
-        {!emailVerified && (
-          <TouchableOpacity
-            style={styles.verifyBanner}
-            onPress={() => navigation.navigate('EmailVerification')}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="mail-outline" size={18} color="#fff" style={{ marginRight: 10 }} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.verifyBannerTitle}>Verify your email</Text>
-              <Text style={styles.verifyBannerSub}>
-                {resending ? 'Sending...' : 'Tap to resend verification link'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-        )}
-        {/* HERO */}
-        <ImageBackground
-          source={{
-            uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1780374905/ChatGPT_Image_Jun_2_2026_10_19_18_AM_hnh3k7.png',
-          }}
-          style={styles.heroCard}
-          imageStyle={{ borderRadius: 18 }}
-        >
-          <View style={styles.heroOverlay}>
-            <Text style={styles.heroTitle}>Jump in. Connect.</Text>
-            <Text style={styles.heroDate}>Join or create an activity of your interest.</Text>
-            <TouchableOpacity style={styles.exploreBtn} onPress={() => navigation.navigate('Explore')}>
-              <Text style={styles.exploreText}>Explore</Text>
-            </TouchableOpacity>
-          </View>
-        </ImageBackground>
-
-        {/* CREATE LEAGUE */}
-        <TouchableOpacity
-          style={styles.createCard}
-          onPress={() => navigation.navigate('CreateLeague')}
-        >
-          <View style={styles.createLeft}>
-            <CreateIcon size={38} color="#c365e2" />
-            <View style={{ marginLeft: 18 }}>
-              <Text style={styles.createTitle}>Create an Activity</Text>
-              <Text style={styles.createSubtitle}>Organize your own Activity</Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={22} color="#fff" />
-        </TouchableOpacity>
-
-        {/* LEAGUES TITLE */}
-        <Text style={styles.leaguesTitle}>Activities</Text>
-
-        {/* PILLS */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabScroll}
-        >
-          {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
-            <TouchableOpacity
-              key={tab}
-              style={[
-                styles.pill,
-                activeTab === tab && styles.pillActive,
-              ]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  activeTab === tab && styles.pillTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* FILTER */}
-        {/* <View style={styles.filterRow}>
-          <TouchableOpacity style={styles.filterItem}>
-            <Text style={styles.filterText}>Filter</Text>
-            <Ionicons name="filter-outline" size={14} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.filterItem}>
-            <Text style={styles.filterText}>Sort by</Text>
-            <Ionicons name="chevron-down" size={14} color="#999" />
-          </TouchableOpacity>
-        </View> */}
-
-        {/* LIST */}
-        <FlatList
-          data={getActiveData()}
-          keyExtractor={item => item.id.toString()}
-          renderItem={({ item }) => <LeagueCard league={item} />}
-          scrollEnabled={false}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>No Activities here. How about you lead the way?</Text>
-          }
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-
+        {centerContent}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0F0F0F' },
+  safeArea: { flex: 1, backgroundColor: '#0F0F0F', overflow: 'hidden' },
 
   centered: {
     flex: 1,
@@ -342,7 +470,7 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
 
-  /* ───────── HERO ───────── */
+  /* ───────── HERO (mobile only) ───────── */
   heroCard: {
     height: 200,
     marginHorizontal: 20,
@@ -383,7 +511,48 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.semibold,
   },
 
-  /* ───────── CREATE LEAGUE ───────── */
+  /* ───────── WIDE WEB: 3-column layout ─────────
+     overflow:'hidden' on both rows keeps the sidebar pinned to the
+     viewport — without it, content taller than the available height
+     bubbles up and makes the whole page scroll instead of just webCenter. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    // Centers the content block instead of left-anchoring it and leaving a
+    // lopsided gap on the right when the viewport is wider than the columns.
+    justifyContent: 'center',
+    overflow: 'hidden',
+    // Only source of top breathing room on web now that the "Home" header
+    // (which used to supply it via its own padding) is skipped there.
+    paddingTop: 24,
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  webCenter: {
+    flex: 1,
+    maxWidth: 680,
+  },
+  exploreMoreBtn: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 40,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: 24,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  exploreMoreText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.semibold,
+  },
+
+  /* ───────── CREATE ACTIVITY ───────── */
   createCard: {
     marginHorizontal: 20,
     marginTop: 16,
@@ -394,11 +563,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  // Kept purple icon / title / subtitle / arrow / dark card — just smaller,
+  // so Activities below reads as the primary section, not this.
+  createCardWeb: {
+    padding: 12,
+    marginTop: 12,
+    borderRadius: 14,
+  },
   createLeft: { flexDirection: 'row', alignItems: 'center' },
   createTitle: {
     color: '#fff',
     fontSize: 16,
     fontFamily: Fonts.semibold,
+  },
+  createTitleWeb: {
+    fontSize: 14,
   },
   createSubtitle: {
     color: '#AAA',
@@ -406,9 +585,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontFamily: Fonts.regular,
   },
+  createSubtitleWeb: {
+    fontSize: 12,
+  },
 
-  /* ───────── LEAGUES TITLE ───────── */
-  leaguesTitle: {
+  /* ───────── ACTIVITIES TITLE ───────── */
+  activitiesTitle: {
     color: '#fff',
     fontSize: 22,
     fontFamily: Fonts.bold,
@@ -520,6 +702,50 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Fonts.regular',
   },
+
+  /* ───────── Activities empty state (web) — guides toward a next action ── */
+  activitiesEmptyState: {
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 24,
+    paddingVertical: 26,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#1E1E1E',
+    borderRadius: 18,
+  },
+  activitiesEmptyTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontFamily: Fonts.semibold,
+    marginBottom: 6,
+  },
+  activitiesEmptySubtitle: {
+    color: '#888',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 18,
+    maxWidth: 360,
+  },
+  activitiesEmptyActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  activitiesEmptyPrimaryBtn: {
+    backgroundColor: '#6C5CE7',
+    borderRadius: 20,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+  },
+  activitiesEmptyPrimaryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: Fonts.semibold,
+  },
+
+  /* ───────── Email verify banner ───────── */
   verifyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -529,16 +755,105 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
   },
+  // Same orange styling/message/resend behavior — just a smaller footprint
+  // on desktop so it doesn't read as the page's primary purpose.
+  verifyBannerWeb: {
+    padding: 9,
+    borderRadius: 10,
+  },
   verifyBannerTitle: {
     color: '#fff',
     fontFamily: Fonts.semibold,
     fontSize: 14,
     marginBottom: 2,
   },
+  verifyBannerTitleWeb: {
+    fontSize: 12,
+    marginBottom: 0,
+  },
   verifyBannerSub: {
     color: 'rgba(255,255,255,0.7)',
     fontFamily: Fonts.regular,
     fontSize: 12,
+  },
+
+  /* ───────── Email verify — expanded inline card ───────── */
+  verifyCard: {
+    backgroundColor: '#181818',
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(230,156,45,0.35)',
+  },
+  verifyCardWeb: {
+    padding: 12,
+    borderRadius: 10,
+  },
+  verifyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  verifyCardTitle: {
+    flex: 1,
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 15,
+  },
+  verifyCardSub: {
+    color: '#999',
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  verifyCardError: {
+    color: '#ff6b6b',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  verifyCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  verifyCardInput: {
+    flex: 1,
+    backgroundColor: '#111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    paddingHorizontal: 14,
+    height: 44,
+    color: '#fff',
+    fontSize: 17,
+    letterSpacing: 4,
+    fontFamily: Fonts.semibold,
+    marginRight: 10,
+  },
+  verifyCardBtn: {
+    backgroundColor: '#e69c2d',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifyCardBtnDisabled: {
+    opacity: 0.6,
+  },
+  verifyCardBtnText: {
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 14,
+  },
+  verifyCardResend: {
+    color: '#e69c2d',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
 

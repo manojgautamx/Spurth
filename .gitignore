@@ -110,3 +110,6 @@ ENV/
 *.swp
 
 serviceAccountKey.json
+
+# Web build output — built fresh by CI (deploy-pages.yml) on every deploy.
+web-build/

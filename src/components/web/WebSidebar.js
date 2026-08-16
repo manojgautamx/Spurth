@@ -1,21 +1,36 @@
 // Left navigation sidebar shown in place of the bottom tab bar on wide web
-// viewports (X/Twitter-style). Talks to navigation purely through the app's
-// global navigationRef, so it works as a plain sibling of <Tab.Navigator>
-// rather than needing to live inside its React Navigation context.
+// viewports. Talks to navigation purely through the app's global
+// navigationRef, so it works as a plain sibling of <Tab.Navigator> rather
+// than needing to live inside its React Navigation context.
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../../theme/fonts';
 import { navigationRef } from '../../navigation/navigationRef';
 
+import HomeIcon from '../../assets/icons/HomeIcon';
+import ExploreIcon from '../../assets/icons/ExploreIcon';
+import ActivityIcon from '../../assets/icons/ActivityIcon';
+import NotificationIcon from '../../assets/icons/NotificationIcon';
+import ChatIcon from '../../assets/icons/ChatIcon';
+
 export const SIDEBAR_WIDTH = 248;
 
+// Same icon set the mobile bottom tab bar uses (AppNavigator.js), so the
+// sidebar reads as the same app rather than an approximation of it.
 const NAV_ITEMS = [
-  { route: 'Home',         label: 'Home',          icon: 'home-outline',          activeIcon: 'home' },
-  { route: 'Explore',      label: 'Explore',        icon: 'compass-outline',       activeIcon: 'compass' },
-  { route: 'Chat',         label: 'Messages',       icon: 'chatbubble-outline',    activeIcon: 'chatbubble' },
-  { route: 'Notification', label: 'Notifications',  icon: 'notifications-outline', activeIcon: 'notifications' },
-  { route: 'Activity',     label: 'Activity',       icon: 'flame-outline',         activeIcon: 'flame' },
+  { route: 'Home',         label: 'Home',         Icon: HomeIcon },
+  { route: 'Explore',      label: 'Explore',       Icon: ExploreIcon },
+  { route: 'Chat',         label: 'Messages',      Icon: ChatIcon },
+  { route: 'Notification', label: 'Notifications', Icon: NotificationIcon },
+  { route: 'Experience',   label: 'Experiences',   Icon: ActivityIcon },
+];
+
+// Own-account group, pinned to the bottom — same visual weight for all three.
+const ACCOUNT_ITEMS = [
+  { route: 'ProfileView',  label: 'Profile',         icon: 'person-outline' },
+  { route: 'CreateActivity', label: 'Create Activity',  icon: 'add-circle-outline' },
+  { route: 'Settings',     label: 'Settings',        icon: 'settings-outline' },
 ];
 
 function useActiveRouteName() {
@@ -33,78 +48,92 @@ function useActiveRouteName() {
   return routeName;
 }
 
+// Route names that live inside MainTabNavigator's nested Tab.Navigator
+// rather than as top-level Stack.Screens. navigationRef.navigate(name) only
+// resolves these when the currently-focused route is already inside that
+// nested navigator — from a top-level sibling screen (ProfileView, Settings,
+// ActivityViewerScreen, ...) it silently no-ops. Routing these through
+// MainTabs explicitly makes sidebar nav work from every screen.
+const TAB_ROUTES = new Set(['Home', 'Explore', 'Chat', 'Notification', 'Experience']);
+
 export default function WebSidebar() {
   const activeRouteName = useActiveRouteName();
 
   const go = (name) => {
-    if (navigationRef.isReady()) navigationRef.navigate(name);
+    if (!navigationRef.isReady()) return;
+    if (TAB_ROUTES.has(name)) {
+      navigationRef.navigate('MainTabs', { screen: name });
+    } else {
+      navigationRef.navigate(name);
+    }
   };
 
   return (
     <View style={styles.sidebar}>
-      <Text style={styles.brand}>Spurth</Text>
+      <Image
+        source={require('../../assets/logotext.png')}
+        style={styles.brandLogo}
+        resizeMode="contain"
+      />
 
       <View style={styles.navList}>
-        {NAV_ITEMS.map(item => {
-          const isActive = activeRouteName === item.route;
+        {NAV_ITEMS.map(({ route, label, Icon }) => {
+          const isActive = activeRouteName === route;
           return (
             <TouchableOpacity
-              key={item.route}
+              key={route}
               style={[styles.navItem, isActive && styles.navItemActive]}
-              onPress={() => go(item.route)}
+              onPress={() => go(route)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={isActive ? item.activeIcon : item.icon}
-                size={24}
-                color={isActive ? '#fff' : '#888'}
-                style={styles.navIcon}
-              />
+              {/* The custom SVG icon components only accept size/color, not
+                  style — wrapping in a View is what actually applies the gap. */}
+              <View style={styles.navIcon}>
+                <Icon size={22} color={isActive ? '#fff' : '#888'} />
+              </View>
               <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
-                {item.label}
+                {label}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      <TouchableOpacity
-        style={styles.createBtn}
-        onPress={() => go('CreateLeague')}
-        activeOpacity={0.85}
-      >
-        <Text style={styles.createBtnText}>Create Event</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.accountBtn}
-        onPress={() => go('Settings')}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="person-circle-outline" size={30} color="#fff" />
-        <Text style={styles.accountLabel}>Settings</Text>
-      </TouchableOpacity>
+      <View style={styles.accountGroup}>
+        {ACCOUNT_ITEMS.map((item, i) => (
+          <TouchableOpacity
+            key={item.route}
+            style={[styles.accountItem, i > 0 && styles.accountItemDivider]}
+            onPress={() => go(item.route)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={item.icon} size={20} color="#ccc" style={styles.navIcon} />
+            <Text style={styles.accountLabel}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   sidebar: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
+    // A normal flex item now (not pinned to the viewport edge) — it's part
+    // of the same centered [sidebar + content] block as everything else, so
+    // it moves with the content instead of always hugging the true left edge.
     width: SIDEBAR_WIDTH,
-    backgroundColor: '#0A0A0A',
+    flexShrink: 0,
+    // Matches HomeScreen's background (#0F0F0F) so sidebar/content/outer
+    // margins read as one seamless surface instead of three shades of black.
+    backgroundColor: '#0F0F0F',
     borderRightWidth: 1,
     borderRightColor: '#1A1A1A',
     paddingHorizontal: 16,
     paddingVertical: 24,
   },
-  brand: {
-    color: '#fff',
-    fontSize: 22,
-    fontFamily: Fonts.extrabold,
+  brandLogo: {
+    height: 26,
+    aspectRatio: 528 / 182,
     marginBottom: 28,
     marginLeft: 12,
   },
@@ -133,29 +162,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontFamily: Fonts.semibold,
   },
-  createBtn: {
-    marginTop: 24,
-    backgroundColor: '#2CB9B0',
-    borderRadius: 28,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  createBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontFamily: Fonts.semibold,
-  },
-  accountBtn: {
+
+  // ── Account group (Profile / Create Activity / Settings) ────────────────
+  accountGroup: {
     marginTop: 'auto',
+    borderWidth: 1,
+    borderColor: '#1E1E1E',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  accountItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 24,
-    gap: 10,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+  },
+  accountItemDivider: {
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
   },
   accountLabel: {
-    color: '#fff',
+    color: '#ccc',
     fontSize: 15,
     fontFamily: Fonts.medium,
   },

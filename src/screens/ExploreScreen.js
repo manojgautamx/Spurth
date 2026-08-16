@@ -21,11 +21,13 @@ import { useNavigation } from '@react-navigation/native';
 
 import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
-import LeagueCard from '../components/LeagueCard';
+import ActivityCard from '../components/ActivityCard';
 import { Fonts } from '../theme/fonts';
 import { getMainCategory } from '../utils/categoryMapper';
 import { BASE_URL } from '../config';
-import { LocationContext, filterLeaguesByDistance, getDistanceKm } from '../context/LocationContext';
+import { LocationContext, filterActivitiesByDistance, getDistanceKm } from '../context/LocationContext';
+import { useIsWideWeb } from '../utils/responsive';
+import PostsRail from '../components/web/PostsRail';
 
 const DATE_FILTERS = ['Upcoming', 'Today', 'Tomorrow', 'This Week', 'This Weekend'];
 dayjs.extend(isBetween);
@@ -64,7 +66,8 @@ const getTabIcon = (category, active) => {
 };
 
 const ExploreScreen = () => {
-  const [leagues, setLeagues] = useState([]);
+  const isWideWeb = useIsWideWeb();
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,17 +82,17 @@ const ExploreScreen = () => {
   const { user } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
 
-  const fetchLeagues = async () => {
+  const fetchActivities = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${BASE_URL}/api/public-leagues/`);
+      const res = await axios.get(`${BASE_URL}/api/public-activities/`);
 
       const processed = res.data.map(item => ({
         ...item,
-        mainCategory: getMainCategory(item.sport)
+        mainCategory: getMainCategory(item.activity_type)
       }));
 
-      setLeagues(processed);
+      setActivities(processed);
     } catch (e) {
       console.log('Explore fetch error', e);
     } finally {
@@ -98,7 +101,7 @@ const ExploreScreen = () => {
   };
 
   useEffect(() => {
-    const unsub = navigation.addListener('focus', fetchLeagues);
+    const unsub = navigation.addListener('focus', fetchActivities);
     return unsub;
   }, [navigation]);
 
@@ -128,19 +131,19 @@ const ExploreScreen = () => {
     }
   }, [searchQuery]);
 
-  const filteredLeagues = useMemo(() => {
+  const filteredActivities = useMemo(() => {
     // SEARCH MODE
     if (searchQuery.length > 0) {
       const lowerQ = searchQuery.toLowerCase();
-      return leagues.filter(item =>
+      return activities.filter(item =>
         item.name?.toLowerCase().includes(lowerQ) ||
-        item.sport?.toLowerCase().includes(lowerQ)
+        item.activity_type?.toLowerCase().includes(lowerQ)
       );
     }
 
     const now = dayjs();
 
-    let data = leagues.filter(item => {
+    let data = activities.filter(item => {
       const eventDate = dayjs(item.date_time);
 
       switch (activeDate) {
@@ -178,7 +181,7 @@ const ExploreScreen = () => {
       searchQuery.length === 0
     ) {
       // default view — filter by distance
-      data = filterLeaguesByDistance(
+      data = filterActivitiesByDistance(
         data,
         location?.latitude,
         location?.longitude,
@@ -187,7 +190,7 @@ const ExploreScreen = () => {
     }
 
     return data;
-  }, [leagues, activeDate, activeCategory, searchQuery, location]);
+  }, [activities, activeDate, activeCategory, searchQuery, location]);
 
 
   if (loading) {
@@ -278,25 +281,25 @@ const ExploreScreen = () => {
           })}
         </ScrollView>
 
-        <View style={styles.sportContainer}>
+        <View style={styles.categoryContainer}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sportScrollContent}
+            contentContainerStyle={styles.categoryScrollContent}
           >
             {MAIN_CATEGORIES.map(category => {
               const isActive = activeCategory === category;
               return (
                 <TouchableOpacity
                   key={category}
-                  style={styles.sportTab}
+                  style={styles.categoryTab}
                   onPress={() => setActiveCategory(category)}
                 >
                   {getTabIcon(category, isActive)}
                   <Text
                     style={[
-                      styles.sportText,
-                      isActive && styles.sportTextActive
+                      styles.categoryText,
+                      isActive && styles.categoryTextActive
                     ]}
                   >
                     {category}
@@ -311,89 +314,139 @@ const ExploreScreen = () => {
     );
   };
 
+  // Shared between the mobile and wide-web layouts.
+  const header = (
+    <View style={styles.headerContainer}>
+      <View style={styles.searchBar}>
+        <Ionicons
+          name="search"
+          size={20}
+          color="#888"
+          style={{ marginLeft: 10 }}
+        />
+        <TextInput
+          placeholder="Search Activities or People"
+          placeholderTextColor="#666"
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons
+              name="close-circle"
+              size={18}
+              color="#666"
+              style={{ marginRight: 10 }}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+      <TouchableOpacity
+        style={styles.mapToggleBtn}
+        onPress={() => navigation.navigate('ExploreMap', { activities: filteredActivities })}
+      >
+        <Ionicons name="map-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+        <Text style={styles.mapToggleText}>Map</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const list = (
+    <FlatList
+      data={filteredActivities}
+      keyExtractor={item => item.id.toString()}
+      ListHeaderComponent={ListHeader}
+      renderItem={({ item }) => (
+        <ActivityCard
+          activity={item}
+          onPress={() =>
+            navigation.navigate(
+              user?.username === item.created_by?.username
+                ? 'ActivityOwnerScreen'
+                : 'ActivityViewerScreen',
+              { activity: item }
+            )
+          }
+        />
+      )}
+      style={isWideWeb ? styles.webList : undefined}
+      // The browser's native scrollbar looked out of place next to the
+      // custom UI — hide it on web only; mobile keeps its default indicator.
+      showsVerticalScrollIndicator={!isWideWeb}
+      contentContainerStyle={{ paddingBottom: 100 }}
+      ListEmptyComponent={
+        <View style={styles.emptyContainer}>
+          {!loading && (
+            <>
+              <Ionicons name="search-outline" size={50} color="#333" />
+              <Text style={styles.emptyText}>
+                {searchQuery.length > 0
+                  ? 'No matches found.'
+                  : 'No Activities found.'}
+              </Text>
+            </>
+          )}
+        </View>
+      }
+    />
+  );
+
+  if (isWideWeb) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#121212" />
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <View style={styles.webCenter}>
+              {header}
+              {list}
+            </View>
+            <PostsRail />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
-
-      <View style={styles.headerContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#888"
-            style={{ marginLeft: 10 }}
-          />
-          <TextInput
-            placeholder="Search Activities or People"
-            placeholderTextColor="#666"
-            style={styles.searchInput}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color="#666"
-                style={{ marginRight: 10 }}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={styles.mapToggleBtn}
-          onPress={() => navigation.navigate('ExploreMap', { leagues: filteredLeagues })}
-        >
-          <Ionicons name="map-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.mapToggleText}>Map</Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={filteredLeagues}
-        keyExtractor={item => item.id.toString()}
-        ListHeaderComponent={ListHeader}
-        renderItem={({ item }) => (
-          <LeagueCard
-            league={item}
-            onPress={() =>
-              navigation.navigate(
-                user?.username === item.created_by?.username
-                  ? 'LeagueOwnerScreen'
-                  : 'LeagueViewerScreen',
-                { league: item }
-              )
-            }
-          />
-        )}
-        contentContainerStyle={{ paddingBottom: 100 }}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {!loading && (
-              <>
-                <Ionicons name="search-outline" size={50} color="#333" />
-                <Text style={styles.emptyText}>
-                  {searchQuery.length > 0
-                    ? 'No matches found.'
-                    : 'No Activities found.'}
-                </Text>
-              </>
-            )}
-          </View>
-        }
-      />
+      {header}
+      {list}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#121212' },
+  safeArea: { flex: 1, backgroundColor: '#121212', overflow: 'hidden' },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#121212'
+  },
+
+  /* ───────── WIDE WEB: 3-column layout (matches HomeScreen) ───────── */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  webCenter: {
+    flex: 1,
+    maxWidth: 680,
+    overflow: 'hidden',
+  },
+  webList: {
+    flex: 1,
   },
   headerContainer: {
     flexDirection: 'row',
@@ -464,10 +517,10 @@ const styles = StyleSheet.create({
   },
   dateText: { color: '#aaa', fontSize: 13, fontWeight: '500' },
   dateTextActive: { color: '#fff', fontWeight: '700' },
-  sportContainer: {
+  categoryContainer: {
     marginLeft: 15,
   },
-  sportTab: {
+  categoryTab: {
     alignItems: 'center',
     marginRight: 20,
     marginTop: 15,
@@ -475,13 +528,13 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     position: 'relative'
   },
-  sportText: {
+  categoryText: {
     fontSize: 12,
     color: '#aaa',
     marginTop: 6,
     fontFamily: Fonts.regular
   },
-  sportTextActive: {
+  categoryTextActive: {
     color: '#fff',
     fontFamily: Fonts.semibold
   },

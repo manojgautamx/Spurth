@@ -16,20 +16,24 @@ import {
   Platform,
   TextInput,
   FlatList,
+  Dimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../context/AuthContext';
 import useAxios from '../utils/useAxios';
-import { getSportImage } from '../utils/getSportImage';
+import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
 import LeafletMap from '../components/LeafletMap';
-import { getSportIcon } from '../utils/sportIcons';
+import { getActivityTypeIcon } from '../utils/activityTypeIcons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import PostCard from '../components/PostCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
 import { LocationContext, getDistanceKm } from '../context/LocationContext';
 import { Share } from 'react-native';
+import { useIsWideWeb } from '../utils/responsive';
+import PostsRail from '../components/web/PostsRail';
+import WebSidebar from '../components/web/WebSidebar';
 
 const geocodeLocation = async (location) => {
   try {
@@ -48,9 +52,10 @@ const geocodeLocation = async (location) => {
   }
 };
 
-const LeagueViewerScreen = ({ route, navigation }) => {
-  const { league: initialLeague, leagueId } = route.params;
-  const [league, setLeague] = useState(initialLeague);
+const ActivityViewerScreen = ({ route, navigation }) => {
+  const isWideWeb = useIsWideWeb();
+  const { activity: initialActivity, activityId } = route.params;
+  const [activity, setActivity] = useState(initialActivity);
   const { user } = useContext(AuthContext);
   const axios = useAxios();
 
@@ -59,6 +64,13 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const [isJoined, setIsJoined] = useState(false);
   const [canChat, setCanChat] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  // Menu dropdown position is measured from the kebab button itself rather
+  // than assumed from a fixed StatusBar-height offset — the button's actual
+  // on-screen position shifts with the wide-web centered layout (and could
+  // just as easily shift on mobile if the header ever changes height), and
+  // a Modal renders as a viewport-level overlay independent of that layout.
+  const [menuAnchor, setMenuAnchor] = useState({ top: 60, right: 16 });
+  const menuBtnRef = useRef(null);
   const [descExpanded, setDescExpanded] = useState(false);
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
@@ -80,14 +92,14 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
   const distance = useMemo(() => {
     if (!location?.latitude || !location?.longitude) return null;
-    if (!league?.latitude || !league?.longitude) return null;
+    if (!activity?.latitude || !activity?.longitude) return null;
     return getDistanceKm(
       location.latitude,
       location.longitude,
-      league.latitude,
-      league.longitude
+      activity.latitude,
+      activity.longitude
     );
-  }, [location, league?.latitude, league?.longitude]);
+  }, [location, activity?.latitude, activity?.longitude]);
 
   const distanceLabel = distance === null
     ? null
@@ -97,44 +109,44 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
   // ALL useEffects before early return
   useEffect(() => {
-    if (!league && leagueId) {
-      axios.get(`${BASE_URL}/api/league-detail/${leagueId}/`)
-        .then(res => setLeague(res.data))
+    if (!activity && activityId) {
+      axios.get(`${BASE_URL}/api/activity-detail/${activityId}/`)
+        .then(res => setActivity(res.data))
         .catch(() => {
-          Alert.alert('Error', 'Failed to load league.');
+          Alert.alert('Error', 'Failed to load activity.');
           navigation.goBack();
         });
     }
-  }, [leagueId]);
+  }, [activityId]);
 
   const handleShare = async () => {
     setMenuVisible(false);
     try {
       await Share.share({
-        title: league.name,
-        message: `Check out "${league.name}" on Spurth!\n\nJoin this event: spurth://event/${league.id}\n\nWeb: https://spurth.com/event/${league.id}`,
+        title: activity.name,
+        message: `Check out "${activity.name}" on Spurth!\n\nJoin this event: spurth://event/${activity.id}\n\nWeb: https://spurth.com/event/${activity.id}`,
       });
     } catch (err) {
       console.warn('Share failed', err);
     }
   };
   useEffect(() => {
-    if (!league) return;
-    if (league.latitude && league.longitude) {
-      setCoords({ latitude: league.latitude, longitude: league.longitude });
+    if (!activity) return;
+    if (activity.latitude && activity.longitude) {
+      setCoords({ latitude: activity.latitude, longitude: activity.longitude });
     }
-    if (league.date_time) {
-      setNewDate(new Date(league.date_time));
+    if (activity.date_time) {
+      setNewDate(new Date(activity.date_time));
     }
-  }, [league?.id]);
+  }, [activity?.id]);
 
   useEffect(() => {
-    if (coords || !league?.location) return;
+    if (coords || !activity?.location) return;
     let mounted = true;
     const fetchCoords = async () => {
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(league.location)}`
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(activity.location)}`
         );
         const data = await res.json();
         if (mounted && data.length) {
@@ -146,42 +158,42 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     };
     fetchCoords();
     return () => { mounted = false; };
-  }, [league?.location]);
+  }, [activity?.location]);
 
   useEffect(() => {
-    if (!league?.id) return;
+    if (!activity?.id) return;
     let mounted = true;
     const fetchAll = async () => {
       try {
-        const statusRes = await axios.get(`${BASE_URL}/api/league-status/${league.id}/`);
-        const chatRes = await axios.get(`${BASE_URL}/api/can-enter-chat/${league.id}/`);
+        const statusRes = await axios.get(`${BASE_URL}/api/activity-status/${activity.id}/`);
+        const chatRes = await axios.get(`${BASE_URL}/api/can-enter-chat/${activity.id}/`);
         if (!mounted) return;
         setIsJoined(statusRes.data.joined);
         setCanChat(chatRes.data.can_chat);
       } catch (err) {
-        console.warn('Failed to fetch league state');
+        console.warn('Failed to fetch activity state');
       } finally {
         if (mounted) setLoading(false);
       }
     };
     fetchAll();
     return () => { mounted = false; };
-  }, [league?.id]);
+  }, [activity?.id]);
 
   useEffect(() => {
-    if (!league?.id) return;
-    fetchLeaguePosts();
-  }, [league?.id]);
+    if (!activity?.id) return;
+    fetchActivityPosts();
+  }, [activity?.id]);
 
   const displayedParticipants = useMemo(() => {
-    const participants = (league?.participants) || [];
+    const participants = (activity?.participants) || [];
     if (participants.length === 0) return [];
     if (participants.length <= 3) return participants;
     return [...participants].sort(() => 0.5 - Math.random()).slice(0, 3);
-  }, [league?.participants]);
+  }, [activity?.participants]);
 
   // ── EARLY RETURN — safe, all hooks above ────────────────────────────────
-  if (!league) {
+  if (!activity) {
     return (
       <View style={[styles.container, { justifyContent: 'center' }]}>
         <ActivityIndicator size="large" color="#E81F89" />
@@ -190,10 +202,10 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   }
 
   // Derived values — not hooks, safe after early return
-  const isConcluded = league.is_concluded;
-  const isCancelled = league.is_cancelled;
-  const leagueType = (league.league_type || '').toLowerCase();
-  const isOwner = league.is_owner;
+  const isConcluded = activity.is_concluded;
+  const isCancelled = activity.is_cancelled;
+  const activityFormat = (activity.format || '').toLowerCase();
+  const isOwner = activity.is_owner;
 
   const getAvatarSource = (avatarPath) => {
     if (!avatarPath) return require('../assets/avatar-placeholder.png');
@@ -204,19 +216,19 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const handleJoin = async () => {
     try {
       setJoining(true);
-      await axios.post(`${BASE_URL}/api/join-league/${league.id}/`);
-      Alert.alert('Success', 'You joined the league!');
+      await axios.post(`${BASE_URL}/api/join-activity/${activity.id}/`);
+      Alert.alert('Success', 'You joined the activity!');
       setIsJoined(true);
       setCanChat(true);
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to join league');
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to join activity');
     } finally {
       setJoining(false);
     }
   };
 
   const handleLeave = async () => {
-    Alert.alert('Leave League', 'Are you sure you want to leave?', [
+    Alert.alert('Leave Activity', 'Are you sure you want to leave?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
@@ -224,12 +236,12 @@ const LeagueViewerScreen = ({ route, navigation }) => {
         onPress: async () => {
           try {
             setJoining(true);
-            await axios.post(`${BASE_URL}/api/leave-league/${league.id}/`);
+            await axios.post(`${BASE_URL}/api/leave-activity/${activity.id}/`);
             setIsJoined(false);
             setCanChat(false);
-            Alert.alert('Left League', 'You have left the league.');
+            Alert.alert('Left Activity', 'You have left the activity.');
           } catch (error) {
-            Alert.alert('Error', 'Failed to leave league');
+            Alert.alert('Error', 'Failed to leave activity');
           } finally {
             setJoining(false);
           }
@@ -238,10 +250,10 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     ]);
   };
 
-  const deleteLeague = async () => {
+  const deleteActivity = async () => {
     try {
-      await axios.delete(`${BASE_URL}/api/delete-league/${league.id}/`);
-      Alert.alert('Event Deleted', 'The league has been deleted successfully.');
+      await axios.delete(`${BASE_URL}/api/delete-activity/${activity.id}/`);
+      Alert.alert('Event Deleted', 'The activity has been deleted successfully.');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.detail || 'Delete failed');
@@ -250,28 +262,28 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
   const confirmDelete = () => {
     setMenuVisible(false);
-    Alert.alert('Delete League', 'This action cannot be undone', [
+    Alert.alert('Delete Activity', 'This action cannot be undone', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: deleteLeague },
+      { text: 'Delete', style: 'destructive', onPress: deleteActivity },
     ]);
   };
 
   const goToChat = () => {
     if (canChat || isOwner) {
-      navigation.navigate('LeagueChatScreen', { leagueId: league.id, leagueName: league.name });
+      navigation.navigate('ActivityChatScreen', { activityId: activity.id, activityName: activity.name });
     } else {
-      Alert.alert('Access Denied', 'You must join this league to chat.');
+      Alert.alert('Access Denied', 'You must join this activity to chat.');
     }
   };
 
   const handleEdit = () => {
-    navigation.navigate('CreateLeague', { editMode: true, league: league });
+    navigation.navigate('CreateActivity', { editMode: true, activity: activity });
   };
 
   const handleReschedule = async () => {
     try {
       setRescheduling(true);
-      await axios.put(`${BASE_URL}/api/update-league/${league.id}/`, {
+      await axios.put(`${BASE_URL}/api/update-activity/${activity.id}/`, {
         date_time: newDate.toISOString(),
       });
       Alert.alert('Success', 'Event rescheduled!');
@@ -283,10 +295,10 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     }
   };
 
-  const cancelLeague = async () => {
+  const cancelActivity = async () => {
     try {
-      await axios.put(`${BASE_URL}/api/cancel-league/${league.id}/`);
-      setLeague(prev => ({ ...prev, is_cancelled: true }));
+      await axios.put(`${BASE_URL}/api/cancel-activity/${activity.id}/`);
+      setActivity(prev => ({ ...prev, is_cancelled: true }));
       Alert.alert('Cancelled', 'Event has been cancelled.');
     } catch (err) {
       Alert.alert('Error', 'Failed to cancel event');
@@ -297,27 +309,27 @@ const LeagueViewerScreen = ({ route, navigation }) => {
     setMenuVisible(false);
     Alert.alert('Cancel Event', 'Are you sure you want to cancel this event?', [
       { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: cancelLeague },
+      { text: 'Yes, Cancel', style: 'destructive', onPress: cancelActivity },
     ]);
   };
 
-  const fetchLeaguePosts = async () => {
-    if (!league?.id) return;
+  const fetchActivityPosts = async () => {
+    if (!activity?.id) return;
     try {
       setPostsLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
-      const res = await fetch(`${BASE_URL}/api/posts/?league=${league.id}`, {
+      const res = await fetch(`${BASE_URL}/api/posts/?activity=${activity.id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       const normalized = (data.results || data).map(p => ({
         ...p,
-        league_id: p.league_id || p.league,
-        event_name: p.league_name,
+        activity_id: p.activity,
+        event_name: p.activity_name,
       }));
       setPosts(normalized);
     } catch (err) {
-      console.warn('Failed to fetch league posts', err);
+      console.warn('Failed to fetch activity posts', err);
     } finally {
       setPostsLoading(false);
     }
@@ -330,9 +342,23 @@ const LeagueViewerScreen = ({ route, navigation }) => {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
-      fetchLeaguePosts();
+      fetchActivityPosts();
     } catch (err) {
       console.warn('Like failed', err);
+    }
+  };
+
+  const handleVote = async (postId, choiceId) => {
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      await fetch(`${BASE_URL}/api/posts/${postId}/vote/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ choice_id: choiceId }),
+      });
+      fetchActivityPosts();
+    } catch (err) {
+      console.warn('Vote failed', err);
     }
   };
 
@@ -366,7 +392,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
       });
       setCommentText('');
       openComments(selectedPost);
-      fetchLeaguePosts();
+      fetchActivityPosts();
     } catch (err) {
       console.warn('Create comment error', err);
     }
@@ -375,27 +401,23 @@ const LeagueViewerScreen = ({ route, navigation }) => {
   const statusColor = isCancelled ? '#B00020' : isConcluded ? '#444' : '#F2994A';
   const statusLabel = isCancelled ? 'Cancelled' : isConcluded ? 'Concluded' : 'Upcoming';
 
-  const descriptionText = league.description || 'No description provided for this league.';
+  const descriptionText = activity.description || 'No description provided for this activity.';
   const isLongDesc = descriptionText.length > 220;
   const displayedDesc = (!descExpanded && isLongDesc)
     ? descriptionText.slice(0, 220) + '...'
     : descriptionText;
 
-  return (
-    <View style={styles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
+  const mainContent = (
+    <>
         {/* HEADER IMAGE */}
         <View style={styles.imageContainer}>
           <ImageBackground
             source={{
-              uri: league.cover_image
-                ? league.cover_image.startsWith('http')
-                  ? league.cover_image
-                  : `${BASE_URL}${league.cover_image}`
-                : getSportImage(league.sport),
+              uri: activity.cover_image
+                ? activity.cover_image.startsWith('http')
+                  ? activity.cover_image
+                  : `${BASE_URL}${activity.cover_image}`
+                : getActivityTypeImage(activity.activity_type),
             }}
             style={styles.headerImage}
             resizeMode="cover"
@@ -412,7 +434,20 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                       <Ionicons name="pencil-outline" size={22} color="#fff" />
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={styles.iconBtn} onPress={() => setMenuVisible(true)}>
+                  <TouchableOpacity
+                    ref={menuBtnRef}
+                    style={styles.iconBtn}
+                    onPress={() => {
+                      menuBtnRef.current?.measureInWindow((x, y, width, height) => {
+                        const windowWidth = Dimensions.get('window').width;
+                        setMenuAnchor({
+                          top: y + height + 6,
+                          right: Math.max(16, windowWidth - (x + width)),
+                        });
+                        setMenuVisible(true);
+                      });
+                    }}
+                  >
                     <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
                   </TouchableOpacity>
                 </View>
@@ -436,7 +471,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
         {/* BODY */}
         <View style={styles.body}>
 
-          <Text style={styles.title}>{league.name}</Text>
+          <Text style={styles.title}>{activity.name}</Text>
 
           {isCancelled && (
             <View style={styles.cancelledBanner}>
@@ -451,12 +486,12 @@ const LeagueViewerScreen = ({ route, navigation }) => {
               </View>
               <View>
                 <Text style={styles.infoValue}>
-                  {new Date(league.date_time).toLocaleDateString('en-GB', {
+                  {new Date(activity.date_time).toLocaleDateString('en-GB', {
                     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
                   })}
                 </Text>
                 <Text style={styles.infoSubValue}>
-                  {new Date(league.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} Onwards
+                  {new Date(activity.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} Onwards
                 </Text>
               </View>
             </View>
@@ -466,19 +501,19 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                 <Ionicons name="location-outline" size={20} color="#2CB9B0" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.infoValue} numberOfLines={1}>{league.location?.split(',')[0]}</Text>
+                <Text style={styles.infoValue} numberOfLines={1}>{activity.location?.split(',')[0]}</Text>
                 <Text style={styles.infoSubValue} numberOfLines={1}>
-                  {league.location?.split(',').slice(1).join(',').trim() || league.location}
+                  {activity.location?.split(',').slice(1).join(',').trim() || activity.location}
                 </Text>
               </View>
             </View>
 
             <View style={styles.infoCard}>
               <View style={styles.iconCircle}>
-                {getSportIcon(league.sport, 20, '#2CB9B0')}
+                {getActivityTypeIcon(activity.activity_type, 20, '#2CB9B0')}
               </View>
               <View>
-                <Text style={styles.infoValue}>{league.sport}</Text>
+                <Text style={styles.infoValue}>{activity.activity_type}</Text>
               </View>
             </View>
           </View>
@@ -497,20 +532,20 @@ const LeagueViewerScreen = ({ route, navigation }) => {
               <TouchableOpacity
                 style={styles.pill}
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('ProfileView', { userId: league.created_by?.id })}
+                onPress={() => navigation.navigate('ProfileView', { userId: activity.created_by?.id })}
               >
                 <View style={styles.hostAvatar}>
                   <Image
                     source={
-                      league.created_by?.avatar
-                        ? { uri: league.created_by.avatar }
+                      activity.created_by?.avatar
+                        ? { uri: activity.created_by.avatar }
                         : { uri: 'https://via.placeholder.com/50' }
                     }
                     style={styles.fullImage}
                   />
                 </View>
                 <Text style={styles.pillText} numberOfLines={1}>
-                  @{league.created_by?.username || 'user'}
+                  @{activity.created_by?.username || 'user'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -521,12 +556,12 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                 style={styles.pill}
                 activeOpacity={0.7}
                 onPress={() => {
-                  if (league.participants?.length > 0) {
+                  if (activity.participants?.length > 0) {
                     navigation.navigate('ParticipantsList', {
-                      participants: league.participants,
-                      leagueName: league.name,
+                      participants: activity.participants,
+                      activityName: activity.name,
                       isOwner: isOwner,
-                      leagueId: league.id,
+                      activityId: activity.id,
                     });
                   } else {
                     Alert.alert('Info', 'No participants have joined yet.');
@@ -543,7 +578,7 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                   ))}
                 </View>
                 <Text style={styles.pillText}>
-                  {league.participant_count}/{league.max_players || '22'}
+                  {activity.participant_count}/{activity.max_players || '22'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -553,10 +588,10 @@ const LeagueViewerScreen = ({ route, navigation }) => {
             <LeafletMap
               latitude={coords?.latitude}
               longitude={coords?.longitude}
-              label={league.location}
+              label={activity.location}
             />
           </View>
-          <Text style={styles.mapLabel}>{league.location}</Text>
+          <Text style={styles.mapLabel}>{activity.location}</Text>
 
           <View style={styles.activitySection}>
             <Text style={styles.sectionHeader}>Activity</Text>
@@ -570,12 +605,13 @@ const LeagueViewerScreen = ({ route, navigation }) => {
                   key={post.id.toString()}
                   post={post}
                   onLike={handleLike}
+                  onVote={handleVote}
                   onCommentPress={openComments}
-                  onPostDeleted={fetchLeaguePosts}
+                  onPostDeleted={fetchActivityPosts}
                   navigation={navigation}
                   compact={true}
-                  isLeagueOwner={isOwner}
-                  leagueId={league.id}
+                  isActivityOwner={isOwner}
+                  activityId={activity.id}
                 />
               ))
             )}
@@ -583,58 +619,101 @@ const LeagueViewerScreen = ({ route, navigation }) => {
 
           <View style={{ height: 100 }} />
         </View>
-      </ScrollView>
+    </>
+  );
 
-      {/* STICKY FOOTER */}
-      <View style={styles.stickyFooter}>
-        <View>
-          <Text style={styles.footerLabel}>Price</Text>
-          <Text style={styles.footerPrice}>
-            {league.price && league.price > 0 ? `Rs. ${league.price}` : 'Free'}
-          </Text>
-        </View>
-
-        <View style={styles.footerButtons}>
-          {isCancelled ? (
-            <>
-              <TouchableOpacity style={[styles.actionBtn, styles.disabledBtn]} disabled>
-                <Text style={styles.actionBtnText}>Event Cancelled</Text>
-              </TouchableOpacity>
-              {(isJoined || isOwner) && (
-                <TouchableOpacity style={styles.chatIconBtn} onPress={goToChat}>
-                  <Ionicons name="chatbubble-outline" size={22} color="#fff" />
-                </TouchableOpacity>
-              )}
-            </>
-          ) : isConcluded ? (
-            <>
-              <TouchableOpacity style={[styles.actionBtn, styles.disabledBtn]} disabled>
-                <Text style={styles.actionBtnText}>Event Ended</Text>
-              </TouchableOpacity>
-              {(isJoined || isOwner) && (
-                <TouchableOpacity style={styles.chatIconBtn} onPress={goToChat}>
-                  <Ionicons name="chatbubble-outline" size={22} color="#fff" />
-                </TouchableOpacity>
-              )}
-            </>
-          ) : (isJoined || isOwner) ? (
-            <TouchableOpacity style={[styles.actionBtn, styles.chatBtn]} onPress={goToChat}>
-              <Text style={styles.actionBtnText}>Chat</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={[styles.actionBtn, styles.joinBtn]} onPress={handleJoin} disabled={joining}>
-              <Text style={styles.actionBtnText}>{joining ? 'Joining...' : 'Join'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+  // Price + action buttons row, shared between mobile and wide web — on
+  // wide web this gets nested inside the 680px center-column wrapper (see
+  // webCenterWrap below) so it's structurally confined to that column,
+  // rather than relying on manual pixel-width math to line up with it.
+  const footerButtonsContent = (
+    <View style={styles.footerPriceButtons}>
+      <View>
+        <Text style={styles.footerLabel}>Price</Text>
+        <Text style={styles.footerPrice}>
+          {activity.price && activity.price > 0 ? `Rs. ${activity.price}` : 'Free'}
+        </Text>
       </View>
+
+      <View style={styles.footerButtons}>
+        {isCancelled ? (
+          <>
+            <TouchableOpacity style={[styles.actionBtn, styles.disabledBtn]} disabled>
+              <Text style={styles.actionBtnText}>Event Cancelled</Text>
+            </TouchableOpacity>
+            {(isJoined || isOwner) && (
+              <TouchableOpacity style={styles.chatIconBtn} onPress={goToChat}>
+                <Ionicons name="chatbubble-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </>
+        ) : isConcluded ? (
+          <>
+            <TouchableOpacity style={[styles.actionBtn, styles.disabledBtn]} disabled>
+              <Text style={styles.actionBtnText}>Event Ended</Text>
+            </TouchableOpacity>
+            {(isJoined || isOwner) && (
+              <TouchableOpacity style={styles.chatIconBtn} onPress={goToChat}>
+                <Ionicons name="chatbubble-outline" size={22} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (isJoined || isOwner) ? (
+          <TouchableOpacity style={[styles.actionBtn, styles.chatBtn]} onPress={goToChat}>
+            <Text style={styles.actionBtnText}>Chat</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={[styles.actionBtn, styles.joinBtn]} onPress={handleJoin} disabled={joining}>
+            <Text style={styles.actionBtnText}>{joining ? 'Joining...' : 'Join'}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+
+      {isWideWeb ? (
+        <View style={styles.webRow}>
+          <WebSidebar />
+          <View style={styles.webContent}>
+            {/* webCenterWrap is exactly 680px (matching webCenter's own cap)
+                and is the positioning anchor for the sticky footer below —
+                that keeps the footer physically confined to this column,
+                so it can never overlay the sidebar or spill into the rail
+                regardless of viewport width. */}
+            <View style={styles.webCenterWrap}>
+              <ScrollView style={styles.webCenter} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {mainContent}
+              </ScrollView>
+              <View style={styles.stickyFooter}>
+                {footerButtonsContent}
+              </View>
+            </View>
+            <PostsRail />
+          </View>
+        </View>
+      ) : (
+        <>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {mainContent}
+          </ScrollView>
+
+          {/* STICKY FOOTER */}
+          <View style={styles.stickyFooterMobile}>
+            {footerButtonsContent}
+          </View>
+        </>
+      )}
 
       {/* KEBAB DROPDOWN MENU */}
       <Modal visible={menuVisible} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={() => setMenuVisible(false)}>
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
-              <View style={styles.menuCard}>
+              <View style={[styles.menuCard, { top: menuAnchor.top, right: menuAnchor.right }]}>
                 {/* Share — visible to everyone */}
                 <TouchableOpacity style={styles.menuItem} onPress={handleShare}>
                   <Text style={styles.menuItemText}>Share Event</Text>
@@ -792,9 +871,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0E0E0E',
+    overflow: 'hidden',
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+
+  /* ───────── WIDE WEB: 2-column layout (matches Home) ─────────
+     overflow:'hidden' on every row/column ancestor keeps the sidebar and
+     rail pinned to the viewport — without it, any child taller than the
+     available height bubbles up and makes the whole page (not just the
+     center ScrollView) scroll, dragging the sidebar down with it. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  // Exactly 680px (matching webCenter's own cap) — this is the positioning
+  // anchor for the wide-web sticky footer (position:absolute inside it), so
+  // the footer is physically confined to the center column and can never
+  // overlay the sidebar or spill into the rail.
+  webCenterWrap: {
+    flex: 1,
+    maxWidth: 680,
+  },
+  webCenter: {
+    flex: 1,
   },
 
   // ── Header ──────────────────────────────────────
@@ -1015,19 +1124,39 @@ const styles = StyleSheet.create({
   },
 
   // ── Sticky Footer ───────────────────────────────
+  // Mobile: full-width, positioned absolute against `container` (unchanged
+  // from before). Wide web uses a separate `stickyFooter` (below) nested
+  // inside webCenterWrap instead, so it's confined to the center column.
+  stickyFooterMobile: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#0E0E0E',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
+  },
+  // Wide web: positioned absolute against webCenterWrap (its own 680px
+  // column wrapper) rather than the full-viewport container — so it's
+  // physically confined to that column and can't overlay the sidebar or
+  // spill into the rail, no matter the viewport width.
   stickyFooter: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     backgroundColor: '#0E0E0E',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderTopWidth: 1,
     borderTopColor: '#1E1E1E',
+  },
+  footerPriceButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   footerLabel: {
     color: '#888',
@@ -1080,9 +1209,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   menuCard: {
+    // top/right are overridden inline per-render with the kebab button's
+    // actual measured position (see menuAnchor) — the Modal renders as a
+    // viewport-level overlay, so a fixed offset here would only be correct
+    // for one specific header height/layout.
     position: 'absolute',
-    top: (StatusBar.currentHeight || 44) + 48,
-    right: 16,
     backgroundColor: '#1E1E1E',
     borderRadius: 12,
     width: 180,
@@ -1263,4 +1394,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default LeagueViewerScreen;
+export default ActivityViewerScreen;

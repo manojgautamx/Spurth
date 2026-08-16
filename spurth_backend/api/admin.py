@@ -1,15 +1,15 @@
 from django.contrib import admin
-from .models import League, Post, UserProfile
+from .models import Activity, Post, UserProfile
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
 admin.site.register(User)
 
-class LeagueAdmin(admin.ModelAdmin):
-    list_display = ('name', 'sport', 'location', 'date_time', 'league_type', 'max_players', 'price', 'created_by')
+class ActivityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'activity_type', 'location', 'date_time', 'format', 'max_players', 'price', 'created_by')
     list_editable = ('max_players', 'price')
-    list_filter = ('league_type', 'sport')
-    search_fields = ('name', 'sport', 'location', 'created_by__username')
+    list_filter = ('format', 'activity_type')
+    search_fields = ('name', 'activity_type', 'location', 'created_by__username')
     exclude = ('created_by',)  # HIDE 'created_by' field from the admin form
 
     def save_model(self, request, obj, form, change):
@@ -18,18 +18,18 @@ class LeagueAdmin(admin.ModelAdmin):
         obj.save()
 
 
-admin.site.register(League, LeagueAdmin)
+admin.site.register(Activity, ActivityAdmin)
 
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ['user', 'get_leagues_created', 'get_leagues_joined']
+    list_display = ['user', 'get_activities_created', 'get_activities_joined']
 
-    def get_leagues_created(self, obj):
-        return obj.user.created_leagues.count()
-    get_leagues_created.short_description = 'Leagues Created'
+    def get_activities_created(self, obj):
+        return obj.user.created_activities.count()
+    get_activities_created.short_description = 'Activities Created'
 
-    def get_leagues_joined(self, obj):
-        return obj.user.joined_leagues.exclude(created_by=obj.user).count()
-    get_leagues_joined.short_description = 'Leagues Joined'
+    def get_activities_joined(self, obj):
+        return obj.user.joined_activities.exclude(created_by=obj.user).count()
+    get_activities_joined.short_description = 'Activities Joined'
 
 admin.site.register(UserProfile, UserProfileAdmin)
 
@@ -39,13 +39,13 @@ class PostAdmin(admin.ModelAdmin):
     list_display = (
         'id',
         'user',
-        'league',
+        'activity',
         'short_caption',
         'image_preview',
         'created_at',
     )
-    search_fields = ('user__username', 'caption', 'league__name')
-    list_filter = ('league', 'created_at')
+    search_fields = ('user__username', 'caption', 'activity__name')
+    list_filter = ('activity', 'created_at')
 
     def short_caption(self, obj):
         return obj.caption[:40] + ('...' if len(obj.caption) > 40 else '')

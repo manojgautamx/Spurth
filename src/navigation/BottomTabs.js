@@ -5,7 +5,7 @@ import HomeScreen from '../screens/HomeScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import ChatListScreen from '../screens/ChatListScreen';
-import ActivityScreen from '../screens/ActivityScreen';
+import ExperienceScreen from '../screens/ExperienceScreen';
 
 import HomeIcon from '../assets/icons/HomeIcon';
 import ExploreIcon from '../assets/icons/ExploreIcon';
@@ -35,7 +35,7 @@ const BottomTabs = () => {
           switch (route.name) {
             case 'Home':         return <HomeIcon color={color} />;
             case 'Explore':      return <ExploreIcon color={color} />;
-            case 'Activity':     return <ActivityIcon color={color} />;
+            case 'Experience':   return <ActivityIcon color={color} />;
             case 'Notification': return <NotificationIcon color={color} />;
             case 'Chat':         return <ChatIcon color={color} />;
           }
@@ -44,7 +44,7 @@ const BottomTabs = () => {
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Explore" component={ExploreScreen} />
-      <Tab.Screen name="Activity" component={ActivityScreen} />
+      <Tab.Screen name="Experience" component={ExperienceScreen} />
       <Tab.Screen name="Notification" component={NotificationScreen} />
       <Tab.Screen name="Chat" component={ChatListScreen} />
     </Tab.Navigator>

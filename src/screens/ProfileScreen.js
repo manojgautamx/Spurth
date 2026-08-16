@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,15 +11,22 @@ import {
   KeyboardAvoidingView,
   TextInput,
   StatusBar,
+  SafeAreaView,
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
+import { LocationContext } from '../context/LocationContext';
 import { BASE_URL } from '../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsWideWeb } from '../utils/responsive';
+import { Fonts } from '../theme/fonts';
+
+// Most people creating a profile are adults — defaulting the picker to
+// today (as `new Date()` did) forced everyone to scroll back decades.
+const DEFAULT_BIRTH_DATE = new Date(2000, 0, 1);
 
 // ── Interest categories from categoryMapper ──────────────────────────────────
 
@@ -59,13 +66,14 @@ const MAX_INTERESTS = 5;
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function ProfileScreen({ navigation }) {
+  const isWideWeb = useIsWideWeb();
   const [step, setStep] = useState(1); // 1 = photo, 2 = details, 3 = interests
 
   // Step 1
   const [avatar, setAvatar] = useState(null);
 
   // Step 2
-  const [birthDate, setBirthDate] = useState(new Date());
+  const [birthDate, setBirthDate] = useState(DEFAULT_BIRTH_DATE);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [location, setLocation] = useState('');
   const [bio, setBio] = useState('');
@@ -76,7 +84,67 @@ export default function ProfileScreen({ navigation }) {
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState('');
 
-  const { refreshProfileStatus, setProfileComplete } = useContext(ProfileStatusContext);
+  const { refreshProfileStatus } = useContext(ProfileStatusContext);
+
+  // ── Location: auto-fill from device GPS, fall back to search-as-you-type ────
+  const { location: deviceLocation } = useContext(LocationContext);
+  const [autoFillingLocation, setAutoFillingLocation] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState([]);
+  const locationAutoFillTried = useRef(false);
+  // Distinguishes the user typing from the reverse-geocode effect writing to
+  // `location` itself — only the former should trigger a suggestions search.
+  const userEditedLocation = useRef(false);
+
+  useEffect(() => {
+    if (!deviceLocation || location || locationAutoFillTried.current) return;
+    locationAutoFillTried.current = true;
+    setAutoFillingLocation(true);
+    fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${deviceLocation.latitude}&lon=${deviceLocation.longitude}`,
+      { headers: { 'User-Agent': 'StreetLeagueApp/1.0' } }
+    )
+      .then(res => res.json())
+      .then(data => {
+        const addr = data?.address || {};
+        const place = addr.city || addr.town || addr.village || addr.county || addr.state;
+        const label = [place, addr.country].filter(Boolean).join(', ');
+        if (label) setLocation(label);
+      })
+      .catch(err => console.warn('Reverse geocode failed:', err))
+      .finally(() => setAutoFillingLocation(false));
+  }, [deviceLocation]);
+
+  useEffect(() => {
+    if (!userEditedLocation.current) return;
+    if (!location || location.trim().length < 3) {
+      setLocationSuggestions([]);
+      return;
+    }
+    const timeoutId = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(location)}`,
+          { headers: { 'User-Agent': 'StreetLeagueApp/1.0' } }
+        );
+        const data = await res.json();
+        setLocationSuggestions(data || []);
+      } catch (err) {
+        console.warn('Location search failed:', err);
+      }
+    }, 400);
+    return () => clearTimeout(timeoutId);
+  }, [location]);
+
+  const handleLocationChange = (text) => {
+    userEditedLocation.current = true;
+    setLocation(text);
+  };
+
+  const handleLocationSuggestionPress = (item) => {
+    userEditedLocation.current = false;
+    setLocation(item.display_name);
+    setLocationSuggestions([]);
+  };
 
   // ── Step 1: Photo ──────────────────────────────────────────────────────────
 
@@ -128,15 +196,18 @@ export default function ProfileScreen({ navigation }) {
       formData.append('gender', gender);
       formData.append('location', location);
       formData.append('bio', bio);
-      interests.forEach(i => formData.append('favorite_sports', i.toLowerCase()));
+      interests.forEach(i => formData.append('interests', i.toLowerCase()));
 
       await axiosInstance.post('profile/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Cache first, then set state directly — no network re-fetch
-      await AsyncStorage.setItem('profileComplete', 'true');
-      setProfileComplete(true);  // ← triggers navigator re-render immediately
+      // Re-check with the server rather than optimistically assuming
+      // success — keeps the client's notion of "complete" from drifting
+      // out of sync with whatever the backend actually requires (that
+      // exact drift was previously bouncing users back to onboarding on
+      // their next session/reload, even though they'd already finished it).
+      await refreshProfileStatus();
 
     } catch (err) {
       const detail = err.response?.data
@@ -151,53 +222,56 @@ export default function ProfileScreen({ navigation }) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
 
       {/* ── STEP 1: Pick Interests ───────────────────────────────────────── */}
       {step === 1 && (
-        <View style={styles.stepContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
+        <View style={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}>
+          <View style={[{ flex: 1, width: '100%' }, isWideWeb && styles.webCenter]}>
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+              <Ionicons name="arrow-back" size={22} color="#fff" />
+            </TouchableOpacity>
 
-          <View style={styles.interestHeader}>
-            <Text style={styles.stepTitle}>Pick your Interest</Text>
-            <Text style={styles.interestCount}>
-              {interests.length}/{MAX_INTERESTS} Selected
-            </Text>
+            <View style={styles.interestHeader}>
+              <Text style={styles.stepTitle}>Pick your Interest</Text>
+              <Text style={styles.interestCount}>
+                {interests.length}/{MAX_INTERESTS} Selected
+              </Text>
+            </View>
+
+            <ScrollView
+              style={styles.interestScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.interestScroll}
+            >
+              {Object.entries(CATEGORY_GROUPS).map(([category, items]) => (
+                <View key={category} style={styles.categorySection}>
+                  <Text style={styles.categoryLabel}>{category}</Text>
+                  <View style={styles.tagsWrap}>
+                    {items.map(item => {
+                      const selected = interests.includes(item);
+                      return (
+                        <TouchableOpacity
+                          key={item}
+                          style={[styles.tag, selected && styles.tagSelected]}
+                          onPress={() => toggleInterest(item)}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={[styles.tagText, selected && styles.tagTextSelected]}>
+                            {item}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+              <View style={{ height: 100 }} />
+            </ScrollView>
           </View>
 
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.interestScroll}
-          >
-            {Object.entries(CATEGORY_GROUPS).map(([category, items]) => (
-              <View key={category} style={styles.categorySection}>
-                <Text style={styles.categoryLabel}>{category}</Text>
-                <View style={styles.tagsWrap}>
-                  {items.map(item => {
-                    const selected = interests.includes(item);
-                    return (
-                      <TouchableOpacity
-                        key={item}
-                        style={[styles.tag, selected && styles.tagSelected]}
-                        onPress={() => toggleInterest(item)}
-                        activeOpacity={0.75}
-                      >
-                        <Text style={[styles.tagText, selected && styles.tagTextSelected]}>
-                          {item}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ))}
-            <View style={{ height: 100 }} />
-          </ScrollView>
-
-          <View style={styles.bottomAction}>
+          <View style={[styles.bottomAction, isWideWeb && styles.bottomActionWeb]}>
             <TouchableOpacity
               style={styles.continueBtn}
               onPress={() => setStep(2)}
@@ -210,23 +284,25 @@ export default function ProfileScreen({ navigation }) {
 
       {/* ── STEP 2: Upload Photo ─────────────────────────────────────────── */}
       {step === 2 && (
-        <View style={styles.stepContainer}>
-          <TouchableOpacity onPress={() => setStep(1)} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
+        <View style={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}>
+          <View style={[{ width: '100%' }, isWideWeb && styles.webCenter]}>
+            <TouchableOpacity onPress={() => setStep(1)} style={styles.backBtn}>
+              <Ionicons name="arrow-back" size={22} color="#fff" />
+            </TouchableOpacity>
 
-          <Text style={styles.stepTitle}>Upload your Photo</Text>
-          <Text style={styles.stepSubtitle}>Upload or Capture Now</Text>
+            <Text style={styles.stepTitle}>Upload your Photo</Text>
+            <Text style={styles.stepSubtitle}>Upload or Capture Now</Text>
 
-          <TouchableOpacity style={styles.photoBox} onPress={showPhotoPicker} activeOpacity={0.8}>
-            {avatar ? (
-              <Image source={{ uri: avatar.uri }} style={styles.photoPreview} />
-            ) : (
-              <Ionicons name="add" size={52} color="#333" />
-            )}
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.photoBox} onPress={showPhotoPicker} activeOpacity={0.8}>
+              {avatar ? (
+                <Image source={{ uri: avatar.uri }} style={styles.photoPreview} />
+              ) : (
+                <Ionicons name="add" size={52} color="#333" />
+              )}
+            </TouchableOpacity>
+          </View>
 
-          <View style={styles.bottomAction}>
+          <View style={[styles.bottomAction, isWideWeb && styles.bottomActionWeb]}>
             <TouchableOpacity
               style={styles.continueBtn}
               onPress={() => setStep(3)}
@@ -244,9 +320,10 @@ export default function ProfileScreen({ navigation }) {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <ScrollView
-            contentContainerStyle={styles.stepContainer}
+            contentContainerStyle={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}
             keyboardShouldPersistTaps="handled"
           >
+          <View style={[{ width: '100%' }, isWideWeb && styles.webCenter]}>
             <TouchableOpacity onPress={() => setStep(2)} style={styles.backBtn}>
               <Ionicons name="arrow-back" size={22} color="#fff" />
             </TouchableOpacity>
@@ -297,30 +374,46 @@ export default function ProfileScreen({ navigation }) {
                 })}
               </Text>
             </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={birthDate}
-                mode="date"
-                display="default"
-                maximumDate={new Date()}
-                onChange={(_, date) => {
-                  setShowDatePicker(false);
-                  if (date) setBirthDate(date);
-                }}
-              />
-            )}
+            <DateTimePickerModal
+              isVisible={showDatePicker}
+              mode="date"
+              date={birthDate}
+              maximumDate={new Date()}
+              onConfirm={(date) => {
+                setShowDatePicker(false);
+                setBirthDate(date);
+              }}
+              onCancel={() => setShowDatePicker(false)}
+            />
 
             {/* Location */}
             <Text style={styles.fieldLabel}>Location</Text>
             <View style={styles.fieldInput}>
+              <Ionicons name="location-outline" size={18} color="#888" style={styles.fieldIcon} />
               <TextInput
                 style={styles.fieldTextInput}
-                placeholder="Where are you based?"
+                placeholder={autoFillingLocation ? 'Detecting your location…' : 'Where are you based?'}
                 placeholderTextColor="#555"
                 value={location}
-                onChangeText={setLocation}
+                onChangeText={handleLocationChange}
               />
             </View>
+            {locationSuggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                {locationSuggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionItem}
+                    onPress={() => handleLocationSuggestionPress(item)}
+                  >
+                    <Ionicons name="location-outline" size={13} color="#555" style={{ marginRight: 8, marginTop: 1 }} />
+                    <Text style={styles.suggestionText} numberOfLines={2}>
+                      {item.display_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             {/* Bio */}
             <Text style={styles.fieldLabel}>Bio</Text>
@@ -337,7 +430,7 @@ export default function ProfileScreen({ navigation }) {
               />
             </View>
 
-            <View style={styles.bottomAction}>
+            <View style={[styles.bottomAction, isWideWeb && styles.bottomActionWeb]}>
               <TouchableOpacity
                 style={[styles.continueBtn, styles.tealBtn]}
                 onPress={handleSubmit}
@@ -348,10 +441,11 @@ export default function ProfileScreen({ navigation }) {
                 </Text>
               </TouchableOpacity>
             </View>
+          </View>
           </ScrollView>
         </KeyboardAvoidingView>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -368,6 +462,25 @@ const styles = StyleSheet.create({
     paddingTop: (StatusBar.currentHeight || 44) + 8,
     paddingBottom: 20,
   },
+  // Wide web: center the form as a fixed-width column (matches
+  // CreateActivityScreen's 680px center column) instead of letting fields
+  // stretch edge-to-edge across a wide desktop viewport.
+  stepContainerWeb: {
+    alignItems: 'center',
+  },
+  webCenter: {
+    width: '100%',
+    maxWidth: 680,
+  },
+  // bottomAction below is `position: fixed` (see its own comment), so
+  // alignItems doesn't center it the way it does on CreateActivityScreen —
+  // it needs to be centered directly via left/width/marginLeft instead.
+  bottomActionWeb: {
+    left: '50%',
+    right: 'auto',
+    width: 680,
+    marginLeft: -340,
+  },
 
   // ── Nav ──────────────────────────────────────────────────────────────────
   backBtn: {
@@ -382,11 +495,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 6,
     letterSpacing: 0.2,
+    fontFamily: Fonts.bold,
   },
   stepSubtitle: {
     color: '#666',
     fontSize: 14,
     marginBottom: 32,
+    fontFamily: Fonts.regular,
   },
 
   // ── Step 1: Photo ─────────────────────────────────────────────────────────
@@ -442,6 +557,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     marginTop: 20,
+    fontFamily: Fonts.semibold,
   },
   fieldInput: {
     backgroundColor: '#111',
@@ -467,6 +583,27 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 0,
   },
+  suggestionsContainer: {
+    backgroundColor: '#141414',
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#222',
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e1e1e',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  suggestionText: {
+    color: '#ccc',
+    fontSize: 13,
+    flex: 1,
+    fontFamily: Fonts.regular,
+  },
   bioInput: {
     alignItems: 'flex-start',
     paddingVertical: 14,
@@ -490,6 +627,9 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 13,
     marginTop: 6,
+  },
+  interestScrollView: {
+    flex: 1,
   },
   interestScroll: {
     paddingBottom: 20,
@@ -533,7 +673,11 @@ const styles = StyleSheet.create({
 
   // ── Bottom CTA ────────────────────────────────────────────────────────────
   bottomAction: {
-    position: 'absolute',
+    // 'fixed' anchors to the actual viewport instead of the nearest
+    // positioned ancestor — on web, a tall scrollable child (the interest
+    // tag grid) can inflate that ancestor's box well past the viewport
+    // height, which would otherwise carry this button down off-screen with it.
+    position: 'fixed',
     bottom: 30,
     left: 24,
     right: 24,
