@@ -20,9 +20,9 @@ export default function LandingScreen({ navigation }) {
           resizeMode="contain"
         />
 
-        <Text style={styles.headline}>Meet up. For real.</Text>
+        <Text style={styles.headline}>Your weekend deserves better plans.</Text>
         <Text style={styles.subheading}>
-          Find people and activities near you — no endless scrolling required.
+          Your next story shouldn't be on your feed.
         </Text>
 
         <TouchableOpacity
