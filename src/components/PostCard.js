@@ -7,13 +7,75 @@ import { Fonts } from '../theme/fonts';
 
 import { BASE_URL } from '../config';
 
+// The post's caption doubles as the poll's question (the composer's
+// question input and caption input are the same field), so the plain
+// caption <Text> is skipped wherever a poll is rendered instead.
+function PollBlock({ post, onVote }) {
+  const poll = post.poll;
+  if (!poll) return null;
+
+  const showResults = poll.has_voted || poll.is_expired;
+  const totalVotes = poll.total_votes || 0;
+
+  const timeLeftLabel = () => {
+    if (poll.is_expired) return 'Poll ended';
+    const ms = new Date(poll.expires_at).getTime() - Date.now();
+    if (ms <= 0) return 'Poll ended';
+    const days = Math.floor(ms / 86400000);
+    if (days > 0) return `${days}d left`;
+    const hours = Math.floor(ms / 3600000);
+    if (hours > 0) return `${hours}h left`;
+    return `${Math.max(1, Math.floor(ms / 60000))}m left`;
+  };
+
+  return (
+    <View style={pollStyles.container}>
+      <Text style={pollStyles.question}>{post.caption}</Text>
+
+      {poll.choices.map((choice) => {
+        if (!showResults) {
+          return (
+            <TouchableOpacity
+              key={choice.id}
+              style={pollStyles.choicePill}
+              onPress={() => onVote && onVote(post.id, choice.id)}
+              activeOpacity={0.75}
+            >
+              <Text style={pollStyles.choiceText} numberOfLines={1}>{choice.text}</Text>
+            </TouchableOpacity>
+          );
+        }
+
+        const pct = totalVotes > 0 ? Math.round((choice.votes_count / totalVotes) * 100) : 0;
+        const isSelected = poll.user_choice_id === choice.id;
+        return (
+          <View key={choice.id} style={pollStyles.resultRow}>
+            <View style={[pollStyles.resultFill, { width: `${pct}%` }, isSelected && pollStyles.resultFillSelected]} />
+            <View style={pollStyles.resultLabelRow}>
+              <Text style={pollStyles.resultText} numberOfLines={1}>
+                {choice.text}{isSelected ? ' ✓' : ''}
+              </Text>
+              <Text style={pollStyles.resultPct}>{pct}%</Text>
+            </View>
+          </View>
+        );
+      })}
+
+      <Text style={pollStyles.footer}>
+        {totalVotes} vote{totalVotes === 1 ? '' : 's'} · {timeLeftLabel()}
+      </Text>
+    </View>
+  );
+}
+
 export default function PostCard({
   post,
   onLike,
+  onVote,
   onCommentPress,
   onPostDeleted,
   compact = false,
-  isLeagueOwner = false,
+  isActivityOwner = false,
   hideUsername = false,
 }) {
   const navigation = useNavigation();
@@ -26,13 +88,13 @@ export default function PostCard({
   const mainImageUri = getImageUrl(post.image);
   const DEFAULT_COVER = 'https://via.placeholder.com/100x100.png?text=Event';
   const coverImageUri = getImageUrl(post.cover_image) || DEFAULT_COVER;
-  const isConcluded = post.league_is_concluded;
-  const isCancelled = post.league_is_cancelled;
+  const isConcluded = post.activity_is_concluded;
+  const isCancelled = post.activity_is_cancelled;
   const avatarUri = getImageUrl(post.user_avatar);
 
-  const goToLeague = () => {
-    if (!post.league_id) return;
-    navigation.navigate('LeagueViewerScreen', { leagueId: post.league_id });
+  const goToActivity = () => {
+    if (!post.activity_id) return;
+    navigation.navigate('ActivityViewerScreen', { activityId: post.activity_id });
   };
 
   const goToProfile = () => {
@@ -65,7 +127,7 @@ export default function PostCard({
   };
 
   const showPostOptions = () => {
-    if (isLeagueOwner) {
+    if (isActivityOwner) {
       Alert.alert('Post Options', null, [
         { text: 'Delete Post', style: 'destructive', onPress: handleDeletePost },
         { text: 'Cancel', style: 'cancel' },
@@ -81,7 +143,7 @@ export default function PostCard({
         <View style={styles.compactHeader}>
           <View style={styles.compactHeaderLeft}>
 
-            {/* Avatar + username — LeagueViewerScreen (hideUsername=false) */}
+            {/* Avatar + username — ActivityViewerScreen (hideUsername=false) */}
             {!hideUsername && (
               <>
                 {avatarUri ? (
@@ -103,25 +165,25 @@ export default function PostCard({
               </>
             )}
 
-            {/* League thumbnail + name — ProfileViewScreen (hideUsername=true) */}
+            {/* Activity thumbnail + name — ProfileViewScreen (hideUsername=true) */}
             {hideUsername && (
               <TouchableOpacity
-                style={styles.compactLeagueRow}
-                onPress={goToLeague}
+                style={styles.compactActivityRow}
+                onPress={goToActivity}
                 activeOpacity={0.75}
               >
                 {post.cover_image ? (
                   <Image
                     source={{ uri: getImageUrl(post.cover_image) }}
-                    style={styles.compactLeagueThumb}
+                    style={styles.compactActivityThumb}
                   />
                 ) : (
-                  <View style={[styles.compactLeagueThumb, styles.avatarFallback]}>
+                  <View style={[styles.compactActivityThumb, styles.avatarFallback]}>
                     <Ionicons name="trophy-outline" size={14} color="#555" />
                   </View>
                 )}
-                <Text style={styles.compactLeagueName} numberOfLines={1}>
-                  {post.event_name || post.league_name || 'Event'}
+                <Text style={styles.compactActivityName} numberOfLines={1}>
+                  {post.event_name || post.activity_name || 'Event'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -136,25 +198,29 @@ export default function PostCard({
 
           <TouchableOpacity
             style={styles.dotsBtn}
-            onPress={isLeagueOwner ? showPostOptions : undefined}
+            onPress={isActivityOwner ? showPostOptions : undefined}
           >
             <Ionicons
               name="ellipsis-horizontal"
               size={20}
-              color={isLeagueOwner ? '#ccc' : '#444'}
+              color={isActivityOwner ? '#ccc' : '#444'}
             />
           </TouchableOpacity>
         </View>
 
-        {/* Image */}
-        {mainImageUri && (
-          <Image source={{ uri: mainImageUri }} style={styles.compactImage} />
+        {/* Poll (question reuses post.caption, rendered separately below) or Image */}
+        {post.poll ? (
+          <PollBlock post={post} onVote={onVote} />
+        ) : (
+          <>
+            {mainImageUri && (
+              <Image source={{ uri: mainImageUri }} style={styles.compactImage} />
+            )}
+            {post.caption ? (
+              <Text style={styles.compactCaption}>{post.caption}</Text>
+            ) : null}
+          </>
         )}
-
-        {/* Caption */}
-        {post.caption ? (
-          <Text style={styles.compactCaption}>{post.caption}</Text>
-        ) : null}
 
         {/* Actions */}
         <View style={styles.actions}>
@@ -184,15 +250,15 @@ export default function PostCard({
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={goToLeague}>
+          <TouchableOpacity onPress={goToActivity}>
             <Image source={{ uri: coverImageUri }} style={styles.coverImage} />
           </TouchableOpacity>
 
           <View style={styles.headerTextContainer}>
-            {(post.event_name || post.league_name) && (
-              <TouchableOpacity onPress={goToLeague}>
+            {(post.event_name || post.activity_name) && (
+              <TouchableOpacity onPress={goToActivity}>
                 <Text style={styles.eventTitle} numberOfLines={1}>
-                  {post.event_name || post.league_name}
+                  {post.event_name || post.activity_name}
                 </Text>
               </TouchableOpacity>
             )}
@@ -231,15 +297,19 @@ export default function PostCard({
         </View>
       </View>
 
-      {/* Main Image */}
-      {mainImageUri && (
-        <Image source={{ uri: mainImageUri }} style={styles.mainImage} />
+      {/* Poll (question reuses post.caption, rendered separately below) or Image */}
+      {post.poll ? (
+        <PollBlock post={post} onVote={onVote} />
+      ) : (
+        <>
+          {mainImageUri && (
+            <Image source={{ uri: mainImageUri }} style={styles.mainImage} />
+          )}
+          {post.caption ? (
+            <Text style={styles.caption}>{post.caption}</Text>
+          ) : null}
+        </>
       )}
-
-      {/* Caption */}
-      {post.caption ? (
-        <Text style={styles.caption}>{post.caption}</Text>
-      ) : null}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -299,7 +369,7 @@ const styles = StyleSheet.create({
   eventTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontFamily: Fonts.semiBold,
+    fontFamily: Fonts.semibold,
     marginBottom: 4,
   },
   userInfoRow: {
@@ -335,7 +405,7 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 11,
-    fontFamily: Fonts.semiBold,
+    fontFamily: Fonts.semibold,
   },
   dotsBtn: {
     padding: 4,
@@ -403,7 +473,7 @@ const styles = StyleSheet.create({
   compactUsername: {
     color: '#fff',
     fontSize: 14,
-    fontFamily: Fonts.semiBold,
+    fontFamily: Fonts.semibold,
   },
   compactImage: {
     width: '100%',
@@ -420,23 +490,91 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
   },
 
-  // ── Compact league row (ProfileViewScreen only) ─────
-  compactLeagueRow: {
+  // ── Compact activity row (ProfileViewScreen only) ───
+  compactActivityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexShrink: 1,
   },
-  compactLeagueThumb: {
+  compactActivityThumb: {
     width: 30,
     height: 30,
     borderRadius: 15,
     backgroundColor: '#2A2A2A',
   },
-  compactLeagueName: {
+  compactActivityName: {
     color: '#fff',
     fontSize: 14,
-    fontFamily: Fonts.semiBold,
+    fontFamily: Fonts.semibold,
     flexShrink: 1,
+  },
+});
+
+const pollStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  question: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.semibold,
+    lineHeight: 21,
+    marginBottom: 12,
+  },
+  choicePill: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+  },
+  choiceText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.medium,
+  },
+  resultRow: {
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#111',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  resultFill: {
+    position: 'absolute',
+    top: 0, left: 0, bottom: 0,
+    backgroundColor: 'rgba(44,185,176,0.25)',
+  },
+  resultFillSelected: {
+    backgroundColor: 'rgba(44,185,176,0.45)',
+  },
+  resultLabelRow: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  resultText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
+    marginRight: 8,
+  },
+  resultPct: {
+    color: '#ccc',
+    fontSize: 13,
+    fontFamily: Fonts.semibold,
+  },
+  footer: {
+    color: '#666',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+    marginTop: 2,
   },
 });

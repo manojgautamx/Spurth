@@ -1,4 +1,3 @@
-import uuid
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -15,26 +14,29 @@ from rest_framework.decorators import action
 from django.db.models import Count
 
 from django.utils import timezone
+from django.db import IntegrityError
+from datetime import timedelta
 from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from firebase_admin import auth as firebase_auth
 import firebase_config  # triggers initialization
+from rest_framework.throttling import ScopedRateThrottle
 
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import EmailVerificationToken
+from .models import EmailVerificationToken, generate_verification_code
 from django.contrib.auth.backends import ModelBackend
 
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import CommentSerializer, LeagueSerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
-from .models import League, Like, Post, UserProfile, Comment, Notification
+from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
+from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -71,7 +73,7 @@ def google_auth(request):
         })
     except Exception as e:
         return Response({'detail': str(e)}, status=400)
-    
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def set_username(request):
@@ -105,7 +107,10 @@ def register(request):
     user = User.objects.create_user(username=username, email=email, password=password)
 
     refresh = RefreshToken.for_user(user)
-    send_verification_email(user)
+    # Deliberately not sending a verification email here — it now only goes
+    # out when the user reaches Home and taps "Verify your email" themselves
+    # (EmailVerificationScreen / HomeScreen's inline card), not automatically
+    # at signup.
     return Response({
         'access': str(refresh.access_token),
         'refresh': str(refresh),
@@ -119,38 +124,76 @@ def firebase_token(request):
     token = firebase_auth.create_custom_token(uid)
     return Response({'firebase_token': token.decode('utf-8')})
 
-# Create League View
-class CreateLeagueView(APIView):
+# Create Activity View
+class CreateActivityView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        serializer = LeagueSerializer(data=request.data, context={'request': request})
+        if not request.user.phone_verified:
+            return Response(
+                {'detail': 'Host verification required', 'phone_verified': False},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ActivitySerializer(data=request.data, context={'request': request})
 
         if serializer.is_valid():
             serializer.save(created_by=request.user)
-            league = serializer.instance
+            activity = serializer.instance
 
-            # Notify users whose interests match the league sport
-            sport = (league.sport or '').lower()
+            # Notify users whose interests match the activity type
+            activity_type = (activity.activity_type or '').lower()
             interested_users = User.objects.filter(
-                profile__favorite_sports__icontains=sport
+                profile__interests__icontains=activity_type
             ).exclude(id=request.user.id)
 
             create_notifications(
                 recipients=list(interested_users),
                 notification_type='new_event',
-                title=f'🎉 New {league.sport} event near you',
-                body=f'{league.name} has been posted. Check it out!',
-                league=league,
+                title=f'🎉 New {activity.activity_type} event near you',
+                body=f'{activity.name} has been posted. Check it out!',
+                activity=activity,
             )
 
             return Response(
-                LeagueSerializer(league, context={'request': request}).data,
+                ActivitySerializer(activity, context={'request': request}).data,
                 status=status.HTTP_201_CREATED
             )
 
         print("Validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Phone (host) verification — client verifies the OTP with Firebase directly,
+# then hands us the resulting ID token so we can confirm it server-side and
+# trust the phone_number claim it carries.
+class PhoneVerificationConfirmView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verification'
+
+    def post(self, request):
+        id_token = request.data.get('id_token')
+        if not id_token:
+            return Response({'detail': 'id_token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            decoded = firebase_auth.verify_id_token(id_token)
+        except Exception:
+            return Response({'detail': 'Invalid or expired verification token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        phone_number = decoded.get('phone_number')
+        if not phone_number:
+            return Response({'detail': 'Token did not carry a verified phone number'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(phone_number=phone_number).exclude(id=request.user.id).exists():
+            return Response({'detail': 'This phone number is already verified on another account'}, status=status.HTTP_409_CONFLICT)
+
+        request.user.phone_number = phone_number
+        request.user.phone_verified = True
+        request.user.save(update_fields=['phone_number', 'phone_verified'])
+
+        return Response({'phone_verified': True, 'phone_number': phone_number})
 
 
 #email or username authentication backend
@@ -170,124 +213,124 @@ class EmailOrUsernameBackend(ModelBackend):
             return user
         return None
 
-# List My Leagues View
-class MyLeaguesView(APIView):
+# List My Activities View
+class MyActivitiesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        leagues = League.objects.filter(created_by=request.user)
-        serializer = LeagueSerializer(leagues, many=True, context={'request': request})
+        activities = Activity.objects.filter(created_by=request.user)
+        serializer = ActivitySerializer(activities, many=True, context={'request': request})
         return Response(serializer.data)
 
-# List Public Leagues View
-class PublicLeaguesView(APIView):
+# List Public Activities View
+class PublicActivitiesView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        # Get the list of joined leagues
-        joined_league_ids = request.user.joined_leagues.values_list('id', flat=True)
+        # Get the list of joined activities
+        joined_activity_ids = request.user.joined_activities.values_list('id', flat=True)
 
-        # Exclude both created and joined leagues
-        leagues = League.objects.exclude(
-            Q(created_by=request.user) | Q(id__in=joined_league_ids)
+        # Exclude both created and joined activities
+        activities = Activity.objects.exclude(
+            Q(created_by=request.user) | Q(id__in=joined_activity_ids)
         )
 
-        serializer = LeagueSerializer(leagues, many=True, context={'request': request})
+        serializer = ActivitySerializer(activities, many=True, context={'request': request})
         return Response(serializer.data)
 
 
 
-# Join League View
+# Join Activity View
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def join_league(request, league_id):
+def join_activity(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
+        activity = Activity.objects.get(id=activity_id)
 
-        if league.created_by == request.user:
+        if activity.created_by == request.user:
             return Response(
-                {'detail': 'Creator is already part of the league.'},
+                {'detail': 'Creator is already part of the activity.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if league.is_full():
+        if activity.is_full():
             return Response(
-                {'detail': 'League is full.'},
+                {'detail': 'Activity is full.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        if league.participants.filter(id=request.user.id).exists():
+        if activity.participants.filter(id=request.user.id).exists():
             return Response(
-                {'detail': 'You already joined this league.'},
+                {'detail': 'You already joined this activity.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if league.date_time < timezone.now():
+        if activity.date_time < timezone.now():
             raise ValidationError("This event has already concluded.")
 
-        league.participants.add(request.user)
+        activity.participants.add(request.user)
 
-        serializer = LeagueSerializer(league, context={'request': request})
+        serializer = ActivitySerializer(activity, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
 
-    except League.DoesNotExist:
-        return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    
-# Leave League View
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# Leave Activity View
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def leave_league(request, league_id):
+def leave_activity(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
+        activity = Activity.objects.get(id=activity_id)
 
-        if request.user not in league.participants.all():
-            return Response({'detail': 'You are not part of this league.'}, status=status.HTTP_400_BAD_REQUEST)
+        if request.user not in activity.participants.all():
+            return Response({'detail': 'You are not part of this activity.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        league.participants.remove(request.user)
-        league.save()
+        activity.participants.remove(request.user)
+        activity.save()
 
-        # Return updated league
-        serializer = LeagueSerializer(league, context={'request': request})
+        # Return updated activity
+        serializer = ActivitySerializer(activity, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    except League.DoesNotExist:
-        return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
-    
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 # Check Join Status
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def league_status(request, league_id):
+def activity_status(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
-        joined = request.user in league.participants.all()
+        activity = Activity.objects.get(id=activity_id)
+        joined = request.user in activity.participants.all()
         return Response({'joined': joined}, status=status.HTTP_200_OK)
 
-    except League.DoesNotExist:
-        return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-# List Joined Leagues
+# List Joined Activities
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def joined_leagues(request):
-    leagues = League.objects.filter(participants=request.user).exclude(created_by=request.user)
-    serializer = LeagueSerializer(leagues, many=True, context={'request': request})
+def joined_activities(request):
+    activities = Activity.objects.filter(participants=request.user).exclude(created_by=request.user)
+    serializer = ActivitySerializer(activities, many=True, context={'request': request})
     return Response(serializer.data)
 
 
-# Update League View
+# Update Activity View
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def update_league(request, league_id):
+def update_activity(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
+        activity = Activity.objects.get(id=activity_id)
 
-        if league.created_by != request.user:
+        if activity.created_by != request.user:
             return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
-        old_datetime = league.date_time
-        serializer = LeagueSerializer(league, data=request.data, partial=True, context={'request': request})
+        old_datetime = activity.date_time
+        serializer = ActivitySerializer(activity, data=request.data, partial=True, context={'request': request})
 
         if serializer.is_valid():
             serializer.save()
@@ -295,60 +338,60 @@ def update_league(request, league_id):
             # Fire reschedule notification if date changed
             new_datetime = serializer.instance.date_time
             if 'date_time' in request.data and old_datetime != new_datetime:
-                participants = list(league.participants.all())
+                participants = list(activity.participants.all())
                 new_date_str = new_datetime.strftime('%d %b %Y at %I:%M %p')
                 create_notifications(
                     recipients=participants,
                     notification_type='reschedule',
-                    title=f'{league.name} rescheduled',
+                    title=f'{activity.name} rescheduled',
                     body=f'The event has been moved to {new_date_str}.',
-                    league=league,
+                    activity=activity,
                 )
 
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    except League.DoesNotExist:
-        return Response({'detail': 'League not found.'}, status=status.HTTP_404_NOT_FOUND)
-    
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-def delete_league(request, league_id):
+def delete_activity(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
+        activity = Activity.objects.get(id=activity_id)
 
-        if league.created_by != request.user:
+        if activity.created_by != request.user:
             return Response(
-                {'detail': 'You do not have permission to delete this league.'},
+                {'detail': 'You do not have permission to delete this activity.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        league.delete()
+        activity.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    except League.DoesNotExist:
+    except Activity.DoesNotExist:
         return Response(
-            {'detail': 'League not found.'},
+            {'detail': 'Activity not found.'},
             status=status.HTTP_404_NOT_FOUND
         )
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def can_enter_chat(request, league_id):
+def can_enter_chat(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
+        activity = Activity.objects.get(id=activity_id)
 
-        is_creator = league.created_by == request.user
-        is_participant = league.participants.filter(id=request.user.id).exists()
+        is_creator = activity.created_by == request.user
+        is_participant = activity.participants.filter(id=request.user.id).exists()
 
         return Response({
             "can_chat": is_creator or is_participant
         })
-    except League.DoesNotExist:
-        return Response({"detail": "League not found"}, status=404)
+    except Activity.DoesNotExist:
+        return Response({"detail": "Activity not found"}, status=404)
 
 
 class UserProfileCreateView(APIView):
@@ -381,12 +424,21 @@ class ProfileStatusView(APIView):
         user = request.user
         profile = getattr(user, 'profile', None)  # assuming OneToOneField to a Profile model
         if not profile:
-            return Response({'profile_complete': False})
+            return Response({'profile_complete': False, 'phone_verified': False, 'can_host': False})
 
-        required_fields = [profile.gender, profile.birth_date, profile.avatar]
+        # avatar intentionally excluded — the onboarding wizard's photo step
+        # (ProfileScreen.js) lets users skip it with no validation, so
+        # requiring it here would silently disagree with what the UI
+        # actually enforces (surfacing as a confusing "kicked back to
+        # onboarding" on the user's next session).
+        required_fields = [profile.gender, profile.birth_date]
         is_complete = all(required_fields)
-        return Response({'profile_complete': is_complete})
-    
+        return Response({
+            'profile_complete': is_complete,
+            'phone_verified': user.phone_verified,
+            'can_host': user.phone_verified,
+        })
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def view_user_profile(request, user_id):
@@ -398,20 +450,20 @@ def view_user_profile(request, user_id):
         return Response(serializer.data)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
-    
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def user_leagues(request, user_id):
+def user_activities(request, user_id):
     User = get_user_model()
     try:
         target = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
-    created = League.objects.filter(created_by=target)
-    joined = League.objects.filter(participants=target).exclude(created_by=target)
+    created = Activity.objects.filter(created_by=target)
+    joined = Activity.objects.filter(participants=target).exclude(created_by=target)
     return Response({
-        'created': LeagueSerializer(created, many=True, context={'request': request}).data,
-        'joined': LeagueSerializer(joined, many=True, context={'request': request}).data,
+        'created': ActivitySerializer(created, many=True, context={'request': request}).data,
+        'joined': ActivitySerializer(joined, many=True, context={'request': request}).data,
     })
 
 # class UpdateProfileView(APIView):
@@ -456,23 +508,23 @@ def me(request):
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
-def cancel_league(request, pk):
-    league = get_object_or_404(League, pk=pk)
+def cancel_activity(request, pk):
+    activity = get_object_or_404(Activity, pk=pk)
 
-    if league.created_by != request.user:
+    if activity.created_by != request.user:
         return Response({"detail": "Not allowed"}, status=403)
 
-    league.is_cancelled = True
-    league.save()
+    activity.is_cancelled = True
+    activity.save()
 
     # Notify all participants
-    participants = list(league.participants.all())
+    participants = list(activity.participants.all())
     create_notifications(
         recipients=participants,
         notification_type='cancel',
-        title=f'{league.name} cancelled',
+        title=f'{activity.name} cancelled',
         body='This event has been cancelled by the host.',
-        league=league,
+        activity=activity,
     )
 
     return Response({"success": True})
@@ -481,28 +533,28 @@ def cancel_league(request, pk):
 @permission_classes([IsAuthenticated])
 def send_invite(request):
     invited_user_id = request.data.get('invited_user_id')
-    league_id       = request.data.get('league_id')
+    activity_id     = request.data.get('activity_id')
 
-    if not invited_user_id or not league_id:
+    if not invited_user_id or not activity_id:
         return Response(
-            {'detail': 'invited_user_id and league_id are required.'},
+            {'detail': 'invited_user_id and activity_id are required.'},
             status=400
         )
 
     try:
         invited_user = User.objects.get(id=invited_user_id)
-        league       = League.objects.get(id=league_id)
+        activity     = Activity.objects.get(id=activity_id)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
-    except League.DoesNotExist:
+    except Activity.DoesNotExist:
         return Response({'detail': 'Event not found.'}, status=404)
 
     inviter = request.user
 
     # Inviter must be the owner or a participant
     is_member = (
-        league.created_by == inviter or
-        league.participants.filter(id=inviter.id).exists()
+        activity.created_by == inviter or
+        activity.participants.filter(id=inviter.id).exists()
     )
     if not is_member:
         return Response(
@@ -510,10 +562,10 @@ def send_invite(request):
             status=403
         )
 
-    # Don't invite someone already in the league
+    # Don't invite someone already in the activity
     already_in = (
-        league.created_by == invited_user or
-        league.participants.filter(id=invited_user.id).exists()
+        activity.created_by == invited_user or
+        activity.participants.filter(id=invited_user.id).exists()
     )
     if already_in:
         return Response(
@@ -525,7 +577,7 @@ def send_invite(request):
     already_invited = Notification.objects.filter(
         recipient=invited_user,
         notification_type='invite',
-        league=league,
+        activity=activity,
         is_read=False,
     ).exists()
     if already_invited:
@@ -535,12 +587,12 @@ def send_invite(request):
         recipient=invited_user,
         notification_type='invite',
         title='You have been invited',
-        body=f'@{inviter.username} invited you to "{league.name}"',
-        league=league,
+        body=f'@{inviter.username} invited you to "{activity.name}"',
+        activity=activity,
     )
 
     return Response({'detail': 'Invite sent.'}, status=201)
-    
+
 
 class UpdateProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -590,7 +642,7 @@ class PostViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = (
             Post.objects
-            .select_related('user', 'league')
+            .select_related('user', 'activity')
             .annotate(
                 likes_count=Count('likes', distinct=True),
                 comments_count=Count('comments', distinct=True)
@@ -598,22 +650,64 @@ class PostViewSet(viewsets.ModelViewSet):
             .order_by('-created_at')
         )
 
-        league_id = self.request.query_params.get('league')
-        if league_id:
-            queryset = queryset.filter(league_id=league_id)
+        activity_id = self.request.query_params.get('activity')
+        if activity_id:
+            queryset = queryset.filter(activity_id=activity_id)
 
         return queryset
 
 
     def perform_create(self, serializer):
-        league = serializer.validated_data['league']
+        activity = serializer.validated_data['activity']
         user = self.request.user
 
         # Allow only creator or participants to post
-        if league.created_by != user and not league.participants.filter(id=user.id).exists():
-            raise PermissionDenied("You are not a member of this league.")
+        if activity.created_by != user and not activity.participants.filter(id=user.id).exists():
+            raise PermissionDenied("You are not a member of this activity.")
 
-        serializer.save(user=user)
+        post = serializer.save(user=user)
+
+        # Optional poll — DRF's default nested create() won't handle a
+        # choices array automatically, so this is plain ORM code rather
+        # than serializer magic (matches the activity-membership check
+        # above, which is also plain view logic, not serializer-driven).
+        choices = [c.strip() for c in self.request.data.getlist('poll_choices') if c.strip()]
+        if len(choices) >= 2:
+            days = int(self.request.data.get('poll_days') or 0)
+            hours = int(self.request.data.get('poll_hours') or 0)
+            minutes = int(self.request.data.get('poll_minutes') or 0)
+            duration = timedelta(days=days, hours=hours, minutes=minutes)
+            if duration.total_seconds() <= 0:
+                duration = timedelta(days=1)  # matches the composer's default (1 day)
+
+            poll = Poll.objects.create(post=post, expires_at=timezone.now() + duration)
+            PollChoice.objects.bulk_create([
+                PollChoice(poll=poll, text=text[:25]) for text in choices[:4]
+            ])
+
+    @action(detail=True, methods=['post'])
+    def vote(self, request, pk=None):
+        post = self.get_object()
+        try:
+            poll = post.poll
+        except Poll.DoesNotExist:
+            return Response({'detail': 'This post has no poll.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if poll.expires_at < timezone.now():
+            return Response({'detail': 'This poll has ended.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        choice_id = request.data.get('choice_id')
+        choice = poll.choices.filter(id=choice_id).first()
+        if not choice:
+            return Response({'detail': 'Invalid choice.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            PollVote.objects.create(poll=poll, choice=choice, user=request.user)
+        except IntegrityError:
+            return Response({'detail': 'You already voted on this poll.'}, status=status.HTTP_409_CONFLICT)
+
+        serializer = PostSerializer(post, context={'request': request})
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def like(self, request, pk=None):
@@ -643,17 +737,17 @@ class PostViewSet(viewsets.ModelViewSet):
                 serializer.save(user=request.user, post=post)
                 return Response(serializer.data, status=201)
             return Response(serializer.errors, status=400)
-        
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def league_detail(request, league_id):
+def activity_detail(request, activity_id):
     try:
-        league = League.objects.get(id=league_id)
-    except League.DoesNotExist:
+        activity = Activity.objects.get(id=activity_id)
+    except Activity.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    from .serializers import LeagueSerializer  # use whatever serializer MyLeaguesView uses
-    serializer = LeagueSerializer(league, context={'request': request})
+    from .serializers import ActivitySerializer  # use whatever serializer MyActivitiesView uses
+    serializer = ActivitySerializer(activity, context={'request': request})
     return Response(serializer.data)
 
 
@@ -662,10 +756,10 @@ def league_detail(request, league_id):
 def delete_post(request, post_id):
     try:
         post = Post.objects.get(id=post_id)
-        # Allow post owner OR league owner to delete
+        # Allow post owner OR activity owner to delete
         is_post_owner = request.user == post.user
-        is_league_owner = post.league and post.league.created_by == request.user
-        if not is_post_owner and not is_league_owner:
+        is_activity_owner = post.activity and post.activity.created_by == request.user
+        if not is_post_owner and not is_activity_owner:
             return Response({'detail': 'Permission denied.'}, status=403)
         post.delete()
         return Response(status=204)
@@ -675,20 +769,20 @@ def delete_post(request, post_id):
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
-def remove_participant(request, league_id, user_id):
+def remove_participant(request, activity_id, user_id):
     User = get_user_model()
     try:
-        league = League.objects.get(id=league_id)
-        if league.created_by != request.user:
+        activity = Activity.objects.get(id=activity_id)
+        if activity.created_by != request.user:
             return Response({'detail': 'Permission denied.'}, status=403)
         participant = User.objects.get(id=user_id)
-        league.participants.remove(participant)
+        activity.participants.remove(participant)
         return Response(status=204)
-    except League.DoesNotExist:
-        return Response({'detail': 'League not found.'}, status=404)
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=404)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
-        
+
 
 # views.py
 class CommentViewSet(viewsets.ModelViewSet):
@@ -701,7 +795,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user, post_id=self.kwargs['post_pk'])
 
-def create_notifications(recipients, notification_type, title, body, league=None):
+def create_notifications(recipients, notification_type, title, body, activity=None):
     """Bulk-create notifications for a list of users."""
     notifications = [
         Notification(
@@ -709,7 +803,7 @@ def create_notifications(recipients, notification_type, title, body, league=None
             notification_type=notification_type,
             title=title,
             body=body,
-            league=league,
+            activity=activity,
         )
         for user in recipients
         if user is not None
@@ -749,14 +843,16 @@ def mark_all_read(request):
     return Response({'detail': 'All marked as read.'})
 
 def send_verification_email(user):
-    token_obj, _ = EmailVerificationToken.objects.get_or_create(user=user)
-    # Regenerate token on resend
-    token_obj.token = uuid.uuid4()
-    token_obj.created_at = timezone.now()
-    token_obj.save()
-    
-    verify_url = f"{settings.BACKEND_BASE_URL}/api/verify-email-redirect/?token={token_obj.token}"
-    
+    # Reuse the existing code if it's still valid so that every email sent
+    # (initial + any resends) carries the same code — otherwise an earlier
+    # email's code silently stops working the moment a new one is sent.
+    token_obj = EmailVerificationToken.objects.filter(user=user).first()
+    if token_obj is None or token_obj.is_expired():
+        token_obj, _ = EmailVerificationToken.objects.update_or_create(
+            user=user,
+            defaults={'token': generate_verification_code(), 'created_at': timezone.now()},
+        )
+
     send_mail(
         subject='Verify your Spurth email',
         message=f'Hi {user.username},\n\nYour Spurth verification code:\n\n{token_obj.token}\n\nOpen the Spurth app and enter this code to verify your email.\nExpires in 24 hours.',
@@ -793,7 +889,7 @@ def resend_verification(request):
         return Response({'detail': 'Verification email sent.'})
     except Exception as e:
         return Response({'detail': f'Failed to send email: {str(e)}'}, status=500)
-    
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def verify_email_redirect(request):
@@ -821,13 +917,11 @@ def forgot_password(request):
         # Don't reveal whether email exists — always return success
         return Response({'detail': 'If that email exists, a reset link has been sent.'})
 
-    # Reuse EmailVerificationToken model with a new token
+    # Reuse EmailVerificationToken model with a new code
     token_obj, _ = EmailVerificationToken.objects.get_or_create(user=user)
-    token_obj.token = uuid.uuid4()
+    token_obj.token = generate_verification_code()
     token_obj.created_at = timezone.now()
     token_obj.save()
-
-    reset_url = f"{settings.BACKEND_BASE_URL}/api/password-reset-redirect/?token={token_obj.token}"
 
     send_mail(
         subject='Reset your Spurth password',
@@ -878,3 +972,31 @@ def reset_password(request):
     token_obj.delete()
 
     return Response({'detail': 'Password reset successfully. You can now log in.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    current_password = request.data.get('current_password', '').strip()
+    new_password = request.data.get('new_password', '').strip()
+    confirm_password = request.data.get('confirm_password', '').strip()
+
+    if not current_password or not new_password:
+        return Response({'detail': 'Current and new password are required.'}, status=400)
+
+    if not request.user.check_password(current_password):
+        return Response({'detail': 'Current password is incorrect.'}, status=400)
+
+    if new_password != confirm_password:
+        return Response({'detail': 'New passwords do not match.'}, status=400)
+
+    if len(new_password) < 8:
+        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+
+    if new_password == current_password:
+        return Response({'detail': 'New password must be different from the current password.'}, status=400)
+
+    request.user.set_password(new_password)
+    request.user.save()
+
+    return Response({'detail': 'Password changed successfully.'})

@@ -20,11 +20,11 @@ export const getDistanceKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-// ── Filter leagues within a radius ──────────────────────────────────────────
-export const filterLeaguesByDistance = (leagues, userLat, userLon, radiusKm = 50) => {
-  if (!userLat || !userLon) return leagues; // no location = show all
-  return leagues.filter(l => {
-    const dist = getDistanceKm(userLat, userLon, l.latitude, l.longitude);
+// ── Filter activities within a radius ────────────────────────────────────────
+export const filterActivitiesByDistance = (activities, userLat, userLon, radiusKm = 50) => {
+  if (!userLat || !userLon) return activities; // no location = show all
+  return activities.filter(a => {
+    const dist = getDistanceKm(userLat, userLon, a.latitude, a.longitude);
     return dist === null || dist <= radiusKm;
   });
 };

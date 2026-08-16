@@ -19,6 +19,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { BASE_URL } from '../config';
+import { useIsWideWeb } from '../utils/responsive';
+import WebSidebar from '../components/web/WebSidebar';
 
 const CATEGORY_GROUPS = {
   Sports: [
@@ -54,6 +56,7 @@ const CATEGORY_GROUPS = {
 const MAX_INTERESTS = 5;
 
 export default function ProfileEditScreen({ navigation }) {
+  const isWideWeb = useIsWideWeb();
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState('');
   const [birthDate, setBirthDate] = useState(new Date());
@@ -76,11 +79,11 @@ export default function ProfileEditScreen({ navigation }) {
         if (p.birth_date) setBirthDate(new Date(p.birth_date));
         setBio(p.bio || '');
         setLocation(p.location || '');
-        if (p.favorite_sports) {
+        if (p.interests) {
           // stored as comma-separated string or array
-          const parsed = Array.isArray(p.favorite_sports)
-            ? p.favorite_sports
-            : p.favorite_sports.split(',').map(s => s.trim()).filter(Boolean);
+          const parsed = Array.isArray(p.interests)
+            ? p.interests
+            : p.interests.split(',').map(s => s.trim()).filter(Boolean);
           // Capitalise first letter to match CATEGORY_GROUPS keys
           setInterests(parsed.map(s => s.charAt(0).toUpperCase() + s.slice(1)));
         }
@@ -145,7 +148,7 @@ export default function ProfileEditScreen({ navigation }) {
       formData.append('birth_date', birthDate.toISOString().split('T')[0]);
       formData.append('bio', bio);
       formData.append('location', location);
-      interests.forEach(i => formData.append('favorite_sports', i.toLowerCase()));
+      interests.forEach(i => formData.append('interests', i.toLowerCase()));
 
       await axiosInstance.put('profile/update/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -178,10 +181,17 @@ export default function ProfileEditScreen({ navigation }) {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+      <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
+
+      {/* Wide web: sidebar + centered column, same layout/width as
+          ProfileViewScreen — no rail, matching total block width keeps the
+          sidebar at the same on-screen position across every page. */}
+      <View style={styles.webRow}>
+      {isWideWeb && <WebSidebar />}
+      <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isWideWeb && styles.headerWide]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -194,7 +204,7 @@ export default function ProfileEditScreen({ navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, isWideWeb && styles.scrollContentWide]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -334,20 +344,44 @@ export default function ProfileEditScreen({ navigation }) {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      </View>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // #0F0F0F matches WebSidebar's own background and ProfileViewScreen —
+  // keeps the sidebar and content reading as one seamless surface.
   root: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: '#0F0F0F',
+    overflow: 'hidden',
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: '#0F0F0F',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  /* ───────── WIDE WEB: sidebar + centered column, no rail —
+     matches ProfileViewScreen's layout exactly, including the same total
+     block width (sidebar + 1040), so the sidebar sits at the same
+     on-screen position as every other page. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webCol: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  webColWide: {
+    maxWidth: 680 + 360,
   },
 
   // ── Header ───────────────────────────────────────────────────────────────
@@ -358,6 +392,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: (StatusBar.currentHeight || 44) + 8,
     paddingBottom: 14,
+  },
+  // Matches scrollContentWide's cap so the header's content (back arrow)
+  // lines up with the form fields below instead of spanning the full
+  // wider column on its own. Width is adjusted for the different
+  // horizontal padding (24 here vs 20 in the header) so both align.
+  headerWide: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 640 - 24 * 2 + 20 * 2,
   },
   backBtn: {
     width: 36,
@@ -373,6 +416,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 40,
+  },
+  // Caps and centers the form itself within the wider column — a text
+  // input stretched across the full 1040px column would look absurd, even
+  // though the column/sidebar stay matched to other pages for consistency.
+  scrollContentWide: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 640,
   },
 
   // ── Avatar ───────────────────────────────────────────────────────────────

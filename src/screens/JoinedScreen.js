@@ -13,7 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const screenWidth = Dimensions.get('window').width;
 
-const LeagueCard = ({ type = 'message' }) => (
+const ActivityCardPlaceholder = ({ type = 'message' }) => (
   <View style={styles.card}>
     <View>
       <Image
@@ -89,7 +89,7 @@ const Joined = ({ navigation }) => {
       {/* Create League Button */}
       <TouchableOpacity
         style={styles.createLeague}
-        onPress={() => navigation.navigate('CreateLeague')}
+        onPress={() => navigation.navigate('CreateActivity')}
       >
         <Text style={styles.createLeagueText}>Create your league</Text>
         <Icon name="chevron-right" size={24} color="#fff" />
@@ -116,11 +116,11 @@ const Joined = ({ navigation }) => {
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={{ paddingBottom: 80 }}>
           {[...Array(2)].map((_, idx) => (
-            <LeagueCard key={idx} />
+            <ActivityCardPlaceholder key={idx} />
           ))}
 
           <Text style={styles.sectionTitle}>My leagues</Text>
-          <LeagueCard type="edit" />
+          <ActivityCardPlaceholder type="edit" />
         </View>
       </ScrollView>
 

@@ -14,6 +14,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
+import { useIsWideWeb } from '../utils/responsive';
+import ActivitiesRail from '../components/web/ActivitiesRail';
 
 // ── Icon + colour per notification type ────────────────────────────────────────
 const TYPE_CONFIG = {
@@ -74,6 +76,7 @@ const NotificationItem = ({ item, onPress, onMarkRead }) => {
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 const NotificationScreen = () => {
+  const isWideWeb = useIsWideWeb();
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -129,9 +132,9 @@ const NotificationScreen = () => {
       }
     }
 
-    // Navigate to league if attached
-    if (item.league_id) {
-      navigation.navigate('LeagueViewerScreen', { leagueId: item.league_id });
+    // Navigate to activity if attached
+    if (item.activity_id) {
+      navigation.navigate('ActivityViewerScreen', { activityId: item.activity_id });
     }
   };
 
@@ -144,58 +147,80 @@ const NotificationScreen = () => {
     );
   }
 
+  const header = (
+    <View style={styles.header}>
+      <View style={styles.headerLeft}>
+        <Text style={styles.headerTitle}>Notifications</Text>
+        {unreadCount > 0 && (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{unreadCount}</Text>
+          </View>
+        )}
+      </View>
+      {unreadCount > 0 && (
+        <TouchableOpacity onPress={handleMarkAllRead} style={styles.markAllBtn}>
+          <Text style={styles.markAllText}>Mark all read</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+
+  const list = (
+    <FlatList
+      style={isWideWeb ? styles.webListFlex : undefined}
+      data={notifications}
+      keyExtractor={item => item.id.toString()}
+      renderItem={({ item }) => (
+        <NotificationItem
+          item={item}
+          onPress={handlePress}
+        />
+      )}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#2CB9B0"
+        />
+      }
+      contentContainerStyle={
+        notifications.length === 0 ? styles.emptyContainer : { paddingBottom: 100 }
+      }
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
+      ListEmptyComponent={
+        <View style={styles.emptyInner}>
+          <Ionicons name="notifications-off-outline" size={54} color="#2A2A2A" />
+          <Text style={styles.emptyTitle}>No notifications yet</Text>
+          <Text style={styles.emptySubtitle}>
+            You'll be notified about event changes,{'\n'}new events matching your interests,{'\n'}and messages.
+          </Text>
+        </View>
+      }
+    />
+  );
+
+  if (isWideWeb) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <View style={styles.webCenter}>
+              {header}
+              {list}
+            </View>
+            <ActivitiesRail />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          {unreadCount > 0 && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </View>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={handleMarkAllRead} style={styles.markAllBtn}>
-            <Text style={styles.markAllText}>Mark all read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* List */}
-      <FlatList
-        data={notifications}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => (
-          <NotificationItem
-            item={item}
-            onPress={handlePress}
-          />
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="#2CB9B0"
-          />
-        }
-        contentContainerStyle={
-          notifications.length === 0 ? styles.emptyContainer : { paddingBottom: 100 }
-        }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
-          <View style={styles.emptyInner}>
-            <Ionicons name="notifications-off-outline" size={54} color="#2A2A2A" />
-            <Text style={styles.emptyTitle}>No notifications yet</Text>
-            <Text style={styles.emptySubtitle}>
-              You'll be notified about event changes,{'\n'}new events matching your interests,{'\n'}and messages.
-            </Text>
-          </View>
-        }
-      />
+      {header}
+      {list}
     </SafeAreaView>
   );
 };
@@ -206,7 +231,36 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#0F0F0F',
+    overflow: 'hidden',
   },
+
+  /* ───────── WIDE WEB: 3-column layout (matches Home/Explore/Chat) ────────
+     overflow:'hidden' keeps the sidebar pinned to the viewport — without
+     it, a notification list taller than the available height bubbles up
+     and makes the whole page scroll instead of just the list itself.
+     webListFlex gives the FlatList a bounded height so it scrolls
+     internally instead of rendering at full content height. */
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  webCenter: {
+    flex: 1,
+    maxWidth: 680,
+    overflow: 'hidden',
+  },
+  webListFlex: {
+    flex: 1,
+  },
+
   centered: {
     flex: 1,
     justifyContent: 'center',

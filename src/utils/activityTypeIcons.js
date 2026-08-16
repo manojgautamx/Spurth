@@ -2,10 +2,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import React from 'react';
 
-export const getSportIcon = (sport, size = 16, color = '#ccc') => {
-  if (!sport) return null;
+export const getActivityTypeIcon = (activityType, size = 16, color = '#ccc') => {
+  if (!activityType) return null;
 
-  const normalized = sport.toLowerCase().trim();
+  const normalized = activityType.toLowerCase().trim();
 
   const iconMap = {
     // ------------------

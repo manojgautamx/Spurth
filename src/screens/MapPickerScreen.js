@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react
 import { WebView } from 'react-native-webview';
 import { MAP_PICKER_HTML } from '../assets/mapPickerHtml';
 
-const MapPickerScreen = ({ navigation }) => {
+const MapPickerScreen = ({ navigation, route }) => {
   const [selectedCoords, setSelectedCoords] = useState(null);
   const [address, setAddress] = useState('');
 
@@ -34,13 +34,17 @@ const MapPickerScreen = ({ navigation }) => {
 
   const handleConfirm = () => {
     if (selectedCoords) {
-      navigation.navigate('CreateLeague', {
-        selectedLocation: {
-          latitude: selectedCoords.latitude,
-          longitude: selectedCoords.longitude,
-          display_name: address || 'Unnamed location',
-        },
+      // Hand the result straight to the screen that opened the picker via a
+      // callback in route params, then pop exactly one screen off the stack.
+      // (Previously used navigate('CreateActivity', params) hoping it would
+      // pop back to the existing screen — it didn't reliably remove this
+      // screen from the stack, so pressing back afterwards reopened the map.)
+      route?.params?.onLocationPicked?.({
+        latitude: selectedCoords.latitude,
+        longitude: selectedCoords.longitude,
+        display_name: address || 'Unnamed location',
       });
+      navigation.goBack();
     } else {
       Alert.alert('No location selected', 'Please tap on the map to select a location.');
     }

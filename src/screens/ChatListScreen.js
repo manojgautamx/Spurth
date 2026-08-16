@@ -16,9 +16,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../firebase/firebaseConfig';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import axiosInstance from '../utils/axiosInstance';
-import { getSportImage } from '../utils/getSportImage';
+import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
+import { useIsWideWeb } from '../utils/responsive';
+import ActivitiesRail from '../components/web/ActivitiesRail';
 
 const STORAGE_KEY = 'chat_last_read';
 
@@ -29,13 +31,14 @@ const getCoverSource = (item) => {
       : `${BASE_URL}${item.cover_image}`;
     return { uri };
   }
-  return { uri: getSportImage(item.sport) };
+  return { uri: getActivityTypeImage(item.activity_type) };
 };
 
 const FILTERS = ['All', 'Unread', 'Read'];
 
 export default function ChatListScreen() {
-  const [leagues, setLeagues] = useState([]);
+  const isWideWeb = useIsWideWeb();
+  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
   const [lastRead, setLastRead] = useState({});
@@ -48,20 +51,20 @@ export default function ChatListScreen() {
       .catch(() => {});
   }, []);
 
-  const markAsRead = async (leagueId, lastMsgTimestamp) => {
+  const markAsRead = async (activityId, lastMsgTimestamp) => {
     if (!lastMsgTimestamp) return;
     const ms = lastMsgTimestamp.toDate
       ? lastMsgTimestamp.toDate().getTime()
       : new Date(lastMsgTimestamp).getTime();
-    const updated = { ...lastRead, [leagueId]: ms };
+    const updated = { ...lastRead, [activityId]: ms };
     setLastRead(updated);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   };
 
-  const isUnread = (league) => {
-    const last = league.lastMessage;
+  const isUnread = (activity) => {
+    const last = activity.lastMessage;
     if (!last?.timestamp) return false;
-    const lastReadMs = lastRead[league.id] || 0;
+    const lastReadMs = lastRead[activity.id] || 0;
     const msgMs = last.timestamp.toDate
       ? last.timestamp.toDate().getTime()
       : new Date(last.timestamp).getTime();
@@ -69,11 +72,11 @@ export default function ChatListScreen() {
   };
 
   useEffect(() => {
-    const fetchLeagues = async () => {
+    const fetchActivities = async () => {
       try {
         const [createdRes, joinedRes] = await Promise.all([
-          axiosInstance.get('my-leagues/'),
-          axiosInstance.get('joined-leagues/'),
+          axiosInstance.get('my-activities/'),
+          axiosInstance.get('joined-activities/'),
         ]);
 
         const created = createdRes.data || [];
@@ -83,23 +86,26 @@ export default function ChatListScreen() {
           ...joined.filter(j => !created.some(c => c.id === j.id)),
         ];
 
-        setLeagues(merged);
+        setActivities(merged);
 
         unsubscribersRef.current.forEach(u => u && u());
         unsubscribersRef.current = [];
 
-        unsubscribersRef.current = merged.map(league => {
+        // Firestore chat threads were created under a 'leagues'/'league_<id>'
+        // path before this rename — kept as-is so existing chat history
+        // isn't orphaned under a path no longer written to.
+        unsubscribersRef.current = merged.map(activity => {
           const lastMessageQuery = query(
-            collection(db, 'leagues', `league_${league.id}`, 'messages'),
+            collection(db, 'leagues', `league_${activity.id}`, 'messages'),
             orderBy('timestamp', 'desc'),
             limit(1)
           );
           return onSnapshot(lastMessageQuery, snapshot => {
             if (!snapshot.empty) {
               const msg = snapshot.docs[0].data();
-              setLeagues(prev =>
-                prev.map(l =>
-                  l.id === league.id ? { ...l, lastMessage: msg } : l
+              setActivities(prev =>
+                prev.map(a =>
+                  a.id === activity.id ? { ...a, lastMessage: msg } : a
                 )
               );
             }
@@ -112,18 +118,18 @@ export default function ChatListScreen() {
       }
     };
 
-    fetchLeagues();
+    fetchActivities();
     return () => { unsubscribersRef.current.forEach(u => u && u()); };
   }, []);
 
-  const getFilteredLeagues = () => {
-    const sorted = [...leagues].sort((a, b) => {
+  const getFilteredActivities = () => {
+    const sorted = [...activities].sort((a, b) => {
       const tsA = a.lastMessage?.timestamp?.toDate?.()?.getTime?.() || 0;
       const tsB = b.lastMessage?.timestamp?.toDate?.()?.getTime?.() || 0;
       return tsB - tsA;
     });
     if (activeFilter === 'Unread') return sorted.filter(isUnread);
-    if (activeFilter === 'Read') return sorted.filter(l => !isUnread(l));
+    if (activeFilter === 'Read') return sorted.filter(a => !isUnread(a));
     return sorted;
   };
 
@@ -150,9 +156,9 @@ export default function ChatListScreen() {
         activeOpacity={0.8}
         onPress={() => {
           markAsRead(item.id, last?.timestamp);
-          navigation.navigate('LeagueChatScreen', {
-            leagueId: item.id,
-            leagueName: item.name,
+          navigation.navigate('ActivityChatScreen', {
+            activityId: item.id,
+            activityName: item.name,
           });
         }}
       >
@@ -193,42 +199,71 @@ export default function ChatListScreen() {
     );
   }
 
+  const filterRow = (
+    <View style={[styles.filterRow, isWideWeb && styles.filterRowWeb]}>
+      {FILTERS.map(f => (
+        <TouchableOpacity
+          key={f}
+          style={[styles.pill, activeFilter === f && styles.pillActive]}
+          onPress={() => setActiveFilter(f)}
+          activeOpacity={0.75}
+        >
+          <Text style={[styles.pillText, activeFilter === f && styles.pillTextActive]}>
+            {f}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+
+  const list = (
+    <FlatList
+      style={isWideWeb ? styles.webListFlex : undefined}
+      data={getFilteredActivities()}
+      keyExtractor={item => item.id.toString()}
+      renderItem={renderItem}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={isWideWeb ? { paddingBottom: 40, paddingHorizontal: 20 } : { paddingBottom: 120 }}
+      ListEmptyComponent={
+        <Text style={styles.empty}>
+          {activeFilter === 'Unread'
+            ? 'No unread messages'
+            : activeFilter === 'Read'
+            ? 'No read chats'
+            : 'No activities yet. Join or create one!'}
+        </Text>
+      }
+    />
+  );
+
+  // Wide web: the same outer paddingHorizontal:20 that `safe` bakes in for
+  // mobile would also squeeze the right rail and fight the row's own
+  // centering, so this branch uses an unpadded outer container instead and
+  // pushes the 20px inset down to just the header/filters/list.
+  if (isWideWeb) {
+    return (
+      <View style={styles.webSafe}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
+        <Text style={[styles.header, styles.headerWeb]}>Chats</Text>
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <View style={styles.webCenter}>
+              {filterRow}
+              {list}
+            </View>
+            <ActivitiesRail />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
       <Text style={styles.header}>Chats</Text>
-
-      <View style={styles.filterRow}>
-        {FILTERS.map(f => (
-          <TouchableOpacity
-            key={f}
-            style={[styles.pill, activeFilter === f && styles.pillActive]}
-            onPress={() => setActiveFilter(f)}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.pillText, activeFilter === f && styles.pillTextActive]}>
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <FlatList
-        data={getFilteredLeagues()}
-        keyExtractor={item => item.id.toString()}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 120 }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            {activeFilter === 'Unread'
-              ? 'No unread messages'
-              : activeFilter === 'Read'
-              ? 'No read chats'
-              : 'No leagues yet. Join or create one!'}
-          </Text>
-        }
-      />
+      {filterRow}
+      {list}
     </View>
   );
 }
@@ -244,6 +279,36 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+
+  /* ───────── WIDE WEB: 3-column layout (matches Home/Explore) ─────────
+     overflow:'hidden' keeps the sidebar pinned to the viewport — without
+     it, a chat list taller than the available height bubbles up and makes
+     the whole page scroll instead of just the list itself. webListFlex
+     gives the FlatList a bounded height so it scrolls internally instead
+     of rendering at full content height. */
+  webSafe: { flex: 1, backgroundColor: '#0F0F0F', overflow: 'hidden' },
+  headerWeb: { paddingHorizontal: 20 },
+  filterRowWeb: { paddingHorizontal: 20 },
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  webCenter: {
+    flex: 1,
+    maxWidth: 680,
+    overflow: 'hidden',
+  },
+  webListFlex: {
+    flex: 1,
+  },
   pill: {
     paddingHorizontal: 18,
     paddingVertical: 8,

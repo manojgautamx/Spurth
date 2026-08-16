@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler'; // ✅ MUST be first line
 import React from 'react';
 import { useEffect } from 'react';
+import { Alert } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
@@ -8,8 +9,16 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LocationProvider } from './src/context/LocationContext';
 import { DistanceProvider } from './src/context/DistanceContext';
+import AppAlertModal from './src/components/AppAlertModal';
+import { showAlert } from './src/utils/alertController';
 
 import RNBootSplash from "react-native-bootsplash";
+
+// Replaces the platform's native alert/confirm dialog with our own on-brand
+// modal (AppAlertModal, rendered below) — applies on both web and native
+// since every Alert.alert(...) call site across the app already goes
+// through this single object, unmodified.
+Alert.alert = (title, message, buttons) => showAlert(title, message, buttons);
 
 
 export default function App() {
@@ -34,6 +43,7 @@ export default function App() {
           </DistanceProvider>
         </AuthProvider>
       </NavigationContainer>
+      <AppAlertModal />
     </GestureHandlerRootView>
   );
 }

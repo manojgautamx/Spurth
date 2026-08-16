@@ -16,16 +16,18 @@ import HomeScreen from '../screens/HomeScreen';
 import ExploreScreen from '../screens/ExploreScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import ChatScreen from '../screens/ChatListScreen';
-import CreateLeagueScreen from '../screens/CreateLeagueScreen';
+import CreateActivityScreen from '../screens/CreateActivityScreen';
+import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
+import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
-import LeagueOwnerScreen from '../screens/LeagueOwnerScreen';
-import LeagueViewerScreen from '../screens/LeagueViewerScreen';
+import ActivityOwnerScreen from '../screens/ActivityOwnerScreen';
+import ActivityViewerScreen from '../screens/ActivityViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
-import LeagueChatScreen from '../screens/LeagueChatScreen';
+import ActivityChatScreen from '../screens/ActivityChatScreen';
 import ParticipantsListScreen from '../screens/ParticipantsListScreen';
-import ActivityScreen from '../screens/ActivityScreen';
+import ExperienceScreen from '../screens/ExperienceScreen';
 import CommentsScreen from '../screens/CommentScreen';
 import ExploreMapScreen from '../screens/ExploreMapScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
@@ -54,7 +56,7 @@ const Tab   = createBottomTabNavigator();
 // Supported URLs (both schemes):
 //   spurth://verify-email?token=xxx
 //   spurth://profile/42             → ProfileView    { userId: '42' }
-//   spurth://event/17               → LeagueViewerScreen { leagueId: '17' }
+//   spurth://event/17               → ActivityViewerScreen { activityId: '17' }
 //   https://spurth.com/profile/42   → same
 //   https://spurth.com/event/17     → same
 const parseDeepLink = (url) => {
@@ -77,7 +79,7 @@ const parseDeepLink = (url) => {
 
   const eventMatch = path.match(/^event\/([^/?#]+)/);
   if (eventMatch) {
-    return { type: 'event', leagueId: eventMatch[1] };
+    return { type: 'event', activityId: eventMatch[1] };
   }
 
   return null;
@@ -92,14 +94,17 @@ const navigate = (screen, params) => {
 
 /* ───────────────── TAB NAVIGATOR ───────────────── */
 
+// Sidebar + center column + right rail, capped and centered as one block on
+// wide viewports — matches HomeScreen's own center(680)+rail(360) cap so the
+// sidebar aligns with where that content actually ends up.
+const WEB_CONTENT_MAX_WIDTH = SIDEBAR_WIDTH + 680 + 360;
+
 function MainTabNavigator() {
   const isWideWeb = useIsWideWeb();
 
-  return (
-    <View style={{ flex: 1, flexDirection: 'row' }}>
-      {isWideWeb && <WebSidebar />}
-      <View style={{ flex: 1, marginLeft: isWideWeb ? SIDEBAR_WIDTH : 0 }}>
-        <Tab.Navigator
+  const tabs = (
+    <View style={{ flex: 1, overflow: 'hidden' }}>
+      <Tab.Navigator
           // On wide web the sidebar replaces the tab bar entirely; on mobile
           // (and narrow web) this is left as-is so the default bottom tab
           // bar renders exactly as it always has.
@@ -121,7 +126,7 @@ function MainTabNavigator() {
               switch (route.name) {
                 case 'Home':         return <HomeIcon color={color} />;
                 case 'Explore':      return <ExploreIcon color={color} />;
-                case 'Activity':     return <ActivityIcon color={color} />;
+                case 'Experience':   return <ActivityIcon color={color} />;
                 case 'Notification': return <NotificationIcon color={color} />;
                 case 'Chat':         return <ChatIcon color={color} />;
               }
@@ -130,10 +135,29 @@ function MainTabNavigator() {
         >
           <Tab.Screen name="Home"         component={HomeScreen} />
           <Tab.Screen name="Explore"      component={ExploreScreen} />
-          <Tab.Screen name="Activity"     component={ActivityScreen} />
+          <Tab.Screen name="Experience"   component={ExperienceScreen} options={{ tabBarLabel: 'Experiences' }} />
           <Tab.Screen name="Notification" component={NotificationScreen} />
           <Tab.Screen name="Chat"         component={ChatScreen} />
         </Tab.Navigator>
+    </View>
+  );
+
+  if (!isWideWeb) return tabs;
+
+  // Wide web: sidebar + tab content form one block, capped and centered as a
+  // unit — matches X's layout instead of pinning the sidebar to the true
+  // viewport edge and leaving an uneven gap on one side.
+  return (
+    // Matches HomeScreen's own background (#0F0F0F) so the outer margins,
+    // sidebar, and page content don't read as three different dark shades.
+    // overflow:'hidden' on both rows keeps the sidebar pinned to the
+    // viewport — without it, a tab screen taller than the available height
+    // bubbles up and makes the whole page scroll instead of just that
+    // screen's own inner ScrollView.
+    <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', backgroundColor: '#0F0F0F', overflow: 'hidden' }}>
+      <View style={{ flexDirection: 'row', width: '100%', maxWidth: WEB_CONTENT_MAX_WIDTH, overflow: 'hidden' }}>
+        <WebSidebar />
+        {tabs}
       </View>
     </View>
   );
@@ -144,6 +168,7 @@ function MainTabNavigator() {
 export default function AppNavigator() {
   const { userToken, isLoading } = useContext(AuthContext);
   const [profileComplete, setProfileComplete] = useState(null);
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
   // Stores a parsed deep link that arrived before the user was logged in
   // or before their profile was complete. Consumed once the stack is ready.
@@ -186,7 +211,7 @@ export default function AppNavigator() {
 
     if (parsed.type === 'event') {
       if (canNavigate) {
-        navigate('LeagueViewerScreen', { leagueId: parsed.leagueId });
+        navigate('ActivityViewerScreen', { activityId: parsed.activityId });
       } else {
         setPendingDeepLink(parsed);
       }
@@ -215,7 +240,7 @@ export default function AppNavigator() {
       if (pendingDeepLink.type === 'profile') {
         navigate('ProfileView', { userId: pendingDeepLink.userId });
       } else if (pendingDeepLink.type === 'event') {
-        navigate('LeagueViewerScreen', { leagueId: pendingDeepLink.leagueId });
+        navigate('ActivityViewerScreen', { activityId: pendingDeepLink.activityId });
       }
       setPendingDeepLink(null);
     }, 300);
@@ -223,7 +248,10 @@ export default function AppNavigator() {
     return () => clearTimeout(timer);
   }, [userToken, profileComplete, pendingDeepLink]);
 
-  // ── Profile status check (unchanged) ─────────────────────────────────────
+  // ── Profile status check — also carries host-verification status
+  // (phone_verified) from the same response, so screens that need to gate
+  // on it (CreateActivityScreen) can read it via ProfileStatusContext
+  // without a separate network round-trip. ─────────────────────────────────
   const checkProfileStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
@@ -231,6 +259,8 @@ export default function AppNavigator() {
 
       const cached = await AsyncStorage.getItem('profileComplete');
       if (cached !== null) setProfileComplete(cached === 'true');
+      const cachedPhone = await AsyncStorage.getItem('phoneVerified');
+      if (cachedPhone !== null) setPhoneVerified(cachedPhone === 'true');
 
       const response = await axios.get(
         `${BASE_URL}/api/profile/status/`,
@@ -240,11 +270,17 @@ export default function AppNavigator() {
       const isComplete = response.data.profile_complete;
       setProfileComplete(isComplete);
       await AsyncStorage.setItem('profileComplete', String(isComplete));
+
+      const isPhoneVerified = !!response.data.phone_verified;
+      setPhoneVerified(isPhoneVerified);
+      await AsyncStorage.setItem('phoneVerified', String(isPhoneVerified));
     } catch (err) {
       console.error('Profile status error:', err.message);
       const cached = await AsyncStorage.getItem('profileComplete');
       if (cached !== null) setProfileComplete(cached === 'true');
       else setProfileComplete(false);
+      const cachedPhone = await AsyncStorage.getItem('phoneVerified');
+      if (cachedPhone !== null) setPhoneVerified(cachedPhone === 'true');
     }
   };
 
@@ -262,20 +298,32 @@ export default function AppNavigator() {
 
   return (
     <ProfileStatusContext.Provider
-      value={{ refreshProfileStatus: checkProfileStatus, setProfileComplete }}
+      value={{
+        refreshProfileStatus: checkProfileStatus,
+        setProfileComplete,
+        phoneVerified,
+        refreshVerificationStatus: checkProfileStatus,
+      }}
     >
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {/* cardStyle:{flex:1} — @react-navigation/stack's web Card wrapper
+          otherwise shrink-wraps to its content's natural height instead of
+          stretching to fill the viewport, which breaks every screen's
+          internal ScrollView bounding and makes the whole page scroll
+          instead of just that screen's own scrollable content. */}
+      <Stack.Navigator screenOptions={{ headerShown: false, cardStyle: { flex: 1 } }}>
         {userToken ? (
           profileComplete ? (
             <>
               <Stack.Screen name="MainTabs"          component={MainTabNavigator} />
-              <Stack.Screen name="CreateLeague"      component={CreateLeagueScreen} />
+              <Stack.Screen name="CreateActivity"    component={CreateActivityScreen} />
+              <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
+              <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
               <Stack.Screen name="MapPicker"         component={MapPickerScreen} />
-              <Stack.Screen name="LeagueOwnerScreen" component={LeagueOwnerScreen} />
-              <Stack.Screen name="LeagueViewerScreen" component={LeagueViewerScreen} />
+              <Stack.Screen name="ActivityOwnerScreen" component={ActivityOwnerScreen} />
+              <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} />
               <Stack.Screen name="ProfileView"       component={ProfileViewScreen} />
               <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} />
-              <Stack.Screen name="LeagueChatScreen"  component={LeagueChatScreen} />
+              <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} />
               <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false }} />
               <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} />
