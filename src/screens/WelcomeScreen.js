@@ -31,12 +31,6 @@ export default function WelcomeScreen({ navigation }) {
 
   // ── Animation refs ────────────────────────────────────────────────────────
   const kenBurnsScale = useRef(new Animated.Value(1)).current;
-  const headlineOpacity = useRef(new Animated.Value(0)).current;
-  const headlineY = useRef(new Animated.Value(18)).current;
-  const supportOpacity = useRef(new Animated.Value(0)).current;
-  const supportY = useRef(new Animated.Value(14)).current;
-  const buttonsOpacity = useRef(new Animated.Value(0)).current;
-  const buttonsY = useRef(new Animated.Value(28)).current;
 
   // ── Google Sign-In config ─────────────────────────────────────────────────
   useEffect(() => {
@@ -63,30 +57,6 @@ export default function WelcomeScreen({ navigation }) {
     );
     loop.start();
     return () => loop.stop();
-  }, []);
-
-  // ── Staggered entrance: headline → supporting text → buttons ─────────────
-  useEffect(() => {
-    Animated.sequence([
-      Animated.delay(400),
-      // Headline fades + rises
-      Animated.parallel([
-        Animated.timing(headlineOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.spring(headlineY, { toValue: 0, tension: 60, friction: 12, useNativeDriver: true }),
-      ]),
-      Animated.delay(120),
-      // Supporting text
-      Animated.parallel([
-        Animated.timing(supportOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.spring(supportY, { toValue: 0, tension: 60, friction: 12, useNativeDriver: true }),
-      ]),
-      Animated.delay(100),
-      // Buttons slide up
-      Animated.parallel([
-        Animated.timing(buttonsOpacity, { toValue: 1, duration: 420, useNativeDriver: true }),
-        Animated.spring(buttonsY, { toValue: 0, tension: 55, friction: 11, useNativeDriver: true }),
-      ]),
-    ]).start();
   }, []);
 
   // ── Google Sign-In ────────────────────────────────────────────────────────
@@ -194,36 +164,17 @@ export default function WelcomeScreen({ navigation }) {
             style={StyleSheet.absoluteFillObject}
           />
           <View style={styles.webHeroContent}>
-            <Animated.Text
-              style={[
-                styles.headline,
-                { opacity: headlineOpacity, transform: [{ translateY: headlineY }] },
-              ]}
-            >
-              Don't spend another{'\n'}weekend scrolling.
-            </Animated.Text>
-            <Animated.Text
-              style={[
-                styles.supporting,
-                { opacity: supportOpacity, transform: [{ translateY: supportY }] },
-              ]}
-            >
-              Meet people who'd rather make memories than scroll.
-            </Animated.Text>
+            <Text style={styles.headline}>Your weekend deserves better plans.</Text>
+            <Text style={styles.supporting}>Your next story shouldn't be on your feed.</Text>
           </View>
         </View>
 
         <View style={styles.webFormPane}>
-          <Animated.View
-            style={[
-              styles.webButtonWrap,
-              { opacity: buttonsOpacity, transform: [{ translateY: buttonsY }] },
-            ]}
-          >
+          <View style={styles.webButtonWrap}>
             <Text style={styles.webFormHeading}>Get started</Text>
             <Text style={styles.webFormSubheading}>Join a community that meets up, for real.</Text>
             {authActions}
-          </Animated.View>
+          </View>
         </View>
       </View>
     );
@@ -254,34 +205,14 @@ export default function WelcomeScreen({ navigation }) {
 
       {/* ── Lower content: headline + supporting text — left aligned ── */}
       <View style={styles.contentSection}>
-        <Animated.Text
-          style={[
-            styles.headline,
-            { opacity: headlineOpacity, transform: [{ translateY: headlineY }] },
-          ]}
-        >
-          Don't spend another{'\n'}weekend scrolling.
-        </Animated.Text>
-
-        <Animated.Text
-          style={[
-            styles.supporting,
-            { opacity: supportOpacity, transform: [{ translateY: supportY }] },
-          ]}
-        >
-          Meet people who'd rather make memories than scroll.
-        </Animated.Text>
+        <Text style={styles.headline}>Your weekend deserves better plans.</Text>
+        <Text style={styles.supporting}>Your next story shouldn't be on your feed.</Text>
       </View>
 
       {/* ── Auth buttons, anchored to bottom ── */}
-      <Animated.View
-        style={[
-          styles.buttonSection,
-          { opacity: buttonsOpacity, transform: [{ translateY: buttonsY }] },
-        ]}
-      >
+      <View style={styles.buttonSection}>
         {authActions}
-      </Animated.View>
+      </View>
     </View>
   );
 }
