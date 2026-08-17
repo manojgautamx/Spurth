@@ -34,7 +34,17 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer
+        ref={navigationRef}
+        documentTitle={{
+          // Without this, React Navigation's web integration falls back to
+          // the raw route name (e.g. "Landing", "ProfileView") as the
+          // browser tab title. Screens set their own via
+          // options={{ title: '...' }}; anything that doesn't just gets
+          // the bare brand name instead of a leaked internal route name.
+          formatter: (options) => options?.title ? `Spurth - ${options.title}` : 'Spurth',
+        }}
+      >
         <AuthProvider>
           <DistanceProvider>
             <LocationProvider>

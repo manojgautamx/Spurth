@@ -134,11 +134,11 @@ function MainTabNavigator() {
             },
           })}
         >
-          <Tab.Screen name="Home"         component={HomeScreen} />
-          <Tab.Screen name="Explore"      component={ExploreScreen} />
-          <Tab.Screen name="Experience"   component={ExperienceScreen} options={{ tabBarLabel: 'Experiences' }} />
-          <Tab.Screen name="Notification" component={NotificationScreen} />
-          <Tab.Screen name="Chat"         component={ChatScreen} />
+          <Tab.Screen name="Home"         component={HomeScreen} options={{ title: 'Home' }} />
+          <Tab.Screen name="Explore"      component={ExploreScreen} options={{ title: 'Explore' }} />
+          <Tab.Screen name="Experience"   component={ExperienceScreen} options={{ tabBarLabel: 'Experiences', title: 'Experiences' }} />
+          <Tab.Screen name="Notification" component={NotificationScreen} options={{ title: 'Notifications' }} />
+          <Tab.Screen name="Chat"         component={ChatScreen} options={{ title: 'Messages' }} />
         </Tab.Navigator>
     </View>
   );
@@ -318,33 +318,33 @@ export default function AppNavigator() {
         {userToken ? (
           profileComplete ? (
             <>
-              <Stack.Screen name="MainTabs"          component={MainTabNavigator} />
-              <Stack.Screen name="CreateActivity"    component={CreateActivityScreen} />
-              <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} />
-              <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
-              <Stack.Screen name="MapPicker"         component={MapPickerScreen} />
-              <Stack.Screen name="ActivityOwnerScreen" component={ActivityOwnerScreen} />
-              <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} />
-              <Stack.Screen name="ProfileView"       component={ProfileViewScreen} />
-              <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} />
-              <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} />
-              <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} />
-              <Stack.Screen name="Settings"          component={SettingsScreen} />
+              <Stack.Screen name="MainTabs"          component={MainTabNavigator} options={{ title: 'Home' }} />
+              <Stack.Screen name="CreateActivity"    component={CreateActivityScreen} options={{ title: 'Create Activity' }} />
+              <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} options={{ title: 'Verify Phone' }} />
+              <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} options={{ title: 'Verify Email' }} />
+              <Stack.Screen name="MapPicker"         component={MapPickerScreen} options={{ title: 'Choose Location' }} />
+              <Stack.Screen name="ActivityOwnerScreen" component={ActivityOwnerScreen} options={{ title: 'Manage Activity' }} />
+              <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} options={{ title: 'Activity' }} />
+              <Stack.Screen name="ProfileView"       component={ProfileViewScreen} options={{ title: 'Profile' }} />
+              <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
+              <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} options={{ title: 'Chat' }} />
+              <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false, title: 'Participants' }} />
+              <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false, title: 'Comments' }} />
+              <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} options={{ title: 'Map' }} />
+              <Stack.Screen name="Settings"          component={SettingsScreen} options={{ title: 'Settings' }} />
             </>
           ) : (
-            <Stack.Screen name="Profile" component={ProfileScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Set Up Your Profile' }} />
           )
         ) : (
           <>
-            <Stack.Screen name="Welcome"        component={WelcomeScreen} />
-            <Stack.Screen name="Landing"        component={LandingScreen} />
-            <Stack.Screen name="Login"          component={LoginScreen} />
-            <Stack.Screen name="Signup"         component={SignupScreen} />
-            <Stack.Screen name="GoogleUsername" component={GoogleUsernameScreen} />
-            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-            <Stack.Screen name="ResetPassword"  component={ResetPasswordScreen} />
+            <Stack.Screen name="Welcome"        component={WelcomeScreen} options={{ title: 'Get Started' }} />
+            <Stack.Screen name="Landing"        component={LandingScreen} options={{ title: 'Jump In. Connect.' }} />
+            <Stack.Screen name="Login"          component={LoginScreen} options={{ title: 'Log In' }} />
+            <Stack.Screen name="Signup"         component={SignupScreen} options={{ title: 'Sign Up' }} />
+            <Stack.Screen name="GoogleUsername" component={GoogleUsernameScreen} options={{ title: 'Choose a Username' }} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Forgot Password' }} />
+            <Stack.Screen name="ResetPassword"  component={ResetPasswordScreen} options={{ title: 'Reset Password' }} />
           </>
         )}
       </Stack.Navigator>
