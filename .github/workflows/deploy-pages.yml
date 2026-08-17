@@ -42,7 +42,11 @@ jobs:
           cp web/privacy.html web-build/privacy/index.html
 
       - name: Add favicon
-        run: cp src/assets/logo.png web-build/favicon.png
+        # logo.png isn't square, and browsers render favicons in a square
+        # slot — a plain copy gets visibly stretched in the tab. Pad it onto
+        # a transparent square canvas (sized to the image's larger
+        # dimension) instead of distorting it.
+        run: convert src/assets/logo.png -background none -gravity center -extent "%[fx:max(w,h)]x%[fx:max(w,h)]" web-build/favicon.png
 
       - uses: actions/upload-pages-artifact@v3
         with:
