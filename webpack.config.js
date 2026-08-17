@@ -22,6 +22,7 @@ module.exports = (env, argv) => {
         'react-native-linear-gradient': path.resolve(__dirname, 'src/shims/linearGradient.web.js'),
         'react-native-webview': path.resolve(__dirname, 'src/shims/webview.web.js'),
         'react-native-modal-datetime-picker': path.resolve(__dirname, 'src/shims/dateTimePicker.web.js'),
+        '@react-native-google-signin/google-signin': path.resolve(__dirname, 'src/shims/googleSignin.web.js'),
       },
       fallback: {
         crypto: false,
