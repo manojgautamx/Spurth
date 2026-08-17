@@ -45,8 +45,21 @@ jobs:
         # logo.png isn't square, and browsers render favicons in a square
         # slot — a plain copy gets visibly stretched in the tab. Pad it onto
         # a transparent square canvas (sized to the image's larger
-        # dimension) instead of distorting it.
-        run: convert src/assets/logo.png -background none -gravity center -extent "%[fx:max(w,h)]x%[fx:max(w,h)]" web-build/favicon.png
+        # dimension) instead of distorting it. Uses sharp (via Node, already
+        # set up above) rather than relying on ImageMagick being present on
+        # the runner.
+        run: |
+          npm install --no-save sharp
+          node -e "
+            const sharp = require('sharp');
+            (async () => {
+              const meta = await sharp('src/assets/logo.png').metadata();
+              const size = Math.max(meta.width, meta.height);
+              await sharp('src/assets/logo.png')
+                .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+                .toFile('web-build/favicon.png');
+            })();
+          "
 
       - uses: actions/upload-pages-artifact@v3
         with:
