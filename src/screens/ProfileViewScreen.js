@@ -23,6 +23,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { jwtDecode } from 'jwt-decode';
 import PostCard from '../components/PostCard';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -125,13 +126,22 @@ export default function ProfileViewScreen({ route }) {
     try {
       setPostsLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
-      const targetId = isMyProfile ? user?.user_id : userId;
-      const res = await fetch(`${BASE_URL}/api/posts/`, {
+      // AuthContext only exposes userToken, not a decoded user object — this
+      // screen's `user` destructured from it was always undefined, so
+      // `user?.user_id` never resolved and "my own profile" posts never
+      // fetched. jwt-decode already gets pulled in for the same purpose in
+      // useAxios.js — same pattern here.
+      const targetId = isMyProfile ? jwtDecode(token)?.user_id : userId;
+      // Filtered server-side by ?user= — fetching the global feed and
+      // filtering client-side (as this used to) silently dropped the user's
+      // own posts whenever they weren't within the feed's first page
+      // (PAGE_SIZE=10), since anything posted by other users pushes older
+      // posts off that page before the client-side filter ever sees them.
+      const res = await fetch(`${BASE_URL}/api/posts/?user=${targetId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       const normalized = (data.results || data)
-        .filter(p => String(p.user) === String(targetId))
         .map(p => ({
           ...p,
           activity_id: p.activity,
@@ -390,7 +400,7 @@ export default function ProfileViewScreen({ route }) {
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Activity</Text>
+            <Text style={styles.sectionTitle}>Experiences</Text>
             {posts.length > 0 && (
               <Text style={styles.sectionCount}>{posts.length}</Text>
             )}
