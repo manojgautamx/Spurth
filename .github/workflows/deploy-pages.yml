@@ -41,6 +41,9 @@ jobs:
           cp web/terms.html web-build/terms/index.html
           cp web/privacy.html web-build/privacy/index.html
 
+      - name: Add favicon
+        run: cp src/assets/logo.png web-build/favicon.png
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web-build
