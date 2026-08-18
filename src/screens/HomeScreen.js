@@ -397,43 +397,12 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
-  // A FlatList nested inside a ScrollView (even with scrollEnabled={false})
-  // doesn't reliably pass touch/wheel scroll gestures up to the parent on
-  // web — the list area becomes a dead zone once your gesture starts over
-  // it. Folding everything into ONE FlatList sidesteps that class of bug
-  // entirely: aboveTabsContent and tabsPillRow ride along as regular items
-  // at fixed indices 0/1, with stickyHeaderIndices pinning index 1.
-  const listData = [
-    { key: 'above', kind: 'above' },
-    { key: 'sticky', kind: 'sticky' },
-    ...(activeData.length === 0
-      ? [{ key: 'empty', kind: 'empty' }]
-      : activeData.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
-  ];
-
-  const renderListItem = ({ item }) => {
-    if (item.kind === 'above') return aboveTabsContent;
-    if (item.kind === 'sticky') return tabsPillRow;
-    if (item.kind === 'empty') return activitiesEmptyState;
-    return <ActivityCard activity={item.activity} />;
-  };
-
-  const activitiesList = (
-    <FlatList
-      data={listData}
-      keyExtractor={item => item.key}
-      renderItem={renderListItem}
-      stickyHeaderIndices={[1]}
-      style={isWideWeb ? styles.webCenter : undefined}
-      showsVerticalScrollIndicator={false}
-      ListFooterComponent={exploreMoreButton}
-      contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
-    />
-  );
-
   // Mobile only — on web this is redundant (the sidebar already shows "Home"
-  // as the active item, and has its own Profile entry) so it's just skipped
-  // entirely there rather than left as blank padded space.
+  // as the active item, and has its own Profile entry). It used to be a
+  // fixed sibling above the list, which meant it stayed pinned forever
+  // instead of scrolling away — now it's just the first scrollable item,
+  // so it scrolls off naturally and only the Activities/pills block (the
+  // actual sticky index) stays pinned once you've scrolled past it.
   const header = (
     <View style={styles.topHeader}>
       <Text style={styles.headerText}>Home</Text>
@@ -445,6 +414,43 @@ const HomeScreen = () => {
         )}
       </TouchableOpacity>
     </View>
+  );
+
+  // A FlatList nested inside a ScrollView (even with scrollEnabled={false})
+  // doesn't reliably pass touch/wheel scroll gestures up to the parent on
+  // web — the list area becomes a dead zone once your gesture starts over
+  // it. Folding everything into ONE FlatList sidesteps that class of bug
+  // entirely: header/aboveTabsContent/tabsPillRow ride along as regular
+  // items at fixed indices, with stickyHeaderIndices pinning tabsPillRow.
+  const listData = [
+    ...(isWideWeb ? [] : [{ key: 'header', kind: 'header' }]),
+    { key: 'above', kind: 'above' },
+    { key: 'sticky', kind: 'sticky' },
+    ...(activeData.length === 0
+      ? [{ key: 'empty', kind: 'empty' }]
+      : activeData.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
+  ];
+  const stickyIndex = isWideWeb ? 1 : 2;
+
+  const renderListItem = ({ item }) => {
+    if (item.kind === 'header') return header;
+    if (item.kind === 'above') return aboveTabsContent;
+    if (item.kind === 'sticky') return tabsPillRow;
+    if (item.kind === 'empty') return activitiesEmptyState;
+    return <ActivityCard activity={item.activity} />;
+  };
+
+  const activitiesList = (
+    <FlatList
+      data={listData}
+      keyExtractor={item => item.key}
+      renderItem={renderListItem}
+      stickyHeaderIndices={[stickyIndex]}
+      style={isWideWeb ? styles.webCenter : undefined}
+      showsVerticalScrollIndicator={false}
+      ListFooterComponent={exploreMoreButton}
+      contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
+    />
   );
 
   if (isWideWeb) {
@@ -462,7 +468,6 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {header}
       {activitiesList}
     </SafeAreaView>
   );
