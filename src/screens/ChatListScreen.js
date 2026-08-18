@@ -17,10 +17,11 @@ import { db } from '../firebase/firebaseConfig';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import axiosInstance from '../utils/axiosInstance';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
-import ActivitiesRail from '../components/web/ActivitiesRail';
+import ChatConversationPanel from '../components/ChatConversationPanel';
 
 const STORAGE_KEY = 'chat_last_read';
 
@@ -42,6 +43,9 @@ export default function ChatListScreen() {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('All');
   const [lastRead, setLastRead] = useState({});
+  // Wide web only — selecting a chat opens it in the adjoining panel
+  // instead of navigating to a separate screen (see renderItem below).
+  const [selectedActivity, setSelectedActivity] = useState(null);
   const navigation = useNavigation();
   const unsubscribersRef = useRef([]);
 
@@ -149,17 +153,22 @@ export default function ChatListScreen() {
   const renderItem = ({ item }) => {
     const last = item.lastMessage;
     const unread = isUnread(item);
+    const isSelected = isWideWeb && selectedActivity?.id === item.id;
 
     return (
       <TouchableOpacity
-        style={styles.chatCard}
+        style={[styles.chatCard, isSelected && styles.chatCardSelected]}
         activeOpacity={0.8}
         onPress={() => {
           markAsRead(item.id, last?.timestamp);
-          navigation.navigate('ActivityChatScreen', {
-            activityId: item.id,
-            activityName: item.name,
-          });
+          if (isWideWeb) {
+            setSelectedActivity(item);
+          } else {
+            navigation.navigate('ActivityChatScreen', {
+              activityId: item.id,
+              activityName: item.name,
+            });
+          }
         }}
       >
         <View style={styles.avatarWrap}>
@@ -251,7 +260,24 @@ export default function ChatListScreen() {
               {filterRow}
               {list}
             </View>
-            <ActivitiesRail />
+            <View style={styles.conversationPane}>
+              {selectedActivity ? (
+                <ChatConversationPanel
+                  key={selectedActivity.id}
+                  activityId={selectedActivity.id}
+                  activityName={selectedActivity.name}
+                  onBack={() => setSelectedActivity(null)}
+                  embedded
+                />
+              ) : (
+                <View style={styles.conversationEmpty}>
+                  <Ionicons name="chatbubbles-outline" size={40} color="#333" />
+                  <Text style={styles.conversationEmptyText}>
+                    Select a chat to start messaging
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
       </View>
@@ -280,12 +306,14 @@ const styles = StyleSheet.create({
   },
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
 
-  /* ───────── WIDE WEB: 3-column layout (matches Home/Explore) ─────────
-     overflow:'hidden' keeps the sidebar pinned to the viewport — without
-     it, a chat list taller than the available height bubbles up and makes
-     the whole page scroll instead of just the list itself. webListFlex
-     gives the FlatList a bounded height so it scrolls internally instead
-     of rendering at full content height. */
+  /* ───────── WIDE WEB: split-pane layout — chat list (narrow, fixed) +
+     conversation (wide, flexible), like a typical desktop chat client
+     rather than the list+rail pattern used on Home/Explore. overflow:'hidden'
+     keeps the sidebar pinned to the viewport — without it, a chat list
+     taller than the available height bubbles up and makes the whole page
+     scroll instead of just the list itself. webListFlex gives the FlatList
+     a bounded height so it scrolls internally instead of rendering at full
+     content height. */
   webSafe: { flex: 1, backgroundColor: '#0F0F0F', overflow: 'hidden' },
   headerWeb: { paddingHorizontal: 20 },
   filterRowWeb: { paddingHorizontal: 20 },
@@ -298,13 +326,30 @@ const styles = StyleSheet.create({
   webContent: {
     flex: 1,
     flexDirection: 'row',
-    maxWidth: 680 + 360,
+    maxWidth: 1100,
     overflow: 'hidden',
   },
   webCenter: {
-    flex: 1,
-    maxWidth: 680,
+    width: 380,
+    flexShrink: 0,
     overflow: 'hidden',
+  },
+  conversationPane: {
+    flex: 1,
+    overflow: 'hidden',
+    borderLeftWidth: 1,
+    borderLeftColor: '#1A1A1A',
+  },
+  conversationEmpty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  conversationEmptyText: {
+    color: '#444',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
   },
   webListFlex: {
     flex: 1,
@@ -327,6 +372,12 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  chatCardSelected: {
+    borderColor: '#2CB9B0',
+    backgroundColor: '#1E2828',
   },
   avatarWrap: { position: 'relative' },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#2A2A2A' },
