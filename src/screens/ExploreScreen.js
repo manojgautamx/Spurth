@@ -20,7 +20,6 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { useNavigation } from '@react-navigation/native';
 
 import useAxios from '../utils/useAxios';
-import { AuthContext } from '../context/AuthContext';
 import ActivityCard from '../components/ActivityCard';
 import { Fonts } from '../theme/fonts';
 import { getMainCategory } from '../utils/categoryMapper';
@@ -79,7 +78,6 @@ const ExploreScreen = () => {
 
   const axios = useAxios();
   const navigation = useNavigation();
-  const { user } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
 
   const fetchActivities = async () => {
@@ -154,12 +152,12 @@ const ExploreScreen = () => {
         case 'This Week':
           return eventDate.isAfter(now.startOf('week')) &&
                 eventDate.isBefore(now.endOf('week'));
-        case 'This Weekend':
-          const saturday = now.day(6);
-          
-          const weekendSaturday =
-            now.day() > 6 ? saturday.add(7, 'day') : saturday;
-
+        case 'This Weekend': {
+          // dayjs .day() only ever returns 0–6, so `now.day() > 6` here was
+          // dead code that could never fire. The real edge case is Sunday
+          // (day 0): now.day(6) jumps forward to *next* Saturday instead of
+          // recognizing the weekend already in progress (yesterday).
+          const weekendSaturday = now.day() === 0 ? now.subtract(1, 'day') : now.day(6);
           const weekendSunday = weekendSaturday.add(1, 'day');
 
           return eventDate.isBetween(
@@ -168,13 +166,23 @@ const ExploreScreen = () => {
             null,
             '[]'
           );
+        }
         case 'Upcoming':
         default:
-          return true; // ← IMPORTANT: do NOT block everything
+          // "Upcoming" means not-yet-happened — it was previously returning
+          // true unconditionally, which let already-past activities through.
+          return eventDate.isAfter(now);
       }
     });
 
-    // CATEGORY FILTER
+    // CATEGORY FILTER — activeCategory was only ever compared against
+    // 'All Categories' to gate the distance filter below; it was never
+    // actually used to exclude non-matching items, so picking any specific
+    // category tab had no effect on the list.
+    if (activeCategory !== 'All Categories') {
+      data = data.filter(item => item.mainCategory === activeCategory);
+    }
+
     if (
       activeCategory === 'All Categories' &&
       activeDate === 'Upcoming' &&
@@ -357,19 +365,7 @@ const ExploreScreen = () => {
       data={filteredActivities}
       keyExtractor={item => item.id.toString()}
       ListHeaderComponent={ListHeader}
-      renderItem={({ item }) => (
-        <ActivityCard
-          activity={item}
-          onPress={() =>
-            navigation.navigate(
-              user?.username === item.created_by?.username
-                ? 'ActivityOwnerScreen'
-                : 'ActivityViewerScreen',
-              { activity: item }
-            )
-          }
-        />
-      )}
+      renderItem={({ item }) => <ActivityCard activity={item} />}
       style={isWideWeb ? styles.webList : undefined}
       // The browser's native scrollbar looked out of place next to the
       // custom UI — hide it on web only; mobile keeps its default indicator.

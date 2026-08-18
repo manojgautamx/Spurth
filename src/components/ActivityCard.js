@@ -10,7 +10,6 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 
-import { AuthContext } from '../context/AuthContext';
 import { LocationContext, getDistanceKm } from '../context/LocationContext';
 import { Fonts } from '../theme/fonts';
 import { getActivityTypeIcon } from '../utils/activityTypeIcons';
@@ -43,10 +42,14 @@ const formatDistance = (km) => {
 const ActivityCard = ({ activity }) => {
   const isWideWeb = useIsWideWeb();
   const navigation = useNavigation();
-  const { user } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
 
-  const isOwner = user?.username === activity.created_by?.username;
+  // Comparing against AuthContext's `user` doesn't work — it never exposes
+  // one (only { userToken, login, logout, isLoading }), so this was always
+  // false and every tap (even on your own activity) opened the read-only
+  // viewer instead of the owner/management screen. The backend already
+  // computes ownership correctly per-request, so use that instead.
+  const isOwner = activity.is_owner === true;
 
   const distance = useMemo(() => {
     if (!location?.latitude || !location?.longitude) return null;
