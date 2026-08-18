@@ -370,15 +370,25 @@ const ExploreScreen = () => {
     </View>
   );
 
-  const list = (
-    <FlatList
-      data={filteredActivities}
-      keyExtractor={item => item.id.toString()}
-      ListHeaderComponent={SearchResultsHeader}
-      renderItem={({ item }) => <ActivityCard activity={item} />}
-      scrollEnabled={false}
-      contentContainerStyle={{ paddingBottom: 100 }}
-      ListEmptyComponent={
+  // A FlatList nested inside a ScrollView (even with scrollEnabled={false})
+  // doesn't reliably pass touch/wheel scroll gestures up to the parent on
+  // web — the list area becomes a dead zone once your gesture starts over
+  // it. Folding everything into ONE FlatList sidesteps that class of bug
+  // entirely: stickyHeader rides along as a regular item at a fixed index,
+  // with stickyHeaderIndices pinning it.
+  const listData = [
+    { key: 'sticky', kind: 'sticky' },
+    ...(searchQuery.length > 0 ? [{ key: 'search-results', kind: 'search-results' }] : []),
+    ...(filteredActivities.length === 0
+      ? [{ key: 'empty', kind: 'empty' }]
+      : filteredActivities.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
+  ];
+
+  const renderListItem = ({ item }) => {
+    if (item.kind === 'sticky') return stickyHeader;
+    if (item.kind === 'search-results') return <SearchResultsHeader />;
+    if (item.kind === 'empty') {
+      return (
         <View style={styles.emptyContainer}>
           {!loading && (
             <>
@@ -391,7 +401,20 @@ const ExploreScreen = () => {
             </>
           )}
         </View>
-      }
+      );
+    }
+    return <ActivityCard activity={item.activity} />;
+  };
+
+  const list = (
+    <FlatList
+      data={listData}
+      keyExtractor={item => item.key}
+      renderItem={renderListItem}
+      stickyHeaderIndices={[0]}
+      style={isWideWeb ? styles.webCenter : undefined}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: 100 }}
     />
   );
 
@@ -401,14 +424,7 @@ const ExploreScreen = () => {
         <StatusBar barStyle="light-content" backgroundColor="#121212" />
         <View style={styles.webRow}>
           <View style={styles.webContent}>
-            <ScrollView
-              style={styles.webCenter}
-              showsVerticalScrollIndicator={false}
-              stickyHeaderIndices={[0]}
-            >
-              {stickyHeader}
-              {list}
-            </ScrollView>
+            {list}
             <PostsRail />
           </View>
         </View>
@@ -419,10 +435,7 @@ const ExploreScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
-        {stickyHeader}
-        {list}
-      </ScrollView>
+      {list}
     </SafeAreaView>
   );
 };

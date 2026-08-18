@@ -387,17 +387,6 @@ const HomeScreen = () => {
     </View>
   );
 
-  const activitiesList = (
-    <FlatList
-      data={activeData}
-      keyExtractor={item => item.id.toString()}
-      renderItem={({ item }) => <ActivityCard activity={item} />}
-      scrollEnabled={false}
-      ListEmptyComponent={activitiesEmptyState}
-      contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
-    />
-  );
-
   const exploreMoreButton = isWideWeb && activeData.length > 0 && (
     <TouchableOpacity
       style={styles.exploreMoreBtn}
@@ -406,6 +395,40 @@ const HomeScreen = () => {
     >
       <Text style={styles.exploreMoreText}>Explore more activities</Text>
     </TouchableOpacity>
+  );
+
+  // A FlatList nested inside a ScrollView (even with scrollEnabled={false})
+  // doesn't reliably pass touch/wheel scroll gestures up to the parent on
+  // web — the list area becomes a dead zone once your gesture starts over
+  // it. Folding everything into ONE FlatList sidesteps that class of bug
+  // entirely: aboveTabsContent and tabsPillRow ride along as regular items
+  // at fixed indices 0/1, with stickyHeaderIndices pinning index 1.
+  const listData = [
+    { key: 'above', kind: 'above' },
+    { key: 'sticky', kind: 'sticky' },
+    ...(activeData.length === 0
+      ? [{ key: 'empty', kind: 'empty' }]
+      : activeData.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
+  ];
+
+  const renderListItem = ({ item }) => {
+    if (item.kind === 'above') return aboveTabsContent;
+    if (item.kind === 'sticky') return tabsPillRow;
+    if (item.kind === 'empty') return activitiesEmptyState;
+    return <ActivityCard activity={item.activity} />;
+  };
+
+  const activitiesList = (
+    <FlatList
+      data={listData}
+      keyExtractor={item => item.key}
+      renderItem={renderListItem}
+      stickyHeaderIndices={[1]}
+      style={isWideWeb ? styles.webCenter : undefined}
+      showsVerticalScrollIndicator={false}
+      ListFooterComponent={exploreMoreButton}
+      contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
+    />
   );
 
   // Mobile only — on web this is redundant (the sidebar already shows "Home"
@@ -429,16 +452,7 @@ const HomeScreen = () => {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.webRow}>
           <View style={styles.webContent}>
-            <ScrollView
-              style={styles.webCenter}
-              showsVerticalScrollIndicator={false}
-              stickyHeaderIndices={[1]}
-            >
-              {aboveTabsContent}
-              {tabsPillRow}
-              {activitiesList}
-              {exploreMoreButton}
-            </ScrollView>
+            {activitiesList}
             <PostsRail />
           </View>
         </View>
@@ -449,12 +463,7 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       {header}
-      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[1]}>
-        {aboveTabsContent}
-        {tabsPillRow}
-        {activitiesList}
-        {exploreMoreButton}
-      </ScrollView>
+      {activitiesList}
     </SafeAreaView>
   );
 };
