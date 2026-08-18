@@ -98,9 +98,16 @@ class ActivitySerializer(serializers.ModelSerializer):
         rep['cover_image'] = rep.pop('cover_image_url', None)
         return rep
 
+    # NOTE: these all read from obj.participants.all() rather than using
+    # .filter()/.count() — with the view's prefetch_related('participants'),
+    # .all() reuses the already-fetched list from cache, while .filter() and
+    # .count() would each issue a brand new query per activity regardless of
+    # the prefetch (this was the actual N+1 query bug slowing Explore down).
     def get_joined(self, obj):
         user = self.context.get('request').user
-        return user.is_authenticated and obj.participants.filter(id=user.id).exists()
+        if not user.is_authenticated:
+            return False
+        return any(p.id == user.id for p in obj.participants.all())
 
     def get_is_owner(self, obj):
         request = self.context.get('request')
@@ -110,7 +117,9 @@ class ActivitySerializer(serializers.ModelSerializer):
         return obj.date_time and obj.date_time < timezone.now()
 
     def get_is_full(self, obj):
-        return obj.is_full()
+        if not obj.max_players or obj.max_players <= 0:
+            return False
+        return self.get_participant_count(obj) >= obj.max_players
 
     def get_participants(self, obj):
         participants = list(obj.participants.all())
@@ -121,9 +130,10 @@ class ActivitySerializer(serializers.ModelSerializer):
         return PublicUserSerializer(participants, many=True, context=self.context).data
 
     def get_participant_count(self, obj):
-        count = obj.participants.count()
+        participants = obj.participants.all()
+        count = len(participants)
 
-        if obj.created_by and not obj.participants.filter(id=obj.created_by.id).exists():
+        if obj.created_by and not any(p.id == obj.created_by_id for p in participants):
             count += 1
 
         return count

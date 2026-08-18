@@ -218,7 +218,8 @@ class MyActivitiesView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        activities = Activity.objects.filter(created_by=request.user)
+        activities = Activity.objects.filter(created_by=request.user) \
+            .select_related('created_by__profile').prefetch_related('participants__profile')
         serializer = ActivitySerializer(activities, many=True, context={'request': request})
         return Response(serializer.data)
 
@@ -230,10 +231,16 @@ class PublicActivitiesView(APIView):
         # Get the list of joined activities
         joined_activity_ids = request.user.joined_activities.values_list('id', flat=True)
 
-        # Exclude both created and joined activities
+        # Exclude both created and joined activities.
+        # select_related/prefetch_related here matter a lot: ActivitySerializer's
+        # is_owner/is_full/joined/participants/participant_count fields were each
+        # issuing their own separate query per activity (some even twice), so an
+        # unoptimized list of ~20 activities meant 100+ sequential round-trips to
+        # the DB — this was the actual cause of Explore taking 15-20s to load,
+        # not just a slow query.
         activities = Activity.objects.exclude(
             Q(created_by=request.user) | Q(id__in=joined_activity_ids)
-        )
+        ).select_related('created_by__profile').prefetch_related('participants__profile')
 
         serializer = ActivitySerializer(activities, many=True, context={'request': request})
         return Response(serializer.data)
@@ -314,7 +321,8 @@ def activity_status(request, activity_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def joined_activities(request):
-    activities = Activity.objects.filter(participants=request.user).exclude(created_by=request.user)
+    activities = Activity.objects.filter(participants=request.user).exclude(created_by=request.user) \
+        .select_related('created_by__profile').prefetch_related('participants__profile')
     serializer = ActivitySerializer(activities, many=True, context={'request': request})
     return Response(serializer.data)
 
@@ -653,6 +661,10 @@ class PostViewSet(viewsets.ModelViewSet):
         activity_id = self.request.query_params.get('activity')
         if activity_id:
             queryset = queryset.filter(activity_id=activity_id)
+
+        user_id = self.request.query_params.get('user')
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
 
         return queryset
 
