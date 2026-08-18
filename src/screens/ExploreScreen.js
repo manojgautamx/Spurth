@@ -27,6 +27,7 @@ import { BASE_URL } from '../config';
 import { LocationContext, filterActivitiesByDistance, getDistanceKm } from '../context/LocationContext';
 import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
+import ExploreSkeleton from '../components/skeletons/ExploreSkeleton';
 
 const DATE_FILTERS = ['Upcoming', 'Today', 'Tomorrow', 'This Week', 'This Weekend'];
 dayjs.extend(isBetween);
@@ -203,9 +204,10 @@ const ExploreScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2CB9B0" />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor="#121212" />
+        <ExploreSkeleton />
+      </SafeAreaView>
     );
   }
 
@@ -427,12 +429,6 @@ const ExploreScreen = () => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#121212', overflow: 'hidden' },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#121212'
-  },
 
   /* ───────── WIDE WEB: 3-column layout (matches HomeScreen) ───────── */
   webRow: {

@@ -28,6 +28,7 @@ import { useDistance } from '../context/DistanceContext';
 import CreateIcon from '../assets/icons/CreateIcon';
 import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
+import HomeSkeleton from '../components/skeletons/HomeSkeleton';
 
 const HomeScreen = () => {
   const isWideWeb = useIsWideWeb();
@@ -218,9 +219,9 @@ const HomeScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#6C5CE7" />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <HomeSkeleton />
+      </SafeAreaView>
     );
   }
 
@@ -460,13 +461,6 @@ const HomeScreen = () => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#0F0F0F', overflow: 'hidden' },
-
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0F0F0F',
-  },
 
   /* ───────── HEADER ───────── */
   topHeader: {

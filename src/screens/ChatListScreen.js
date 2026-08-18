@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
   StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -22,6 +21,7 @@ import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import ChatConversationPanel from '../components/ChatConversationPanel';
+import ChatListSkeleton from '../components/skeletons/ChatListSkeleton';
 
 const STORAGE_KEY = 'chat_last_read';
 
@@ -202,8 +202,9 @@ export default function ChatListScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2CB9B0" />
+      <View style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
+        <ChatListSkeleton />
       </View>
     );
   }
@@ -296,7 +297,6 @@ export default function ChatListScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0F0F0F', paddingHorizontal: 20 },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0F0F0F' },
   header: {
     color: '#fff',
     fontSize: 22,

@@ -25,6 +25,7 @@ import PostCard from '../components/PostCard';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
+import ProfileSkeleton from '../components/skeletons/ProfileSkeleton';
 
 const getCoverSource = (item) => {
   if (item.cover_image) {
@@ -217,8 +218,14 @@ export default function ProfileViewScreen({ route }) {
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#36ACA6" />
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.webRow}>
+          {isWideWeb && <WebSidebar />}
+          <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
+            <ProfileSkeleton />
+          </View>
+        </View>
       </View>
     );
   }
