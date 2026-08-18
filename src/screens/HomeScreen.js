@@ -239,9 +239,14 @@ const HomeScreen = () => {
     <Text style={styles.emptyText}>No Activities here. How about you lead the way?</Text>
   );
 
-  // Shared between the mobile and wide-web layouts.
-  const centerContent = (
-    <>
+  // Shared between the mobile and wide-web layouts. Structured as a flat
+  // array of direct children (rather than a single fragment) so the outer
+  // ScrollView's stickyHeaderIndices can pin the filter pills once scrolled
+  // to — everything above (hero, create-activity, "Activities" title) is
+  // grouped into aboveTabsContent (index 0) so that block's own conditional
+  // children (the verify-email banner) don't shift the pills' index.
+  const aboveTabsContent = (
+    <View>
       {!emailVerified && !verifyExpanded && (
         <TouchableOpacity
           style={[styles.verifyBanner, isWideWeb && styles.verifyBannerWeb]}
@@ -346,54 +351,58 @@ const HomeScreen = () => {
 
       {/* ACTIVITIES TITLE */}
       <Text style={styles.activitiesTitle}>Activities</Text>
+    </View>
+  );
 
-      {/* PILLS */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.tabScroll}
-      >
-        {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
-          <TouchableOpacity
-            key={tab}
-            style={[
-              styles.pill,
-              activeTab === tab && styles.pillActive,
-            ]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={[
-                styles.pillText,
-                activeTab === tab && styles.pillTextActive,
-              ]}
-            >
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* LIST */}
-      <FlatList
-        data={activeData}
-        keyExtractor={item => item.id.toString()}
-        renderItem={({ item }) => <ActivityCard activity={item} />}
-        scrollEnabled={false}
-        ListEmptyComponent={activitiesEmptyState}
-        contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
-      />
-
-      {isWideWeb && activeData.length > 0 && (
+  // Its own top-level child (index 1, right after aboveTabsContent) so
+  // stickyHeaderIndices can pin it once scrolled to.
+  const tabsPillRow = (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={[styles.tabScroll, styles.tabScrollSticky]}
+    >
+      {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
         <TouchableOpacity
-          style={styles.exploreMoreBtn}
-          onPress={() => navigation.navigate('Explore')}
-          activeOpacity={0.85}
+          key={tab}
+          style={[
+            styles.pill,
+            activeTab === tab && styles.pillActive,
+          ]}
+          onPress={() => setActiveTab(tab)}
         >
-          <Text style={styles.exploreMoreText}>Explore more activities</Text>
+          <Text
+            style={[
+              styles.pillText,
+              activeTab === tab && styles.pillTextActive,
+            ]}
+          >
+            {tab}
+          </Text>
         </TouchableOpacity>
-      )}
-    </>
+      ))}
+    </ScrollView>
+  );
+
+  const activitiesList = (
+    <FlatList
+      data={activeData}
+      keyExtractor={item => item.id.toString()}
+      renderItem={({ item }) => <ActivityCard activity={item} />}
+      scrollEnabled={false}
+      ListEmptyComponent={activitiesEmptyState}
+      contentContainerStyle={{ paddingBottom: isWideWeb ? 0 : 100 }}
+    />
+  );
+
+  const exploreMoreButton = isWideWeb && activeData.length > 0 && (
+    <TouchableOpacity
+      style={styles.exploreMoreBtn}
+      onPress={() => navigation.navigate('Explore')}
+      activeOpacity={0.85}
+    >
+      <Text style={styles.exploreMoreText}>Explore more activities</Text>
+    </TouchableOpacity>
   );
 
   // Mobile only — on web this is redundant (the sidebar already shows "Home"
@@ -417,8 +426,15 @@ const HomeScreen = () => {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.webRow}>
           <View style={styles.webContent}>
-            <ScrollView style={styles.webCenter} showsVerticalScrollIndicator={false}>
-              {centerContent}
+            <ScrollView
+              style={styles.webCenter}
+              showsVerticalScrollIndicator={false}
+              stickyHeaderIndices={[1]}
+            >
+              {aboveTabsContent}
+              {tabsPillRow}
+              {activitiesList}
+              {exploreMoreButton}
             </ScrollView>
             <PostsRail />
           </View>
@@ -430,8 +446,11 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       {header}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {centerContent}
+      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[1]}>
+        {aboveTabsContent}
+        {tabsPillRow}
+        {activitiesList}
+        {exploreMoreButton}
       </ScrollView>
     </SafeAreaView>
   );
@@ -600,6 +619,15 @@ const styles = StyleSheet.create({
 
   /* ───────── TABS ───────── */
   tabScroll: { paddingLeft: 20, marginTop: 16 },
+  // Opaque background so activity cards scrolling underneath the pinned
+  // (stickyHeaderIndices) pill row don't show through it, plus a little
+  // vertical padding so the pills aren't flush against the sticky edge.
+  tabScrollSticky: {
+    backgroundColor: '#0F0F0F',
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginTop: 0,
+  },
   pill: {
     paddingHorizontal: 16,
     paddingVertical: 6,
