@@ -17,8 +17,6 @@ import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { AuthContext } from '../context/AuthContext';
 import PostCard from '../components/PostCard';
-import { LocationContext, filterActivitiesByDistance } from '../context/LocationContext';
-import { useDistance } from '../context/DistanceContext';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -28,8 +26,6 @@ import { Fonts } from '../theme/fonts';
 const ExperienceScreen = () => {
   const isWideWeb = useIsWideWeb();
   const { user } = useContext(AuthContext);
-  const { location } = useContext(LocationContext);
-  const { distanceKm } = useDistance();
 
   const [activities, setActivities] = useState([]);
   const [selectedActivity, setSelectedActivity] = useState(null);
@@ -58,10 +54,9 @@ const ExperienceScreen = () => {
     fetchMyActivities();
   }, []);
 
-  // Re-filter posts when distance or location changes
   useEffect(() => {
     fetchPosts();
-  }, [distanceKm, location]);
+  }, []);
 
   const getAvatarUri = () => {
     if (!profile?.avatar) return null;
@@ -87,40 +82,25 @@ const ExperienceScreen = () => {
     }
   };
 
+  // Was previously restricted to posts from activities *you* created or
+  // joined, intersected with a distance check against those activities'
+  // location (not the viewer's) — meaning even a fully public, nearby post
+  // never showed up unless you personally happened to be a member of that
+  // exact activity. That's why the feed looked empty despite plenty of
+  // seeded posts existing. Experience is meant to be a discovery feed like
+  // Explore's, not scoped to your own activities, so it just shows
+  // everything now (posts/ has no default restriction server-side either —
+  // see PostViewSet.get_queryset).
   const fetchPosts = async () => {
     try {
-      const [postsRes, createdRes, joinedRes] = await Promise.all([
-        axiosInstance.get('posts/'),
-        axiosInstance.get('my-activities/'),
-        axiosInstance.get('joined-activities/'),
-      ]);
-
-      // Build nearby activity id set
-      const allActivities = [
-        ...(createdRes.data || []),
-        ...(joinedRes.data || []),
-      ];
-      const nearbyActivities = filterActivitiesByDistance(
-        allActivities,
-        location?.latitude,
-        location?.longitude,
-        distanceKm
-      );
-      const nearbyIds = new Set(nearbyActivities.map(a => a.id));
-
-      const data = postsRes.data;
+      const res = await axiosInstance.get('posts/');
+      const data = res.data;
       const normalized = (data.results || data).map(p => ({
         ...p,
         activity_id: p.activity,
         event_name: p.activity_name,
       }));
-
-      // If we have location, filter to nearby activities only
-      const filtered = location
-        ? normalized.filter(p => nearbyIds.has(p.activity_id))
-        : normalized;
-
-      setPosts(filtered);
+      setPosts(normalized);
     } catch (err) {
       console.log('Fetch posts error:', err);
     }
