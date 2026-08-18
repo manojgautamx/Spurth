@@ -166,11 +166,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
     # ── ADD: read-only field for Cloudinary URL ──
     avatar_url = serializers.SerializerMethodField()
     phone_verified = serializers.BooleanField(source='user.phone_verified', read_only=True)
+    # `id` above is the UserProfile row's own PK, not the User's — nothing
+    # client-side can build a profile/share link from it. Expose the actual
+    # User id explicitly instead of relying on callers to guess.
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
 
     class Meta:
         model = UserProfile
         fields = [
-            'id', 'full_name', 'username', 'avatar', 'age', 'bio',
+            'id', 'user_id', 'full_name', 'username', 'avatar', 'age', 'bio',
             'interests', 'interests_display',
             'gender', 'activities_joined', 'activities_created',
             'birth_date', 'location', 'avatar_url', 'phone_verified'

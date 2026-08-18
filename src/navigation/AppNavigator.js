@@ -63,10 +63,13 @@ const Tab   = createBottomTabNavigator();
 const parseDeepLink = (url) => {
   if (!url) return null;
 
-  // Normalise to a bare path string by stripping scheme + host
+  // Normalise to a bare path string by stripping scheme + host. The host
+  // match is generic (not hardcoded to spurth.com) so this also resolves
+  // links opened from wherever the app is actually served — localhost
+  // during development, a staging domain, etc. — not just production.
   const path = url
     .replace(/^spurth:\/\//, '')
-    .replace(/^https?:\/\/spurth\.com\//, '');
+    .replace(/^https?:\/\/[^/]+\//, '');
 
   if (path.startsWith('verify-email')) {
     // Keep the original URL so existing verification logic can parse the token
@@ -87,9 +90,17 @@ const parseDeepLink = (url) => {
 };
 
 // ── Navigate using the ref (safe to call before the navigator is ready) ───────
-const navigate = (screen, params) => {
+// A deep link's "immediate" navigate branch fires as soon as an already-
+// logged-in session is detected (a fast localStorage read), which can beat
+// the Stack.Navigator's own mount — navigationRef.isReady() is briefly
+// false, and without a retry the navigate() call was just silently
+// dropped, landing on the default route with no error. Retries for up to
+// ~2s, which comfortably covers that mount window.
+const navigate = (screen, params, attempt = 0) => {
   if (navigationRef.isReady()) {
     navigationRef.navigate(screen, params);
+  } else if (attempt < 20) {
+    setTimeout(() => navigate(screen, params, attempt + 1), 100);
   }
 };
 
