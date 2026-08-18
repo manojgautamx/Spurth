@@ -41,6 +41,16 @@ jobs:
           cp web/terms.html web-build/terms/index.html
           cp web/privacy.html web-build/privacy/index.html
 
+      - name: Add SPA fallback for deep links
+        # GitHub Pages has no server-side routing — a direct hit on e.g.
+        # /profile/42 or /event/17 (from a shared link) 404s before any JS
+        # loads, since no such file exists. GitHub Pages serves 404.html for
+        # any unmatched path *without* rewriting the address bar, and the
+        # app already reads the real URL at runtime via Linking.getInitialURL()
+        # (see parseDeepLink in AppNavigator.js), so serving the same bundle
+        # for 404s is sufficient — no redirect/rewrite trick needed.
+        run: cp web-build/index.html web-build/404.html
+
       - name: Add favicon
         # logo.png isn't square, and browsers render favicons in a square
         # slot — a plain copy gets visibly stretched in the tab. Pad it onto
