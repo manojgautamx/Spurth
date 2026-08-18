@@ -421,7 +421,12 @@ const HomeScreen = () => {
   // web — the list area becomes a dead zone once your gesture starts over
   // it. Folding everything into ONE FlatList sidesteps that class of bug
   // entirely: header/aboveTabsContent/tabsPillRow ride along as regular
-  // items at fixed indices, with stickyHeaderIndices pinning tabsPillRow.
+  // items at fixed indices, with stickyHeaderIndices pinning header and
+  // tabsPillRow — passing multiple indices makes RN's ScrollView "hand
+  // off" between them: header stays pinned while the hero/create-activity
+  // content scrolls underneath it, and once tabsPillRow's natural position
+  // reaches the top, it pushes header off and takes over the pinned spot,
+  // instead of both just permanently overlapping at y=0.
   const listData = [
     ...(isWideWeb ? [] : [{ key: 'header', kind: 'header' }]),
     { key: 'above', kind: 'above' },
@@ -430,7 +435,7 @@ const HomeScreen = () => {
       ? [{ key: 'empty', kind: 'empty' }]
       : activeData.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
   ];
-  const stickyIndex = isWideWeb ? 1 : 2;
+  const stickyIndices = isWideWeb ? [1] : [0, 2];
 
   const renderListItem = ({ item }) => {
     if (item.kind === 'header') return header;
@@ -445,7 +450,7 @@ const HomeScreen = () => {
       data={listData}
       keyExtractor={item => item.key}
       renderItem={renderListItem}
-      stickyHeaderIndices={[stickyIndex]}
+      stickyHeaderIndices={stickyIndices}
       style={isWideWeb ? styles.webCenter : undefined}
       showsVerticalScrollIndicator={false}
       ListFooterComponent={exploreMoreButton}
@@ -484,6 +489,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 50,
     paddingBottom: 15,
+    // Now a sticky FlatList item (pinned while content scrolls underneath
+    // it) rather than a fixed sibling — needs its own opaque background so
+    // that content doesn't show through while it's pinned.
+    backgroundColor: '#0F0F0F',
   },
   headerText: {
     fontSize: 26,
