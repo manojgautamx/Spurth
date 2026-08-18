@@ -364,7 +364,7 @@ const HomeScreen = () => {
         showsHorizontalScrollIndicator={false}
         style={styles.tabScroll}
       >
-        {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
+        {['Nearby', 'Going', 'Past', 'Created'].map(tab => (
           <TouchableOpacity
             key={tab}
             style={[
