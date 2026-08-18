@@ -72,13 +72,18 @@ export default function PostCard({
   post,
   onLike,
   onVote,
-  onCommentPress,
   onPostDeleted,
   compact = false,
   isActivityOwner = false,
   hideUsername = false,
 }) {
   const navigation = useNavigation();
+
+  // Centralized here (rather than a parent-supplied onCommentPress) so
+  // every screen that renders a PostCard opens the same dedicated post
+  // page consistently — tapping the post body does the same thing as
+  // tapping the comment icon.
+  const goToDetail = () => navigation.navigate('Comments', { post });
 
   const getImageUrl = (url) => {
     if (!url) return null;
@@ -138,7 +143,7 @@ export default function PostCard({
   // ── COMPACT MODE ────────────────────────────────────────────────────────────
   if (compact) {
     return (
-      <View style={styles.compactCard}>
+      <TouchableOpacity style={styles.compactCard} activeOpacity={1} onPress={goToDetail}>
         {/* Header */}
         <View style={styles.compactHeader}>
           <View style={styles.compactHeaderLeft}>
@@ -235,18 +240,18 @@ export default function PostCard({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionItem} onPress={() => onCommentPress(post)}>
+          <TouchableOpacity style={styles.actionItem} onPress={goToDetail}>
             <Ionicons name="chatbubble-outline" size={20} color="#fff" />
             <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
   // ── DEFAULT MODE ────────────────────────────────────────────────────────────
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} activeOpacity={1} onPress={goToDetail}>
       {/* Header */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
@@ -324,12 +329,12 @@ export default function PostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} onPress={() => onCommentPress(post)}>
+        <TouchableOpacity style={styles.actionItem} onPress={goToDetail}>
           <Ionicons name="chatbubble-outline" size={22} color="#fff" />
           <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 

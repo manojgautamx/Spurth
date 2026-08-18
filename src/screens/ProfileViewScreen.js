@@ -11,9 +11,6 @@ import {
   StatusBar,
   Modal,
   FlatList,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Share,                     // ← ADD 1: import Share
 } from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
@@ -54,10 +51,6 @@ export default function ProfileViewScreen({ route }) {
 
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
-  const [commentModalVisible, setCommentModalVisible] = useState(false);
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
 
   // ── ADD 2: Invite state ─────────────────────────────────────────────────────
   // myOwnActivities = the *current user's* activities (created + joined), used to
@@ -166,42 +159,6 @@ export default function ProfileViewScreen({ route }) {
       fetchUserPosts();
     } catch (err) {
       console.warn('Like failed', err);
-    }
-  };
-
-  const openComments = async (post) => {
-    setSelectedPost(post);
-    setComments([]);
-    setCommentModalVisible(true);
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      const res = await fetch(`${BASE_URL}/api/posts/${post.id}/comments/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setComments(data);
-    } catch (err) {
-      console.warn('Fetch comments error', err);
-    }
-  };
-
-  const createComment = async () => {
-    if (!commentText.trim() || !selectedPost) return;
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${BASE_URL}/api/posts/${selectedPost.id}/comments/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: commentText }),
-      });
-      setCommentText('');
-      openComments(selectedPost);
-      fetchUserPosts();
-    } catch (err) {
-      console.warn('Create comment error', err);
     }
   };
 
@@ -347,7 +304,7 @@ export default function ProfileViewScreen({ route }) {
             <View style={styles.statsRowWide}>
               <StatBox label="Age" value={profile.age} />
               <StatBox label="Joined" value={profile.activities_joined} />
-              <StatBox label="Organized" value={profile.activities_created} />
+              <StatBox label="Hosted" value={profile.activities_created} />
             </View>
           </View>
         ) : (
@@ -371,7 +328,7 @@ export default function ProfileViewScreen({ route }) {
             <View style={styles.statsRow}>
               <StatBox label="Age" value={profile.age} />
               <StatBox label="Joined" value={profile.activities_joined} />
-              <StatBox label="Organized" value={profile.activities_created} />
+              <StatBox label="Hosted" value={profile.activities_created} />
             </View>
           </View>
         )}
@@ -418,7 +375,6 @@ export default function ProfileViewScreen({ route }) {
                 key={post.id.toString()}
                 post={post}
                 onLike={handleLike}
-                onCommentPress={openComments}
                 onPostDeleted={fetchUserPosts}
                 navigation={navigation}
                 compact={true}
@@ -437,55 +393,6 @@ export default function ProfileViewScreen({ route }) {
       </ScrollView>
       </View>
       </View>
-
-      {/* COMMENT MODAL */}
-      <Modal
-        visible={commentModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCommentModalVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.commentModalOverlay}
-          activeOpacity={1}
-          onPress={() => setCommentModalVisible(false)}
-        />
-        <KeyboardAvoidingView
-          style={styles.commentModalSheet}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.commentHandle} />
-          <Text style={styles.commentSheetTitle}>Comments</Text>
-
-          <FlatList
-            data={comments}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
-            renderItem={({ item }) => (
-              <View style={styles.commentItem}>
-                <Text style={styles.commentUsername}>@{item.user_name}</Text>
-                <Text style={styles.commentBody}>{item.text}</Text>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.noPostsText}>No comments yet. Be the first!</Text>
-            }
-          />
-
-          <View style={styles.commentInputRow}>
-            <TextInput
-              placeholder="Write a comment..."
-              placeholderTextColor="#555"
-              style={styles.commentInput}
-              value={commentText}
-              onChangeText={setCommentText}
-            />
-            <TouchableOpacity style={styles.commentPostBtn} onPress={createComment}>
-              <Text style={styles.commentPostText}>Post</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* ── ADD: INVITE PICKER MODAL ───────────────────────────────────────────
           Shows the current user's own activities. Tapping one sends an invite to
@@ -570,7 +477,10 @@ const Section = ({ title, count, children }) => (
 
 const StatBox = ({ label, value }) => (
   <View style={styles.statBox}>
-    <Text style={styles.statValue}>{value}</Text>
+    <Text style={styles.statValue} numberOfLines={1}>{value}</Text>
+    {/* No numberOfLines here — at phone widths even "Joined"/"Hosted" don't
+        reliably fit on one line next to two other equal-width pills, and
+        ellipsizing a 6-letter word ("Host…") reads worse than a clean wrap. */}
     <Text style={styles.statLabel}>{label}</Text>
   </View>
 );
@@ -722,18 +632,21 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', marginTop: 25, gap: 10 },
   statBox: {
     backgroundColor: 'rgb(19, 19, 19)',
-    borderRadius: 20,
-    paddingVertical: 18,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
     flex: 1,
+    minWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statValue: { color: '#fff', fontSize: 24, fontFamily: Fonts.semibold },
+  statValue: { color: '#fff', fontSize: 22, fontFamily: Fonts.semibold },
   statLabel: {
     color: '#888',
-    fontSize: 11,
+    fontSize: 10,
     marginTop: 4,
     fontFamily: Fonts.regular,
+    textAlign: 'center',
   },
   section: { paddingHorizontal: 20, marginTop: 30 },
   sectionHeader: {
@@ -827,49 +740,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2A2A2A',
   },
-  commentItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
-  commentUsername: {
-    color: '#36ACA6',
-    fontSize: 13,
-    fontFamily: Fonts.semibold,
-    marginBottom: 3,
-  },
-  commentBody: { color: '#ccc', fontSize: 14, fontFamily: Fonts.regular },
-  commentInputRow: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#252525',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  commentPostBtn: {
-    backgroundColor: '#36ACA6',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 22,
-  },
-  commentPostText: { color: '#fff', fontSize: 14, fontFamily: Fonts.semibold },
   noPostsText: {
     color: '#555',
     fontSize: 14,

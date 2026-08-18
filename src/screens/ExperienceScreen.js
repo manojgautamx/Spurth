@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,9 @@ import {
   Image,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
   Modal,
 } from 'react-native';
-import BottomSheet, { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import axiosInstance from '../utils/axiosInstance';
@@ -53,13 +50,6 @@ const ExperienceScreen = () => {
   const [pollHours, setPollHours] = useState(0);
   const [pollMinutes, setPollMinutes] = useState(0);
   const [numberPickerField, setNumberPickerField] = useState(null); // 'days' | 'hours' | 'minutes' | null
-
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
-
-  const bottomSheetRef = useRef(null);
-  const snapPoints = useMemo(() => ['75%'], []);
 
   const navigation = useNavigation();
 
@@ -133,40 +123,6 @@ const ExperienceScreen = () => {
       setPosts(filtered);
     } catch (err) {
       console.log('Fetch posts error:', err);
-    }
-  };
-
-  const openComments = async (post) => {
-    setSelectedPost(post);
-    bottomSheetRef.current?.snapToIndex(0);
-
-    try {
-      const res = await axiosInstance.get(`posts/${post.id}/comments/`);
-      setComments(res.data);
-    } catch (err) {
-      console.log('Fetch comments error:', err);
-    }
-  };
-
-  const closeComments = () => {
-    bottomSheetRef.current?.close();
-    setSelectedPost(null);
-    setCommentText('');
-  };
-
-  const createComment = async () => {
-    if (!commentText.trim()) return;
-
-    try {
-      await axiosInstance.post(`posts/${selectedPost.id}/comments/`, {
-        text: commentText,
-      });
-
-      setCommentText('');
-      openComments(selectedPost);
-      fetchPosts();
-    } catch (err) {
-      console.log('Create comment error:', err.response?.data || err);
     }
   };
 
@@ -375,66 +331,12 @@ const ExperienceScreen = () => {
           post={item}
           onLike={handleLike}
           onVote={handleVote}
-          onCommentPress={openComments}
           navigation={navigation}
         />
       )}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 80 }}
     />
-  );
-
-  const commentSheet = (
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={-1}
-        snapPoints={snapPoints}
-        enablePanDownToClose={true}
-        onClose={closeComments}
-        backgroundStyle={styles.sheetBg}
-        handleIndicatorStyle={styles.sheetHandle}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Comments</Text>
-            <TouchableOpacity onPress={closeComments} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          <BottomSheetFlatList
-            data={comments}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.comment}>
-                <Text style={styles.commentUser}>@{item.user_name}</Text>
-                <Text style={styles.commentText}>{item.text}</Text>
-              </View>
-            )}
-            contentContainerStyle={styles.commentList}
-          />
-
-          <View style={styles.commentInputRow}>
-            <TextInput
-              placeholder="Write a comment..."
-              placeholderTextColor="#555"
-              style={styles.commentInput}
-              value={commentText}
-              onChangeText={setCommentText}
-            />
-            <TouchableOpacity
-              onPress={createComment}
-              style={[styles.sendBtn, !commentText.trim() && styles.sendBtnDisabled]}
-              disabled={!commentText.trim()}
-            >
-              <Ionicons name="send" size={18} color={commentText.trim() ? '#6E35B7' : '#444'} />
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </BottomSheet>
   );
 
   const activityPickerModal = (
@@ -524,7 +426,6 @@ const ExperienceScreen = () => {
             <ActivitiesRail />
           </View>
         </View>
-        {commentSheet}
         {activityPickerModal}
         {numberPickerModal}
       </View>
@@ -537,7 +438,6 @@ const ExperienceScreen = () => {
       {header}
       {composer}
       {list}
-      {commentSheet}
       {activityPickerModal}
       {numberPickerModal}
     </View>
@@ -802,77 +702,5 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: 12,
     marginTop: 12,
-  },
-
-  // Bottom Sheet
-  sheetBg: {
-    backgroundColor: '#1A1A1A',
-  },
-  sheetHandle: {
-    backgroundColor: '#444',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
-  },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  commentList: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  comment: {
-    marginBottom: 16,
-  },
-  commentUser: {
-    color: '#888',
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  commentText: {
-    color: '#ddd',
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  commentInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-    gap: 12,
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#111',
-    color: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-  },
-  sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2A2A2A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendBtnDisabled: {
-    opacity: 0.5,
   },
 });

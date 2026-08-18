@@ -329,7 +329,7 @@ export default function AppNavigator() {
               <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
               <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} options={{ title: 'Chat' }} />
               <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false, title: 'Participants' }} />
-              <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false, title: 'Comments' }} />
+              <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false, title: 'Post' }} />
               <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} options={{ title: 'Map' }} />
               <Stack.Screen name="Settings"          component={SettingsScreen} options={{ title: 'Settings' }} />
             </>
