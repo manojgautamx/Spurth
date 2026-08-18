@@ -102,7 +102,6 @@ export default function PostsRail() {
               post={post}
               compact
               onLike={handleLike}
-              onCommentPress={goToExperiences}
             />
           ))
         )}

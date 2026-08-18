@@ -12,10 +12,6 @@ import {
   ActivityIndicator,
   Modal,
   TouchableWithoutFeedback,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
-  FlatList,
   Dimensions,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -74,12 +70,6 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [descExpanded, setDescExpanded] = useState(false);
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
-
-  // Comment state
-  const [commentModalVisible, setCommentModalVisible] = useState(false);
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [comments, setComments] = useState([]);
-  const [commentText, setCommentText] = useState('');
 
   // Reschedule + map state — ALL before early return
   const [rescheduleVisible, setRescheduleVisible] = useState(false);
@@ -362,42 +352,6 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     }
   };
 
-  const openComments = async (post) => {
-    setSelectedPost(post);
-    setComments([]);
-    setCommentModalVisible(true);
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      const res = await fetch(`${BASE_URL}/api/posts/${post.id}/comments/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setComments(data);
-    } catch (err) {
-      console.warn('Fetch comments error', err);
-    }
-  };
-
-  const createComment = async () => {
-    if (!commentText.trim() || !selectedPost) return;
-    try {
-      const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${BASE_URL}/api/posts/${selectedPost.id}/comments/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: commentText }),
-      });
-      setCommentText('');
-      openComments(selectedPost);
-      fetchActivityPosts();
-    } catch (err) {
-      console.warn('Create comment error', err);
-    }
-  };
-
   const statusColor = isCancelled ? '#B00020' : isConcluded ? '#444' : '#F2994A';
   const statusLabel = isCancelled ? 'Cancelled' : isConcluded ? 'Concluded' : 'Upcoming';
 
@@ -606,7 +560,6 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                   post={post}
                   onLike={handleLike}
                   onVote={handleVote}
-                  onCommentPress={openComments}
                   onPostDeleted={fetchActivityPosts}
                   navigation={navigation}
                   compact={true}
@@ -814,55 +767,6 @@ const ActivityViewerScreen = ({ route, navigation }) => {
         onCancel={() => setShowTimePicker(false)}
       />
 
-      {/* COMMENT MODAL — plain Modal, no BottomSheet */}
-      <Modal
-        visible={commentModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCommentModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setCommentModalVisible(false)}>
-          <View style={styles.commentModalOverlay} />
-        </TouchableWithoutFeedback>
-
-        <KeyboardAvoidingView
-          style={styles.commentModalSheet}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          {/* Handle bar */}
-          <View style={styles.commentHandle} />
-
-          <Text style={styles.sheetTitle}>Comments</Text>
-
-          <FlatList
-            data={comments}
-            keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
-            renderItem={({ item }) => (
-              <View style={styles.commentItem}>
-                <Text style={styles.commentUsername}>@{item.user_name}</Text>
-                <Text style={styles.commentText}>{item.text}</Text>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.noPostsText}>No comments yet. Be the first!</Text>
-            }
-          />
-
-          <View style={styles.commentInputRow}>
-            <TextInput
-              placeholder="Write a comment..."
-              placeholderTextColor="#555"
-              style={styles.commentInput}
-              value={commentText}
-              onChangeText={setCommentText}
-            />
-            <TouchableOpacity style={styles.commentPostBtn} onPress={createComment}>
-              <Text style={styles.commentPostText}>Post</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </View>
   );
 };
@@ -1299,97 +1203,6 @@ const styles = StyleSheet.create({
   modalSaveText: {
     color: '#fff',
     fontSize: 15,
-    fontFamily: Fonts.semibold,
-  },
-
-  // ── Comment Modal ────────────────────────────────
-  commentModalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  commentModalSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '65%',
-    backgroundColor: '#1A1A1A',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-  },
-  commentHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#555',
-    alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  sheetTitle: {
-    color: '#fff',
-    fontSize: 17,
-    fontFamily: Fonts.semibold,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
-  },
-  commentItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
-  commentUsername: {
-    color: '#2CB9B0',
-    fontSize: 13,
-    fontFamily: Fonts.semibold,
-    marginBottom: 3,
-  },
-  commentText: {
-    color: '#ccc',
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-  },
-  commentInputRow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1A',
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#252525',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    color: '#fff',
-    fontSize: 14,
-    fontFamily: Fonts.regular,
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  commentPostBtn: {
-    backgroundColor: '#E81F89',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 22,
-  },
-  commentPostText: {
-    color: '#fff',
-    fontSize: 14,
     fontFamily: Fonts.semibold,
   },
 });
