@@ -20,7 +20,6 @@ import CreateActivityScreen from '../screens/CreateActivityScreen';
 import PhoneVerificationScreen from '../screens/PhoneVerificationScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
-import ActivityOwnerScreen from '../screens/ActivityOwnerScreen';
 import ActivityViewerScreen from '../screens/ActivityViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
@@ -334,7 +333,6 @@ export default function AppNavigator() {
               <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} options={{ title: 'Verify Phone' }} />
               <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} options={{ title: 'Verify Email' }} />
               <Stack.Screen name="MapPicker"         component={MapPickerScreen} options={{ title: 'Choose Location' }} />
-              <Stack.Screen name="ActivityOwnerScreen" component={ActivityOwnerScreen} options={{ title: 'Manage Activity' }} />
               <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} options={{ title: 'Activity' }} />
               <Stack.Screen name="ProfileView"       component={ProfileViewScreen} options={{ title: 'Profile' }} />
               <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />

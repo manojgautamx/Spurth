@@ -44,13 +44,6 @@ const ActivityCard = ({ activity }) => {
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
 
-  // Comparing against AuthContext's `user` doesn't work — it never exposes
-  // one (only { userToken, login, logout, isLoading }), so this was always
-  // false and every tap (even on your own activity) opened the read-only
-  // viewer instead of the owner/management screen. The backend already
-  // computes ownership correctly per-request, so use that instead.
-  const isOwner = activity.is_owner === true;
-
   const distance = useMemo(() => {
     if (!location?.latitude || !location?.longitude) return null;
     if (!activity.latitude || !activity.longitude) return null;
@@ -89,11 +82,12 @@ const ActivityCard = ({ activity }) => {
     return [...participants].sort(() => 0.5 - Math.random()).slice(0, 3);
   }, [activity.participants]);
 
+  // ActivityViewerScreen already handles the owner case itself (edit/
+  // reschedule/cancel/delete via its kebab menu, gated on the same
+  // server-computed is_owner) — there's no separate owner screen to route
+  // to.
   const handlePress = () => {
-    navigation.navigate(
-      isOwner ? 'ActivityOwnerScreen' : 'ActivityViewerScreen',
-      { activity }
-    );
+    navigation.navigate('ActivityViewerScreen', { activity });
   };
 
   // Web: a compact horizontal row (thumbnail + info side-by-side) instead of

@@ -188,7 +188,7 @@ const HomeScreen = () => {
       case 'Going':
         return upcomingJoined;
 
-      case 'Created by you':
+      case 'Created':
         return allCreated;
 
       case 'Past':
