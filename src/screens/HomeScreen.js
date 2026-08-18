@@ -348,40 +348,42 @@ const HomeScreen = () => {
         </View>
         <Ionicons name="chevron-forward" size={isWideWeb ? 16 : 22} color="#fff" />
       </TouchableOpacity>
-
-      {/* ACTIVITIES TITLE */}
-      <Text style={styles.activitiesTitle}>Activities</Text>
     </View>
   );
 
   // Its own top-level child (index 1, right after aboveTabsContent) so
-  // stickyHeaderIndices can pin it once scrolled to.
+  // stickyHeaderIndices can pin it once scrolled to. The "Activities" title
+  // moved in here (rather than staying in aboveTabsContent) so it sticks
+  // alongside the pills instead of scrolling away on its own.
   const tabsPillRow = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={[styles.tabScroll, styles.tabScrollSticky]}
-    >
-      {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
-        <TouchableOpacity
-          key={tab}
-          style={[
-            styles.pill,
-            activeTab === tab && styles.pillActive,
-          ]}
-          onPress={() => setActiveTab(tab)}
-        >
-          <Text
+    <View style={styles.tabScrollSticky}>
+      <Text style={styles.activitiesTitle}>Activities</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.tabScroll}
+      >
+        {['Nearby', 'Going', 'Past', 'Created by you'].map(tab => (
+          <TouchableOpacity
+            key={tab}
             style={[
-              styles.pillText,
-              activeTab === tab && styles.pillTextActive,
+              styles.pill,
+              activeTab === tab && styles.pillActive,
             ]}
+            onPress={() => setActiveTab(tab)}
           >
-            {tab}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+            <Text
+              style={[
+                styles.pillText,
+                activeTab === tab && styles.pillTextActive,
+              ]}
+            >
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
   );
 
   const activitiesList = (
@@ -614,7 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: Fonts.bold,
     marginHorizontal: 20,
-    marginTop: 28,
   },
 
   /* ───────── TABS ───────── */

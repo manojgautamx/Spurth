@@ -209,154 +209,162 @@ const ExploreScreen = () => {
     );
   }
 
-  const ListHeader = () => {
-    if (searchQuery.length > 0) {
-      return (
-        <View style={styles.searchResultsHeader}>
-          {searchingUsers ? (
-            <ActivityIndicator
-              size="small"
-              color="#2CB9B0"
-              style={{ alignSelf: 'flex-start', marginLeft: 20 }}
-            />
-          ) : userResults.length > 0 ? (
-            <View style={styles.peopleSection}>
-              <Text style={styles.sectionTitle}>People</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingLeft: 20 }}
-              >
-                {userResults.map((u) => (
-                  <TouchableOpacity
-                    key={u.id}
-                    style={styles.userCard}
-                    onPress={() =>
-                      navigation.navigate('ProfileView', { userId: u.id })
-                    }
-                  >
-                    <Image
-                      source={
-                        u.avatar
-                          ? { uri: u.avatar }
-                          : { uri: 'https://via.placeholder.com/150' }
-                      }
-                      style={styles.userAvatar}
-                    />
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {u.full_name || u.username}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          ) : null}
-
-          <Text
-            style={[
-              styles.sectionTitle,
-              { marginLeft: 20, marginTop: 10, marginBottom: 10 }
-            ]}
-          >
-            Matches
-          </Text>
-        </View>
-      );
-    }
-
+  // Only the search-mode results (People carousel + "Matches" label) —
+  // these scroll away with the list, unlike the filter row below, which
+  // stays pinned alongside the search bar (see stickyHeader).
+  const SearchResultsHeader = () => {
+    if (searchQuery.length === 0) return null;
     return (
-      <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateScrollContent}
-        >
-          {DATE_FILTERS.map(item => {
-            const isActive = activeDate === item;
-            return (
-              <TouchableOpacity
-                key={item}
-                onPress={() => setActiveDate(item)}
-                style={[styles.datePill, isActive && styles.datePillActive]}
-              >
-                <Text
-                  style={[styles.dateText, isActive && styles.dateTextActive]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={styles.categoryContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScrollContent}
-          >
-            {MAIN_CATEGORIES.map(category => {
-              const isActive = activeCategory === category;
-              return (
+      <View style={styles.searchResultsHeader}>
+        {searchingUsers ? (
+          <ActivityIndicator
+            size="small"
+            color="#2CB9B0"
+            style={{ alignSelf: 'flex-start', marginLeft: 20 }}
+          />
+        ) : userResults.length > 0 ? (
+          <View style={styles.peopleSection}>
+            <Text style={styles.sectionTitle}>People</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingLeft: 20 }}
+            >
+              {userResults.map((u) => (
                 <TouchableOpacity
-                  key={category}
-                  style={styles.categoryTab}
-                  onPress={() => setActiveCategory(category)}
+                  key={u.id}
+                  style={styles.userCard}
+                  onPress={() =>
+                    navigation.navigate('ProfileView', { userId: u.id })
+                  }
                 >
-                  {getTabIcon(category, isActive)}
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      isActive && styles.categoryTextActive
-                    ]}
-                  >
-                    {category}
+                  <Image
+                    source={
+                      u.avatar
+                        ? { uri: u.avatar }
+                        : { uri: 'https://via.placeholder.com/150' }
+                    }
+                    style={styles.userAvatar}
+                  />
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {u.full_name || u.username}
                   </Text>
-                  {isActive && <View style={styles.activeLine} />}
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        <Text
+          style={[
+            styles.sectionTitle,
+            { marginLeft: 20, marginTop: 10, marginBottom: 10 }
+          ]}
+        >
+          Matches
+        </Text>
       </View>
     );
   };
 
-  // Shared between the mobile and wide-web layouts.
-  const header = (
-    <View style={styles.headerContainer}>
-      <View style={styles.searchBar}>
-        <Ionicons
-          name="search"
-          size={20}
-          color="#888"
-          style={{ marginLeft: 10 }}
-        />
-        <TextInput
-          placeholder="Search Activities or People"
-          placeholderTextColor="#666"
-          style={styles.searchInput}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons
-              name="close-circle"
-              size={18}
-              color="#666"
-              style={{ marginRight: 10 }}
-            />
-          </TouchableOpacity>
-        )}
+  // Shared between the mobile and wide-web layouts. The search bar and the
+  // filter row (date pills + category tabs) are grouped into one sticky
+  // block (index 0) — the filter row hides while actively searching, same
+  // as before, but now pins alongside the search bar instead of scrolling
+  // away with the list.
+  const stickyHeader = (
+    <View style={styles.stickyHeaderBg}>
+      <View style={styles.headerContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons
+            name="search"
+            size={20}
+            color="#888"
+            style={{ marginLeft: 10 }}
+          />
+          <TextInput
+            placeholder="Search Activities or People"
+            placeholderTextColor="#666"
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color="#666"
+                style={{ marginRight: 10 }}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.mapToggleBtn}
+          onPress={() => navigation.navigate('ExploreMap', { activities: filteredActivities })}
+        >
+          <Ionicons name="map-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.mapToggleText}>Map</Text>
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        style={styles.mapToggleBtn}
-        onPress={() => navigation.navigate('ExploreMap', { activities: filteredActivities })}
-      >
-        <Ionicons name="map-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-        <Text style={styles.mapToggleText}>Map</Text>
-      </TouchableOpacity>
+
+      {searchQuery.length === 0 && (
+        <View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.dateScrollContent}
+          >
+            {DATE_FILTERS.map(item => {
+              const isActive = activeDate === item;
+              return (
+                <TouchableOpacity
+                  key={item}
+                  onPress={() => setActiveDate(item)}
+                  style={[styles.datePill, isActive && styles.datePillActive]}
+                >
+                  <Text
+                    style={[styles.dateText, isActive && styles.dateTextActive]}
+                  >
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <View style={styles.categoryContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {MAIN_CATEGORIES.map(category => {
+                const isActive = activeCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    style={styles.categoryTab}
+                    onPress={() => setActiveCategory(category)}
+                  >
+                    {getTabIcon(category, isActive)}
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        isActive && styles.categoryTextActive
+                      ]}
+                    >
+                      {category}
+                    </Text>
+                    {isActive && <View style={styles.activeLine} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </View>
   );
 
@@ -364,12 +372,9 @@ const ExploreScreen = () => {
     <FlatList
       data={filteredActivities}
       keyExtractor={item => item.id.toString()}
-      ListHeaderComponent={ListHeader}
+      ListHeaderComponent={SearchResultsHeader}
       renderItem={({ item }) => <ActivityCard activity={item} />}
-      style={isWideWeb ? styles.webList : undefined}
-      // The browser's native scrollbar looked out of place next to the
-      // custom UI — hide it on web only; mobile keeps its default indicator.
-      showsVerticalScrollIndicator={!isWideWeb}
+      scrollEnabled={false}
       contentContainerStyle={{ paddingBottom: 100 }}
       ListEmptyComponent={
         <View style={styles.emptyContainer}>
@@ -394,10 +399,14 @@ const ExploreScreen = () => {
         <StatusBar barStyle="light-content" backgroundColor="#121212" />
         <View style={styles.webRow}>
           <View style={styles.webContent}>
-            <View style={styles.webCenter}>
-              {header}
+            <ScrollView
+              style={styles.webCenter}
+              showsVerticalScrollIndicator={false}
+              stickyHeaderIndices={[0]}
+            >
+              {stickyHeader}
               {list}
-            </View>
+            </ScrollView>
             <PostsRail />
           </View>
         </View>
@@ -408,8 +417,10 @@ const ExploreScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      {header}
-      {list}
+      <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
+        {stickyHeader}
+        {list}
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -441,15 +452,19 @@ const styles = StyleSheet.create({
     maxWidth: 680,
     overflow: 'hidden',
   },
-  webList: {
-    flex: 1,
+  // Opaque background for the sticky search-bar+filters block — without
+  // it, activity cards scrolling underneath would show through once pinned.
+  // paddingTop (rather than headerContainer's old marginTop) keeps that top
+  // inset covered by the same background once this block is pinned.
+  stickyHeaderBg: {
+    backgroundColor: '#121212',
+    paddingTop: 30,
   },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 10,
-    marginTop: 30,
     gap: 12
   },
   searchBar: {
