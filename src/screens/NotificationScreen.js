@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   RefreshControl,
   SafeAreaView,
   StatusBar,
@@ -16,6 +15,7 @@ import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 import ActivitiesRail from '../components/web/ActivitiesRail';
+import NotificationSkeleton from '../components/skeletons/NotificationSkeleton';
 
 // ── Icon + colour per notification type ────────────────────────────────────────
 const TYPE_CONFIG = {
@@ -141,9 +141,10 @@ const NotificationScreen = () => {
   // ── Render ───────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2CB9B0" />
-      </View>
+      <SafeAreaView style={styles.skeletonContainer}>
+        <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
+        <NotificationSkeleton />
+      </SafeAreaView>
     );
   }
 
@@ -261,12 +262,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0F0F0F',
-  },
+  skeletonContainer: { flex: 1, backgroundColor: '#0F0F0F' },
 
   // ── Header ────────────────────────────────────────────────────────────────
   header: {

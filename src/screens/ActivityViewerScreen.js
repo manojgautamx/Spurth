@@ -30,6 +30,7 @@ import { Share } from 'react-native';
 import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
 import WebSidebar from '../components/web/WebSidebar';
+import ActivityDetailSkeleton from '../components/skeletons/ActivityDetailSkeleton';
 
 const geocodeLocation = async (location) => {
   try {
@@ -183,10 +184,27 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   }, [activity?.participants]);
 
   // ── EARLY RETURN — safe, all hooks above ────────────────────────────────
+  // Mirrors the real (loaded) return's wide-web sidebar wrapping below —
+  // this screen sits outside MainTabNavigator (which is what normally
+  // supplies WebSidebar for tab screens), so without this the sidebar
+  // would just be missing for the whole time the skeleton is showing.
   if (!activity) {
     return (
-      <View style={[styles.container, { justifyContent: 'center' }]}>
-        <ActivityIndicator size="large" color="#E81F89" />
+      <View style={styles.container}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        {isWideWeb ? (
+          <View style={styles.webRow}>
+            <WebSidebar />
+            <View style={styles.webContent}>
+              <ScrollView style={styles.webCenter} showsVerticalScrollIndicator={false}>
+                <ActivityDetailSkeleton />
+              </ScrollView>
+              <PostsRail />
+            </View>
+          </View>
+        ) : (
+          <ActivityDetailSkeleton />
+        )}
       </View>
     );
   }
