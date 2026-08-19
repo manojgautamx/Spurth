@@ -9,6 +9,7 @@ import manropeMedium from '../src/assets/fonts/Manrope-Medium.ttf';
 import manropeSemiBold from '../src/assets/fonts/Manrope-SemiBold.ttf';
 import manropeBold from '../src/assets/fonts/Manrope-Bold.ttf';
 import manropeExtraBold from '../src/assets/fonts/Manrope-ExtraBold.ttf';
+import funkYeah from './Funk Yeah.otf';
 
 import ionicons from 'react-native-vector-icons/Fonts/Ionicons.ttf';
 import materialCommunityIcons from 'react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf';
@@ -23,6 +24,7 @@ const FONT_FACES = [
   ['Manrope-SemiBold', manropeSemiBold],
   ['Manrope-Bold', manropeBold],
   ['Manrope-ExtraBold', manropeExtraBold],
+  ['FunkYeah', funkYeah],
   ['Ionicons', ionicons],
   ['MaterialCommunityIcons', materialCommunityIcons],
   ['Feather', feather],
@@ -33,7 +35,7 @@ const style = document.createElement('style');
 style.textContent = FONT_FACES.map(([family, url]) => `
   @font-face {
     font-family: '${family}';
-    src: url('${url}') format('truetype');
+    src: url('${url}') format('${url.endsWith('.otf') ? 'opentype' : 'truetype'}');
     font-display: swap;
   }
 `).join('\n');
