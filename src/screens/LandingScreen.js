@@ -2,13 +2,15 @@
 // initialRouteName). Native builds skip straight to WelcomeScreen; a pitch
 // page doesn't make sense inside an already-installed app.
 //
-// Implements the "Spurth Landing.dc.html" design pulled from claude.ai/design
-// (project 1abe1348-be64-4b4c-bb5e-36bd5820242e). That file's <image-slot>
-// placeholders were never filled with real photos (.image-slots.state.json
-// was empty), so images here come from a small pool of verified-working
-// Unsplash photo IDs (same CDN host pattern as src/constants/heroImages.js),
-// picked per keyword via a deterministic hash — source.unsplash.com's old
-// keyword-search redirect now 503s (deprecated in 2023).
+// Implements "Spurth Landing v2.dc.html" from the claude.ai/design project
+// (1abe1348-be64-4b4c-bb5e-36bd5820242e) — a full redesign over the previous
+// version (radial-gradient hero with a floating mockup cluster, alternating
+// "feature band" panels replacing the old 3-step section, a Find/Join/Do/
+// Share marquee, and a centered "scroll end" CTA). Two deliberate deviations
+// from the source: the giant faded "Spurth" wordmark behind the footer is
+// dropped per explicit request, and <image-slot> placeholders (never filled
+// with real photos in the design project — .image-slots.state.json was
+// empty) are backed by a small pool of verified-working Unsplash photo IDs.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ScrollView, Animated, Easing } from 'react-native';
 import Svg, { Rect, Path, Circle, G } from 'react-native-svg';
@@ -17,18 +19,22 @@ import LinearGradient from 'react-native-linear-gradient';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 
-// Web-only display font for headings — mirrors the design source's
-// h1/h2 rule (font-family: 'Jeffesta','Manrope'; text-transform: uppercase),
+// Web-only display font used for every h1/h2/h3-scoped title in the design
+// source (font-family: 'Jeffesta','Manrope'; text-transform: uppercase),
 // registered in web/fonts.js since it's only linked for the web build.
-const TITLE_FONT = 'FunkYeah';
+const TITLE_FONT = 'Jeffesta';
 
 const ACCENT = '#6C5CE7';
-const BG = '#0A0A0C';
-const SURFACE = '#121216';
-const RAISE = '#17171D';
-const RAISE2 = '#0E0E12';
+const DEEP = '#13102B';
+const BG = '#08080B';
+const PANEL = '#121218';
+const RAISE = '#191922';
+const BAND = '#14122E';
+const BAND_CARD = '#0C0A1C';
+const BAND_ROW = '#15132B';
 const LINE = 'rgba(255,255,255,0.09)';
 const MUTE = '#8C8C97';
+const LAVENDER = '#B7ADFF';
 
 const UNSPLASH_POOL = [
   '1517649763962-0c623066013b', '1461896836934-ffe607ba8211', '1552674605-db6ffd4facb5',
@@ -47,15 +53,10 @@ const unsplash = (keywords, w = 800, h = 600) => {
   return `https://images.unsplash.com/photo-${id}?w=${w}&h=${h}&fit=crop&q=80`;
 };
 
-const TICKER_ITEMS = [
-  'Bouldering · Baneshwor', 'Sunday 6 a-side', 'Valorant 5-stack', 'Pottery, beginners',
-  'Sunrise hike to Shivapuri', 'Open mic, Thursday', 'Chess in the park', 'Beginner swim laps',
-];
-
-const EXPLORE_MOCK = [
-  { cat: 'Sports', dist: '1.2 km', title: 'Sunset bouldering session', going: '6 going · Today 5:30 PM', avatars: 3, img: unsplash('climbing,gym', 300, 260) },
-  { cat: 'Sports', dist: '3.4 km', title: 'Futsal, 2 spots left', going: '8 going · Tomorrow 8 PM', avatars: 2, img: unsplash('night,football', 300, 260) },
-  { cat: 'Arts', dist: '0.8 km', title: 'Film photo walk, old town', going: '11 going · Sat 7 AM', avatars: 3, img: unsplash('street,photography', 300, 260) },
+const HERO_MOCK = [
+  { cat: 'Sports', dist: '1.2 km', title: 'Sunset bouldering session', going: '6 going · Today 5:30 PM', img: unsplash('climbing,gym', 300, 260) },
+  { cat: 'Sports', dist: '3.4 km', title: 'Futsal, 2 spots left', going: '8 going · Tomorrow 8 PM', img: unsplash('night,football', 300, 260) },
+  { cat: 'Arts', dist: '0.8 km', title: 'Film photo walk, old town', going: '11 going · Sat 7 AM', img: unsplash('street,photography', 300, 260) },
 ];
 
 const CATEGORIES = {
@@ -67,10 +68,12 @@ const CATEGORIES = {
   tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: unsplash('hackathon,coding', 900, 400) },
 };
 
+const MARQUEE_ITEMS = ['Find', 'Join', 'Do', 'Share'];
+
 const FAQS = [
-  { q: 'Is Spurth free to use?', a: "Discovering, joining and creating activities is free. Some hosts charge for their own costs — venue, gear, entry — and that's shown on the activity before you join." },
+  { q: 'Is Spurth free to use?', a: "Discovering, joining and creating activities is free. Some hosts charge for their own costs — venue, gear, entry — and that's shown before you join." },
   { q: 'Do I have to know someone to join?', a: "No. Most people arrive on their own. You can see who else is going and what they're into before you commit." },
-  { q: 'Is my exact location shared?', a: 'No. Spurth uses an approximate area to sort activities by distance. Precise meeting points are only visible to people who have joined.' },
+  { q: 'Is my exact location shared?', a: 'No. Spurth uses an approximate area to sort by distance. Precise meeting points are only visible to people who have joined.' },
   { q: 'What are Experiences?', a: 'Posts made after an activity — photos and a few words, linked back to the activity they came from, so the next person can find it and join.' },
 ];
 
@@ -81,9 +84,24 @@ function Section({ children, style }) {
 function InitialsAvatar({ text, size = 28, bg = '#2A2A33', color = '#ccc', style }) {
   return (
     <View style={[{ width: size, height: size, borderRadius: 99, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }, style]}>
-      <Text style={{ color, fontSize: size * 0.36, fontFamily: Fonts.bold }}>{text}</Text>
+      <Text style={{ color, fontSize: size * 0.36, fontFamily: Fonts.extrabold }}>{text}</Text>
     </View>
   );
+}
+
+function Float({ children, amount = 10, duration = 9000, style }) {
+  const y = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(y, { toValue: -amount, duration: duration / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(y, { toValue: 0, duration: duration / 2, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  return <Animated.View style={[style, { transform: [{ translateY: y }] }]}>{children}</Animated.View>;
 }
 
 function CategoryCard({ item, style, big }) {
@@ -91,20 +109,20 @@ function CategoryCard({ item, style, big }) {
     <View style={[styles.catCard, style]}>
       <Image source={{ uri: item.img }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
       <LinearGradient
-        colors={['rgba(6,6,8,0.05)', 'rgba(6,6,8,0.88)']}
+        colors={['rgba(6,6,9,0.05)', 'rgba(6,6,9,0.9)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFillObject}
       />
       <View style={styles.catCardLabel}>
-        <Text style={[styles.catCardTitle, big && { fontSize: 34 }]}>{item.label}</Text>
+        <Text style={[styles.catCardTitle, big && { fontSize: 38 }]}>{item.label}</Text>
         {item.sub ? <Text style={styles.catCardSub}>{item.sub}</Text> : null}
       </View>
     </View>
   );
 }
 
-function Ticker() {
+function Marquee() {
   const anim = useRef(new Animated.Value(0)).current;
   const [setW, setSetW] = useState(0);
 
@@ -112,25 +130,25 @@ function Ticker() {
     if (!setW) return;
     anim.setValue(0);
     const loop = Animated.loop(
-      Animated.timing(anim, { toValue: -setW, duration: 38000, easing: Easing.linear, useNativeDriver: true })
+      Animated.timing(anim, { toValue: -setW, duration: 30000, easing: Easing.linear, useNativeDriver: true })
     );
     loop.start();
     return () => loop.stop();
   }, [setW]);
 
   const row = (measure) => (
-    <View style={styles.tickerRow} onLayout={measure ? (e) => setSetW(e.nativeEvent.layout.width) : undefined}>
-      {TICKER_ITEMS.map((t, i) => (
+    <View style={styles.marqueeRow} onLayout={measure ? (e) => setSetW(e.nativeEvent.layout.width) : undefined}>
+      {MARQUEE_ITEMS.map((t, i) => (
         <React.Fragment key={i}>
-          <Text style={styles.tickerText}>{t}</Text>
-          <Text style={styles.tickerSlash}>/</Text>
+          <Text style={styles.marqueeText}>{t}</Text>
+          <View style={styles.marqueeDot} />
         </React.Fragment>
       ))}
     </View>
   );
 
   return (
-    <View style={styles.tickerWrap}>
+    <View style={styles.marqueeWrap}>
       <Animated.View style={{ flexDirection: 'row', transform: [{ translateX: anim }] }}>
         {row(true)}
         {row(false)}
@@ -141,7 +159,7 @@ function Ticker() {
 
 function MapPulse() {
   const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.55)).current;
+  const opacity = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
     const loop = Animated.loop(
       Animated.parallel([
@@ -152,8 +170,18 @@ function MapPulse() {
     loop.start();
     return () => loop.stop();
   }, []);
+  return <Animated.View style={[styles.mapPinPulse, { transform: [{ scale }], opacity }]} />;
+}
+
+function FaqItem({ item, open, onPress }) {
   return (
-    <Animated.View style={[styles.mapPinPulse, { transform: [{ scale }], opacity }]} />
+    <TouchableOpacity style={styles.faqItem} activeOpacity={0.8} onPress={onPress}>
+      <View style={styles.faqHeader}>
+        <Text style={styles.faqQ}>{item.q}</Text>
+        <Text style={styles.faqPlus}>{open ? '−' : '+'}</Text>
+      </View>
+      {open && <Text style={styles.faqA}>{item.a}</Text>}
+    </TouchableOpacity>
   );
 }
 
@@ -162,7 +190,6 @@ export default function LandingScreen({ navigation }) {
   const [openFaq, setOpenFaq] = useState(null);
 
   const goJoin = () => navigation.navigate('Welcome');
-  const goLogin = () => navigation.navigate('Login');
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.rootContent} showsVerticalScrollIndicator={false}>
@@ -170,72 +197,80 @@ export default function LandingScreen({ navigation }) {
       <View style={styles.nav}>
         <Section style={styles.navInner}>
           <View style={styles.navBrand}>
-            <View style={styles.navMark} />
+            <View style={styles.navMark}><View style={styles.navMarkDot} /></View>
             <Text style={styles.navBrandText}>Spurth</Text>
           </View>
           {isWide && (
             <View style={styles.navLinks}>
-              <Text style={styles.navLink}>Activities</Text>
               <Text style={styles.navLink}>How it works</Text>
+              <Text style={styles.navLink}>Activities</Text>
               <Text style={styles.navLink}>Experiences</Text>
               <Text style={styles.navLink}>Nearby</Text>
+              <Text style={styles.navLink}>FAQ</Text>
             </View>
           )}
-          <View style={styles.navActions}>
-            <TouchableOpacity onPress={goLogin} style={styles.navLoginBtn} activeOpacity={0.8}>
-              <Text style={styles.navLoginText}>Log in</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={goJoin} style={styles.navJoinBtn} activeOpacity={0.85}>
-              <Text style={styles.navJoinText}>Get the app</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={goJoin} style={styles.navCta} activeOpacity={0.85}>
+            <Text style={styles.navCtaText}>Open Spurth</Text>
+          </TouchableOpacity>
         </Section>
       </View>
 
       {/* HERO */}
-      <Section style={{ marginTop: isWide ? 72 : 40 }}>
-        <View style={[styles.heroTopRow, !isWide && { flexDirection: 'column' }]}>
-          <View style={{ flex: 1, maxWidth: isWide ? 660 : undefined }}>
-            <Text style={[styles.h1, { fontSize: isWide ? 72 : 42 }]}>Find something{'\n'}worth doing.</Text>
-            <Text style={styles.lead}>
-              Discover activities around you, meet people who are into the same things, and make experiences worth sharing.
-            </Text>
-            <View style={styles.heroCtaRow}>
-              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>Explore Activities</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={goJoin} style={styles.ctaOutline} activeOpacity={0.85}>
-                <Text style={styles.ctaOutlineText}>Create an Activity</Text>
-              </TouchableOpacity>
-            </View>
+      <View style={styles.heroBg}>
+        <LinearGradient
+          colors={[DEEP, '#100D26', BG]}
+          locations={[0, 0.46, 1]}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+        {isWide && (
+          <>
+            <Float amount={16} duration={9000} style={styles.heroBlobLeft} />
+            <Float amount={14} duration={11000} style={styles.heroBlobRight} />
+          </>
+        )}
+
+        <Section style={{ alignItems: 'center', paddingTop: isWide ? 88 : 56 }}>
+          <View style={styles.heroBadge}>
+            <View style={styles.heroBadgeDot} />
+            <Text style={styles.heroBadgeText}>412 activities happening this week</Text>
           </View>
+          <Text style={[styles.h1, { fontSize: isWide ? 88 : 44, textAlign: 'center' }]}>Find something{'\n'}worth doing.</Text>
+          <Text style={[styles.lead, { textAlign: 'center', maxWidth: 600 }]}>
+            Discover activities around you, meet people who are into the same things, and make experiences worth sharing.
+          </Text>
+          <View style={[styles.heroCtaRow, { justifyContent: 'center' }]}>
+            <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+              <Text style={styles.ctaFilledText}>Explore Activities</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={goJoin} style={styles.ctaOutline} activeOpacity={0.85}>
+              <Text style={styles.ctaOutlineText}>Create an Activity</Text>
+            </TouchableOpacity>
+          </View>
+        </Section>
 
+        {/* hero mockup cluster */}
+        <View style={[styles.heroCluster, { height: isWide ? 460 : undefined, marginTop: isWide ? 64 : 40 }]}>
           {isWide && (
-            <View style={styles.heroSideCol}>
-              <View style={styles.heroSideImg}>
-                <Image source={{ uri: unsplash('friends,bouldering,film', 580, 420) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
-              <View style={styles.heroAvatarRow}>
-                <View style={styles.avatarStack}>
-                  <InitialsAvatar text="AR" size={28} bg="#2A2A33" style={{ borderWidth: 2, borderColor: BG }} />
-                  <InitialsAvatar text="NK" size={28} bg="#33323F" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
-                  <InitialsAvatar text="+9" size={28} bg={ACCENT} color="#fff" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
-                </View>
-                <Text style={styles.heroAvatarCaption}>joined something{'\n'}in the last hour</Text>
-              </View>
-            </View>
+            <Float amount={12} duration={10000} style={styles.heroClusterLeft}>
+              <Image source={{ uri: unsplash('friends,bouldering,film', 460, 600) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </Float>
           )}
-        </View>
+          {isWide && (
+            <Float amount={14} duration={12000} style={styles.heroClusterRight}>
+              <Image source={{ uri: unsplash('laughing,mid,activity', 420, 540) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+            </Float>
+          )}
 
-        <View style={[styles.heroBottomRow, !isWide && { flexDirection: 'column' }]}>
-          <View style={styles.exploreMock}>
-            <View style={styles.exploreMockTopRow}>
+          <View style={[styles.heroCard, !isWide && { position: 'relative', width: '100%', left: 0, transform: [] }]}>
+            <View style={styles.heroCardTopRow}>
               <View style={styles.trafficDots}>
                 <View style={styles.trafficDot} /><View style={styles.trafficDot} /><View style={styles.trafficDot} />
               </View>
               <View style={styles.exploreSearchBar}>
                 <Ionicons name="search" size={13} color={MUTE} />
-                <Text style={styles.exploreSearchText}>Bouldering near Baneshwor</Text>
+                <Text style={styles.exploreSearchText}>Bouldering near me, tonight</Text>
               </View>
               <View style={styles.exploreBadge}><Text style={styles.exploreBadgeText}>Explore</Text></View>
             </View>
@@ -249,22 +284,15 @@ export default function LandingScreen({ navigation }) {
             </View>
 
             <View style={[styles.exploreCardsRow, !isWide && { flexDirection: 'column' }]}>
-              {EXPLORE_MOCK.map((c) => (
+              {HERO_MOCK.map((c) => (
                 <View key={c.title} style={styles.exploreCard}>
                   <View style={styles.exploreCardImg}>
                     <Image source={{ uri: c.img }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                   </View>
                   <View style={styles.exploreCardBody}>
-                    <Text style={styles.exploreCardCat}>{c.cat} · {c.dist}</Text>
+                    <Text style={styles.exploreCardCat}>{c.cat.toUpperCase()} · {c.dist.toUpperCase()}</Text>
                     <Text style={styles.exploreCardTitle}>{c.title}</Text>
-                    <View style={styles.exploreCardMetaRow}>
-                      <View style={styles.avatarStack}>
-                        {Array.from({ length: c.avatars }).map((_, i) => (
-                          <View key={i} style={[styles.exploreMiniAvatar, i > 0 && { marginLeft: -7 }, { zIndex: c.avatars - i }]} />
-                        ))}
-                      </View>
-                      <Text style={styles.exploreCardMetaText}>{c.going}</Text>
-                    </View>
+                    <Text style={styles.exploreCardMetaText}>{c.going}</Text>
                   </View>
                 </View>
               ))}
@@ -272,20 +300,120 @@ export default function LandingScreen({ navigation }) {
           </View>
 
           {isWide && (
-            <View style={styles.heroTallImg}>
-              <Image source={{ uri: unsplash('golden,hour,laughing', 340, 440) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-            </View>
+            <Float amount={8} duration={7000} style={styles.heroJoinedPill}>
+              <View style={styles.heroJoinedDot} />
+              <Text style={styles.heroJoinedText}>Nisha joined · 2 min ago</Text>
+            </Float>
           )}
         </View>
-      </Section>
+      </View>
 
-      <Ticker />
+      {/* FEATURE BANDS */}
+      <View style={styles.bandsWrap}>
+        <Section style={{ gap: isWide ? 60 : 40 }}>
+
+          {/* band 1 */}
+          <View style={[styles.band, !isWide && { flexDirection: 'column' }]}>
+            <View style={[styles.bandMockWrap, isWide && { flex: 1.1 }]}>
+              <View style={styles.bandCard}>
+                <View style={styles.bandCardHeader}>
+                  <Text style={styles.bandCardHeaderMute}>Within 2 km of you</Text>
+                  <Text style={styles.bandCardHeaderAccent}>Today</Text>
+                </View>
+                <View style={{ gap: 10 }}>
+                  <View style={styles.bandRow}>
+                    <View style={styles.bandRowThumb}><Image source={{ uri: unsplash('swimming,laps', 140, 140) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
+                    <View><Text style={styles.bandRowTitle}>Morning laps, Satdobato</Text><Text style={styles.bandRowMeta}>0.6 km · 6:30 AM · 4 going</Text></View>
+                  </View>
+                  <View style={styles.bandRow}>
+                    <View style={styles.bandRowThumb}><Image source={{ uri: unsplash('board,game,night', 140, 140) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
+                    <View><Text style={styles.bandRowTitle}>Board game night</Text><Text style={styles.bandRowMeta}>1.1 km · 7 PM · 9 going</Text></View>
+                  </View>
+                  <View style={[styles.bandRow, { opacity: 0.55 }]}>
+                    <View style={styles.bandRowThumb}><Image source={{ uri: unsplash('sketch,riverside', 140, 140) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
+                    <View><Text style={styles.bandRowTitle}>Sketch club, riverside</Text><Text style={styles.bandRowMeta}>1.8 km · Sun 4 PM</Text></View>
+                  </View>
+                </View>
+              </View>
+              {isWide && (
+                <Float amount={10} duration={8000} style={styles.bandFloatImg}>
+                  <Image source={{ uri: unsplash('walking,out,door', 300, 300) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                </Float>
+              )}
+            </View>
+            <View style={[styles.bandCopy, isWide && { flex: 0.9 }]}>
+              <Text style={[styles.h2, { fontSize: isWide ? 46 : 30 }]}>Something's on{'\n'}within walking{'\n'}distance</Text>
+              <Text style={styles.bandBody}>Spurth sorts by how far you'd actually have to go. Open it on a dead evening and there are nine things inside a twenty-minute walk.</Text>
+            </View>
+          </View>
+
+          {/* band 2 */}
+          <View style={[styles.band, !isWide && { flexDirection: 'column' }]}>
+            <View style={[styles.bandCopy, isWide && { flex: 0.9 }]}>
+              <Text style={[styles.h2, { fontSize: isWide ? 46 : 30 }]}>See who's{'\n'}going first</Text>
+              <Text style={styles.bandBody}>Faces, not usernames. Check who's turning up and what they're into before you commit — nobody walks into a cold room.</Text>
+            </View>
+            <View style={[styles.bandMockWrap, isWide && { flex: 1.1 }]}>
+              <View style={styles.bandCard}>
+                <View style={styles.bandHeroImg}><Image source={{ uri: unsplash('bouldering,group,photo', 500, 260) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
+                <View style={styles.bandJoinRow}>
+                  <View>
+                    <Text style={styles.bandEventTitle}>Sunset bouldering session</Text>
+                    <Text style={styles.bandRowMeta}>Hosted by Aayush · Sports · 1.2 km</Text>
+                  </View>
+                  <View style={styles.bandJoinBtn}><Text style={styles.bandJoinBtnText}>Join</Text></View>
+                </View>
+                <View style={styles.bandDivider} />
+                <Text style={styles.bandGoingLabel}>6 GOING</Text>
+                <View style={[styles.bandAttendeeGrid, !isWide && { flexDirection: 'column' }]}>
+                  <View style={styles.attendeeCell}><InitialsAvatar text="NK" size={32} bg="#2E2C42" /><View><Text style={styles.attendeeName}>Nisha K.</Text><Text style={styles.attendeeSub}>Climbs 3× a week</Text></View></View>
+                  <View style={styles.attendeeCell}><InitialsAvatar text="RB" size={32} bg="#3A3750" /><View><Text style={styles.attendeeName}>Rohit B.</Text><Text style={styles.attendeeSub}>New to bouldering</Text></View></View>
+                  <View style={styles.attendeeCell}><InitialsAvatar text="SM" size={32} bg="#46425F" /><View><Text style={styles.attendeeName}>Sneha M.</Text><Text style={styles.attendeeSub}>Also into trail runs</Text></View></View>
+                  <View style={styles.attendeeCell}><InitialsAvatar text="+3" size={32} bg={ACCENT} color="#fff" /><Text style={[styles.attendeeSub, { fontFamily: Fonts.semibold }]}>more going</Text></View>
+                </View>
+              </View>
+              {isWide && (
+                <Float amount={9} duration={9000} style={styles.bandFloatPill}>
+                  <Text style={styles.bandFloatPillText}>2 spots left</Text>
+                </Float>
+              )}
+            </View>
+          </View>
+
+          {/* band 3 */}
+          <View style={[styles.band, !isWide && { flexDirection: 'column' }]}>
+            <View style={[styles.bandMockWrap, isWide && { flex: 1.1 }]}>
+              <View style={styles.bandTallImg}>
+                <Image source={{ uri: unsplash('chalky,hands,climb,dusk', 640, 500) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              </View>
+              {isWide && (
+                <Float amount={8} duration={8500} style={styles.bandGoingCard}>
+                  <Text style={styles.bandGoingCardLabel}>YOU'RE GOING</Text>
+                  <Text style={styles.bandGoingCardTitle}>Today, 5:30 PM</Text>
+                  <Text style={styles.bandGoingCardSub}>Astro Wall, Jhamsikhel{'\n'}18 min walk</Text>
+                  <View style={styles.bandGoingCardBtnRow}>
+                    <View style={styles.bandGoingCardBtn}><Text style={styles.bandGoingCardBtnText}>Directions</Text></View>
+                    <View style={styles.bandGoingCardBtn}><Text style={styles.bandGoingCardBtnText}>Group chat</Text></View>
+                  </View>
+                </Float>
+              )}
+            </View>
+            <View style={[styles.bandCopy, isWide && { flex: 0.9 }]}>
+              <Text style={[styles.h2, { fontSize: isWide ? 46 : 30 }]}>Then you{'\n'}actually go</Text>
+              <Text style={styles.bandBody}>Directions, a group chat and a nudge before it starts. Everything you need between saying yes and turning up.</Text>
+            </View>
+          </View>
+
+        </Section>
+      </View>
+
+      <Marquee />
 
       {/* ACTIVITIES */}
       <Section id="activities" style={{ marginTop: isWide ? 120 : 80 }}>
         <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-          <Text style={[styles.h2, { fontSize: isWide ? 62 : 34 }]}>Whatever you're into.</Text>
-          <Text style={[styles.leadSmall, { maxWidth: 330, marginTop: isWide ? 0 : 12 }]}>
+          <Text style={[styles.h2, { fontSize: isWide ? 56 : 34 }]}>Whatever{'\n'}you're into</Text>
+          <Text style={[styles.leadSmall, { maxWidth: 340, marginTop: isWide ? 0 : 12 }]}>
             Seven worlds, one feed. Follow the ones you care about and Spurth keeps them close.
           </Text>
         </View>
@@ -293,22 +421,22 @@ export default function LandingScreen({ navigation }) {
         {isWide ? (
           <View style={{ gap: 14 }}>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <CategoryCard item={CATEGORIES.sports} big style={{ flex: 1, height: 414 }} />
+              <CategoryCard item={CATEGORIES.sports} big style={{ flex: 1, height: 406 }} />
               <View style={{ flex: 1, gap: 14 }}>
-                <CategoryCard item={CATEGORIES.adventure} style={{ height: 200 }} />
+                <CategoryCard item={CATEGORIES.adventure} style={{ height: 196 }} />
                 <View style={{ flexDirection: 'row', gap: 14 }}>
-                  <CategoryCard item={CATEGORIES.gaming} style={{ flex: 1, height: 200 }} />
-                  <CategoryCard item={CATEGORIES.arts} style={{ flex: 1, height: 200 }} />
+                  <CategoryCard item={CATEGORIES.gaming} style={{ flex: 1, height: 196 }} />
+                  <CategoryCard item={CATEGORIES.arts} style={{ flex: 1, height: 196 }} />
                 </View>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <View style={[styles.educationCard, { flex: 1, height: 200 }]}>
+              <View style={[styles.educationCard, { flex: 1, height: 196 }]}>
                 <Text style={styles.educationTitle}>Education</Text>
                 <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
               </View>
-              <CategoryCard item={CATEGORIES.lifestyle} style={{ flex: 1, height: 200 }} />
-              <CategoryCard item={CATEGORIES.tech} style={{ flex: 2, height: 200 }} />
+              <CategoryCard item={CATEGORIES.lifestyle} style={{ flex: 1, height: 196 }} />
+              <CategoryCard item={CATEGORIES.tech} style={{ flex: 2, height: 196 }} />
             </View>
           </View>
         ) : (
@@ -327,131 +455,11 @@ export default function LandingScreen({ navigation }) {
         )}
       </Section>
 
-      {/* STORY */}
-      <Section id="story" style={{ marginTop: isWide ? 140 : 80 }}>
-        <View style={{ alignItems: 'center', marginBottom: 44 }}>
-          <Text style={[styles.h2, { fontSize: isWide ? 62 : 32, textAlign: 'center' }]}>Find. Join. Experience.</Text>
-          <Text style={[styles.leadSmall, { textAlign: 'center', marginTop: 14, maxWidth: 380 }]}>
-            Three taps between an empty evening and a story worth telling.
-          </Text>
-        </View>
-
-        <View style={[styles.storyRow, !isWide && { flexDirection: 'column' }]}>
-          {/* STEP 1 — nearby list */}
-          <View style={[styles.storyCol, isWide && { width: '31.5%' }]}>
-            <View style={styles.phoneCard}>
-              <View style={styles.phoneScreen}>
-                <View style={styles.phoneStatusRow}>
-                  <Text style={styles.phoneStatusText}>9:41</Text>
-                  <Text style={styles.phoneStatusText}>Spurth</Text>
-                </View>
-                <View style={styles.phoneSearchPill}><Text style={styles.phoneSearchText}>Within 2 km of you</Text></View>
-                <View style={{ gap: 10 }}>
-                  <View style={styles.phoneListRow}>
-                    <View style={styles.phoneListThumb}><Image source={{ uri: unsplash('swimming,laps', 120, 120) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.phoneListTitle}>Morning laps, Satdobato</Text>
-                      <Text style={styles.phoneListMeta}>0.6 km · 6:30 AM · 4 going</Text>
-                    </View>
-                  </View>
-                  <View style={styles.phoneListRow}>
-                    <View style={styles.phoneListThumb}><Image source={{ uri: unsplash('board,game,night', 120, 120) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.phoneListTitle}>Board game night</Text>
-                      <Text style={styles.phoneListMeta}>1.1 km · 7 PM · 9 going</Text>
-                    </View>
-                  </View>
-                  <View style={[styles.phoneListRow, { opacity: 0.55 }]}>
-                    <View style={styles.phoneListThumb}><Image source={{ uri: unsplash('sketch,riverside', 120, 120) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.phoneListTitle}>Sketch club, riverside</Text>
-                      <Text style={styles.phoneListMeta}>1.8 km · Sun 4 PM</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <View style={styles.storyCaptionRow}>
-              <Text style={styles.storyNum}>01</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.storyTitle}>Find something nearby</Text>
-                <Text style={styles.storyBody}>Open the app, see what's actually happening within walking distance today.</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* STEP 2 — activity detail */}
-          <View style={[styles.storyCol, isWide && { width: '31.5%' }]}>
-            <View style={styles.phoneCard}>
-              <View style={styles.phoneScreen}>
-                <View style={styles.phoneHeroImg}><Image source={{ uri: unsplash('bouldering,group,photo', 500, 240) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" /></View>
-                <Text style={styles.phoneEventTitle}>Sunset bouldering session</Text>
-                <Text style={styles.phoneEventSub}>Hosted by Aayush · Sports</Text>
-                <View style={styles.phoneDivider} />
-                <Text style={styles.phoneGoingLabel}>6 GOING</Text>
-                <View style={{ gap: 9 }}>
-                  <View style={styles.attendeeRow}>
-                    <InitialsAvatar text="NK" size={30} bg="#2E2E38" />
-                    <View><Text style={styles.attendeeName}>Nisha K.</Text><Text style={styles.attendeeSub}>Climbs 3× a week</Text></View>
-                  </View>
-                  <View style={styles.attendeeRow}>
-                    <InitialsAvatar text="RB" size={30} bg="#3A3947" />
-                    <View><Text style={styles.attendeeName}>Rohit B.</Text><Text style={styles.attendeeSub}>New to bouldering</Text></View>
-                  </View>
-                  <View style={styles.attendeeRow}>
-                    <InitialsAvatar text="SM" size={30} bg="#46445A" />
-                    <View><Text style={styles.attendeeName}>Sneha M.</Text><Text style={styles.attendeeSub}>Also into trail runs</Text></View>
-                  </View>
-                </View>
-                <View style={styles.phoneJoinBtn}><Text style={styles.phoneJoinBtnText}>Join activity</Text></View>
-              </View>
-            </View>
-            <View style={styles.storyCaptionRow}>
-              <Text style={styles.storyNum}>02</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.storyTitle}>Find your people</Text>
-                <Text style={styles.storyBody}>See who's going and what they're into before you commit. No cold rooms.</Text>
-              </View>
-            </View>
-          </View>
-
-          {/* STEP 3 — going + share */}
-          <View style={[styles.storyCol, isWide && { width: '31.5%' }]}>
-            <View style={styles.phoneCard}>
-              <View style={[styles.phoneScreen, { flexDirection: 'column' }]}>
-                <View style={styles.goingChip}><Text style={styles.goingChipText}>You're going</Text></View>
-                <View style={styles.eventBox}>
-                  <Text style={styles.eventBoxTitle}>Today, 5:30 PM</Text>
-                  <Text style={styles.eventBoxSub}>Astro Wall, Jhamsikhel{'\n'}1.2 km · 18 min walk</Text>
-                  <View style={styles.eventBoxBtnRow}>
-                    <View style={styles.eventBoxBtn}><Text style={styles.eventBoxBtnText}>Directions</Text></View>
-                    <View style={styles.eventBoxBtn}><Text style={styles.eventBoxBtnText}>Group chat</Text></View>
-                  </View>
-                </View>
-                <View style={styles.phoneFlexImg}>
-                  <Image source={{ uri: unsplash('chalky,hands,climb', 400, 200) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-                </View>
-                <View style={styles.shareBtn}><Text style={styles.shareBtnText}>Share the experience</Text></View>
-              </View>
-            </View>
-            <View style={styles.storyCaptionRow}>
-              <Text style={styles.storyNum}>03</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.storyTitle}>Make it happen</Text>
-                <Text style={styles.storyBody}>Show up, do the thing, then post it back so the next person finds it.</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      </Section>
-
       {/* EXPERIENCES */}
-      <View id="experiences" style={[styles.expBand, { marginTop: isWide ? 140 : 80 }]}>
+      <View id="experiences" style={[styles.expBand, { marginTop: isWide ? 130 : 80 }]}>
         <Section>
           <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-            <Text style={[styles.h2, { fontSize: isWide ? 46 : 30, maxWidth: 640 }]}>
-              Every experience starts{isWide ? '\n' : ' '}with an activity.
-            </Text>
+            <Text style={[styles.h2, { fontSize: isWide ? 50 : 30, maxWidth: 700 }]}>Every experience starts with an activity</Text>
             <TouchableOpacity onPress={goJoin} style={styles.ctaOutlineLight}>
               <Text style={styles.ctaOutlineLightText}>See the feed</Text>
             </TouchableOpacity>
@@ -461,22 +469,19 @@ export default function LandingScreen({ navigation }) {
             {/* Column 1 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
               <View style={[styles.expCard, { transform: [{ rotate: '1.2deg' }] }]}>
-                <View style={styles.expImageWrap}>
+                <View style={[styles.expImageWrap, { height: 224 }]}>
                   <Image source={{ uri: unsplash('sweaty,group,futsal', 500, 460) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 </View>
-                <View style={{ padding: 15 }}>
+                <View style={{ padding: 16 }}>
                   <View style={styles.expHeader}>
                     <InitialsAvatar text="AR" size={28} bg="#33323F" />
                     <Text style={styles.expUser}>Aarav R. <Text style={styles.expUserTime}>· 2h</Text></Text>
                   </View>
                   <Text style={styles.expQuote}>"Turned up alone to a 6 a-side and left with a WhatsApp group of nine."</Text>
-                  <View style={styles.expFooter}>
-                    <Ionicons name="heart" size={12} color={ACCENT} />
-                    <Text style={styles.expFooterText}>214 · linked to <Text style={{ color: '#DEDEE4', fontFamily: Fonts.semibold }}>Sunday 6 a-side</Text></Text>
-                  </View>
+                  <Text style={styles.expFooterText}><Text style={{ color: LAVENDER, fontFamily: Fonts.extrabold }}>♥ 214</Text> · Sunday 6 a-side</Text>
                 </View>
               </View>
-              <View style={[styles.expPhotoOnly, { height: 180, transform: [{ rotate: '-1.6deg' }] }]}>
+              <View style={[styles.expPhotoOnly, { height: 176, transform: [{ rotate: '-1.6deg' }] }]}>
                 <Image source={{ uri: unsplash('bus,window,travel', 500, 380) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
             </View>
@@ -486,14 +491,12 @@ export default function LandingScreen({ navigation }) {
               <View style={[styles.expHighlightCard, { transform: [{ rotate: '-1.4deg' }] }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="PL" size={28} bg="rgba(20,20,25,0.1)" color="#141419" />
-                  <Text style={[styles.expUser, { color: '#141419' }]}>Prisha L. <Text style={[styles.expUserTime, { color: 'rgba(20,20,25,0.55)' }]}>· yesterday</Text></Text>
+                  <Text style={[styles.expUser, { color: '#141419' }]}>Prisha L. <Text style={[styles.expUserTime, { color: '#75757F' }]}>· yesterday</Text></Text>
                 </View>
                 <Text style={styles.expHighlightQuote}>"I moved here in March and knew nobody. Fourteen activities later my weekends are full."</Text>
-                <View style={[styles.expFooter, { borderTopWidth: 0, marginTop: 16, paddingTop: 0 }]}>
-                  <Text style={[styles.expFooterText, { color: ACCENT, fontFamily: Fonts.semibold }]}>♥ 512 · Pottery, beginners</Text>
-                </View>
+                <Text style={[styles.expFooterText, { color: ACCENT, fontFamily: Fonts.extrabold, marginTop: 16 }]}>♥ 512 · Pottery, beginners</Text>
               </View>
-              <View style={[styles.expPhotoOnly, { height: 300, transform: [{ rotate: '1.1deg' }] }]}>
+              <View style={[styles.expPhotoOnly, { height: 290, transform: [{ rotate: '1.1deg' }] }]}>
                 <Image source={{ uri: unsplash('pottery,hands,clay', 500, 620) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
               <View style={[styles.expCard, { transform: [{ rotate: '-0.9deg' }], padding: 18 }]}>
@@ -502,13 +505,13 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Kiran T. <Text style={styles.expUserTime}>· 3d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Hosted a chess table in the park expecting two people. Sixteen showed up."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 189 · Chess in the park</Text>
+                <Text style={[styles.expFooterText, { marginTop: 12 }]}><Text style={{ color: LAVENDER, fontFamily: Fonts.extrabold }}>♥ 189</Text> · Chess in the park</Text>
               </View>
             </View>
 
             {/* Column 3 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
-              <View style={[styles.expPhotoOnly, { height: 320, transform: [{ rotate: '-1.2deg' }] }]}>
+              <View style={[styles.expPhotoOnly, { height: 310, transform: [{ rotate: '-1.2deg' }] }]}>
                 <Image source={{ uri: unsplash('hike,summit,backlit', 500, 660) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 <View style={styles.expPhotoOverlay}>
                   <Text style={styles.expPhotoOverlayTitle}>Sunrise hike to Shivapuri</Text>
@@ -521,16 +524,16 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Sneha M. <Text style={styles.expUserTime}>· 5d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Left the house at 4 a.m. with five strangers. Watched the valley wake up."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 331 · Sunrise hike to Shivapuri</Text>
+                <Text style={[styles.expFooterText, { marginTop: 12 }]}><Text style={{ color: LAVENDER, fontFamily: Fonts.extrabold }}>♥ 331</Text> · Sunrise hike to Shivapuri</Text>
               </View>
-              <View style={[styles.expPhotoOnly, { height: 170, transform: [{ rotate: '1.5deg' }] }]}>
+              <View style={[styles.expPhotoOnly, { height: 166, transform: [{ rotate: '1.5deg' }] }]}>
                 <Image source={{ uri: unsplash('tea,break,conversation', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
             </View>
 
             {/* Column 4 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 52 }]}>
-              <View style={[styles.expPhotoOnly, { height: 260, transform: [{ rotate: '-1.1deg' }] }]}>
+              <View style={[styles.expPhotoOnly, { height: 252, transform: [{ rotate: '1.5deg' }] }]}>
                 <Image source={{ uri: unsplash('screen,lit,gaming,night', 500, 520) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
               <View style={[styles.expCard, { transform: [{ rotate: '-1.4deg' }], padding: 18 }]}>
@@ -539,34 +542,34 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Dev J. <Text style={styles.expUserTime}>· 1w</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Found a 5-stack that actually communicates. We've played every Friday since."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 96 · Valorant 5-stack</Text>
+                <Text style={[styles.expFooterText, { marginTop: 12 }]}><Text style={{ color: LAVENDER, fontFamily: Fonts.extrabold }}>♥ 96</Text> · Valorant 5-stack</Text>
               </View>
             </View>
           </View>
         </Section>
       </View>
 
-      {/* BRAND STATEMENT */}
-      <View style={[styles.statement, { marginTop: isWide ? 140 : 80, height: isWide ? 460 : 320 }]}>
+      {/* STATEMENT */}
+      <View style={[styles.statement, { marginTop: isWide ? 0 : 0, height: isWide ? 520 : 320 }]}>
         <Image source={{ uri: unsplash('group,walking,dusk', 1400, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
         <LinearGradient
-          colors={['rgba(8,8,10,0.92)', 'rgba(8,8,10,0.3)']}
+          colors={['rgba(8,8,11,0.92)', 'rgba(8,8,11,0.3)']}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFillObject}
         />
         <View style={styles.statementInner}>
-          <Text style={[styles.statementText, { fontSize: isWide ? 64 : 34 }]}>
-            Less scrolling.{'\n'}<Text style={{ color: ACCENT }}>More doing.</Text>
+          <Text style={[styles.statementText, { fontSize: isWide ? 78 : 36 }]}>
+            Less scrolling.{'\n'}<Text style={{ color: LAVENDER }}>More doing.</Text>
           </Text>
         </View>
       </View>
 
       {/* NEARBY */}
-      <Section id="nearby" style={{ marginTop: isWide ? 140 : 80 }}>
+      <Section id="nearby" style={{ marginTop: isWide ? 120 : 80 }}>
         <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start' }]}>
           <View style={{ maxWidth: 520 }}>
-            <Text style={[styles.h2, { fontSize: isWide ? 58 : 30 }]}>Something's probably happening near you.</Text>
+            <Text style={[styles.h2, { fontSize: isWide ? 50 : 30 }]}>Something's probably happening near you</Text>
             <Text style={[styles.leadSmall, { marginTop: 14 }]}>Nine activities inside a twenty-minute walk, right now.</Text>
           </View>
           <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, !isWide && { marginTop: 18 }]}>
@@ -576,21 +579,21 @@ export default function LandingScreen({ navigation }) {
 
         <View style={[styles.mapBox, { height: isWide ? 560 : 340 }]}>
           <Svg width="100%" height="100%" viewBox="0 0 1200 560" preserveAspectRatio="none" style={StyleSheet.absoluteFillObject}>
-            <Rect width="1200" height="560" fill="#0C0C10" />
-            <G stroke="#1B1B22" strokeWidth="1">
+            <Rect width="1200" height="560" fill="#0B0B14" />
+            <G stroke="#1A1A26" strokeWidth="1">
               <Path d="M0 90H1200M0 210H1200M0 330H1200M0 450H1200" />
               <Path d="M120 0V560M300 0V560M480 0V560M660 0V560M840 0V560M1020 0V560" />
             </G>
-            <G stroke="#23232C" strokeWidth="7" strokeLinecap="round" fill="none">
+            <G stroke="#242433" strokeWidth="8" strokeLinecap="round" fill="none">
               <Path d="M-20 300 Q 280 250 520 320 T 1220 260" />
               <Path d="M400 -20 Q 460 200 380 380 T 460 580" />
               <Path d="M760 -20 L 820 560" />
               <Path d="M0 470 L 1200 430" />
             </G>
-            <Path d="M60 60 L 260 40 L 300 170 L 90 200 Z" fill="#12131A" stroke="#1F2029" />
-            <Path d="M900 340 L 1140 320 L 1180 500 L 940 520 Z" fill="#101519" stroke="#1B2228" />
-            <Circle cx="600" cy="280" r="150" fill={ACCENT} fillOpacity={0.07} />
-            <Circle cx="600" cy="280" r="150" fill="none" stroke={ACCENT} strokeOpacity={0.22} strokeDasharray="6 8" />
+            <Path d="M60 60 L 260 40 L 300 170 L 90 200 Z" fill="#13131F" stroke="#1F1F2C" />
+            <Path d="M900 340 L 1140 320 L 1180 500 L 940 520 Z" fill="#101520" stroke="#1B2230" />
+            <Circle cx="600" cy="280" r="152" fill={ACCENT} fillOpacity={0.08} />
+            <Circle cx="600" cy="280" r="152" fill="none" stroke={ACCENT} strokeOpacity={0.25} strokeDasharray="6 9" />
           </Svg>
 
           <View style={styles.mapPin} pointerEvents="none">
@@ -600,28 +603,24 @@ export default function LandingScreen({ navigation }) {
 
           {isWide && (
             <>
-              <View style={[styles.mapChip, { left: '26%', top: '22%' }]}>
-                <View style={styles.mapChipIcon}><Text style={styles.mapChipIconText}>◎</Text></View>
-                <Text style={styles.mapChipText}>Futsal · 0.4 km</Text>
+              <View style={[styles.mapChip, styles.mapChipLight, { left: '25%', top: '21%' }]}>
+                <Text style={styles.mapChipTextDark}>Futsal · 0.4 km</Text>
               </View>
-              <View style={[styles.mapChip, { left: '63%', top: '16%' }]}>
-                <View style={styles.mapChipIcon}><Text style={styles.mapChipIconText}>◎</Text></View>
+              <View style={[styles.mapChip, { left: '48%', top: '12%' }]}>
                 <Text style={styles.mapChipText}>Open mic · 1.7 km</Text>
               </View>
-              <View style={[styles.mapChip, { left: '70%', top: '62%' }]}>
-                <View style={styles.mapChipIcon}><Text style={styles.mapChipIconText}>◎</Text></View>
+              <View style={[styles.mapChip, { left: '69%', top: '63%' }]}>
                 <Text style={styles.mapChipText}>Sketch club · 2.1 km</Text>
               </View>
-              <View style={[styles.mapChip, { left: '18%', top: '70%' }]}>
-                <View style={styles.mapChipIcon}><Text style={styles.mapChipIconText}>◎</Text></View>
+              <View style={[styles.mapChip, { left: '17%', top: '71%' }]}>
                 <Text style={styles.mapChipText}>Swim laps · 0.9 km</Text>
               </View>
 
               <View style={styles.mapCards}>
                 {[
-                  { dist: '0.4 km away', title: 'Floodlit futsal, 2 spots', going: '8 going', img: unsplash('futsal,night', 200, 200) },
-                  { dist: '0.9 km away', title: 'Beginner swim laps', going: '5 going', img: unsplash('swimming,pool', 200, 200) },
-                  { dist: '1.7 km away', title: 'Open mic, Thursday', going: '17 going', img: unsplash('concert,mic', 200, 200) },
+                  { dist: '0.4 KM AWAY', title: 'Floodlit futsal, 2 spots', going: '8 going · 8 PM', img: unsplash('futsal,night', 200, 200) },
+                  { dist: '0.9 KM AWAY', title: 'Beginner swim laps', going: '5 going · 6:30 AM', img: unsplash('swimming,pool', 200, 200) },
+                  { dist: '1.7 KM AWAY', title: 'Open mic, Thursday', going: '17 going · 7 PM', img: unsplash('concert,mic', 200, 200) },
                 ].map((c) => (
                   <View key={c.title} style={styles.mapCard}>
                     <View style={styles.mapCardThumb}>
@@ -647,25 +646,32 @@ export default function LandingScreen({ navigation }) {
       </Section>
 
       {/* CREATE */}
-      <Section id="create" style={{ marginTop: isWide ? 140 : 80 }}>
-        <View style={[styles.createRow, !isWide && { flexDirection: 'column' }]}>
-          <View style={[styles.createCollage, isWide && { width: '46%' }]}>
-            <View style={styles.createImgWide}>
-              <Image source={{ uri: unsplash('rallying,friends,phone', 900, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-            </View>
-            <View style={styles.createImgRow}>
-              <View style={styles.createImgHalf}>
-                <Image source={{ uri: unsplash('chalk,board,plans', 450, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+      <Section id="create" style={{ marginTop: isWide ? 120 : 80 }}>
+        <View style={[styles.createPanel, !isWide && { flexDirection: 'column' }]}>
+          <View style={[styles.createCollageWrap, isWide && { flex: 1 }]}>
+            <View style={styles.createGrid}>
+              <View style={styles.createImgWide}>
+                <Image source={{ uri: unsplash('rallying,friends,phone', 900, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
-              <View style={styles.createImgHalf}>
-                <Image source={{ uri: unsplash('small,group,arriving', 450, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+              <View style={styles.createImgRow}>
+                <View style={styles.createImgHalf}>
+                  <Image source={{ uri: unsplash('chalk,board,plans', 450, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                </View>
+                <View style={styles.createImgHalf}>
+                  <Image source={{ uri: unsplash('small,group,arriving', 450, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                </View>
               </View>
             </View>
+            {isWide && (
+              <Float amount={8} duration={8000} style={styles.createFloatPill}>
+                <Text style={styles.createFloatPillText}>Live in 40 seconds</Text>
+              </Float>
+            )}
           </View>
 
-          <View style={[styles.createCopy, isWide && { width: '46%' }]}>
-            <Text style={[styles.h2, { fontSize: isWide ? 42 : 30 }]}>Can't find your thing? Start it.</Text>
-            <Text style={[styles.leadSmall, { marginTop: 14, marginBottom: 26 }]}>
+          <View style={[styles.createCopy, isWide && { flex: 1 }]}>
+            <Text style={[styles.h2, { fontSize: isWide ? 46 : 30 }]}>Can't find your{'\n'}thing? Start it.</Text>
+            <Text style={[styles.leadSmall, { marginTop: 14, marginBottom: 26, maxWidth: 420 }]}>
               Four fields and it's live. Spurth puts it in front of people nearby who are into the same thing.
             </Text>
 
@@ -714,56 +720,37 @@ export default function LandingScreen({ navigation }) {
       </Section>
 
       {/* FAQ */}
-      <Section style={{ marginTop: isWide ? 140 : 80 }}>
-        <Text style={[styles.h2, { fontSize: isWide ? 54 : 30, marginBottom: 32 }]}>Questions</Text>
+      <Section id="faq" style={{ marginTop: isWide ? 120 : 80 }}>
+        <Text style={[styles.h2, { fontSize: isWide ? 48 : 30, marginBottom: 32 }]}>Questions</Text>
         <View style={[styles.faqGrid, !isWide && { flexDirection: 'column' }]}>
-          {FAQS.map((f, i) => {
-            const open = openFaq === i;
-            return (
-              <TouchableOpacity
-                key={f.q}
-                style={[styles.faqItem, isWide && { width: '48%' }]}
-                activeOpacity={0.8}
-                onPress={() => setOpenFaq(open ? null : i)}
-              >
-                <View style={styles.faqHeader}>
-                  <Text style={styles.faqQ}>{f.q}</Text>
-                  <Ionicons name={open ? 'remove' : 'add'} size={20} color={ACCENT} />
-                </View>
-                {open && <Text style={styles.faqA}>{f.a}</Text>}
-              </TouchableOpacity>
-            );
-          })}
+          {FAQS.map((f, i) => (
+            <View key={f.q} style={[isWide && { width: '48%' }]}>
+              <FaqItem item={f} open={openFaq === i} onPress={() => setOpenFaq(openFaq === i ? null : i)} />
+            </View>
+          ))}
         </View>
       </Section>
 
-      {/* FINAL CTA */}
-      <Section style={{ marginTop: isWide ? 140 : 80 }}>
-        <View style={[styles.finalBox, { height: isWide ? 600 : 340 }]}>
-          <Image source={{ uri: unsplash('faces,mid,laugh,group', 1200, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-          <LinearGradient
-            colors={['rgba(8,8,10,0.25)', 'rgba(8,8,10,0.95)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
-          />
-          <View style={styles.finalInner}>
-            <Text style={[styles.finalText, { fontSize: isWide ? 56 : 32 }]}>What are you{'\n'}doing next?</Text>
-            <Text style={styles.finalSub}>Find something. Find your people. Make it happen.</Text>
-            <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, { marginTop: 22, alignSelf: 'flex-start' }]} activeOpacity={0.85}>
-              <Text style={styles.ctaFilledText}>Explore Spurth</Text>
-            </TouchableOpacity>
-          </View>
+      {/* SCROLL END */}
+      <Section id="end" style={{ marginTop: isWide ? 150 : 90, alignItems: 'center' }}>
+        <Text style={[styles.h2, { fontSize: isWide ? 76 : 38, textAlign: 'center', maxWidth: 900 }]}>Nothing left to scroll.{'\n'}Go do something.</Text>
+        <Text style={[styles.lead, { textAlign: 'center', marginTop: 22 }]}>Find something. Find your people. Make it happen.</Text>
+        <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, { marginTop: 28 }]} activeOpacity={0.85}>
+          <Text style={styles.ctaFilledText}>Explore Spurth</Text>
+        </TouchableOpacity>
+        <View style={[styles.endImg, { height: isWide ? 420 : 260, marginTop: isWide ? 64 : 40 }]}>
+          <Image source={{ uri: unsplash('faces,mid,laugh,group', 1000, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
         </View>
       </Section>
 
-      {/* FOOTER */}
-      <Section style={{ marginTop: 100, paddingTop: 40, paddingBottom: 44, borderTopWidth: 1, borderTopColor: LINE }}>
+      {/* FOOTER — the design's giant faded "Spurth" wordmark behind this
+          block is intentionally omitted per request. */}
+      <Section style={{ marginTop: 100, paddingTop: 56, borderTopWidth: 1, borderTopColor: LINE }}>
         <View style={[styles.footerRow, !isWide && { flexDirection: 'column', gap: 28 }]}>
           <View style={{ maxWidth: 260 }}>
             <View style={styles.navBrand}>
-              <View style={styles.navMark} />
-              <Text style={styles.navBrandText}>Spurth</Text>
+              <View style={styles.navMark}><View style={styles.navMarkDot} /></View>
+              <Text style={[styles.navBrandText, { fontSize: 20 }]}>Spurth</Text>
             </View>
             <Text style={styles.footerTagline}>Find something worth doing.</Text>
           </View>
@@ -792,144 +779,138 @@ const styles = StyleSheet.create({
   section: { width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: 20 },
 
   // Nav
-  nav: { borderBottomWidth: 1, borderBottomColor: LINE, position: 'sticky', top: 0, zIndex: 40, backgroundColor: 'rgba(10,10,12,0.9)' },
-  navInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 32 },
-  navBrand: { flexDirection: 'row', alignItems: 'center', gap: 9, marginRight: 'auto' },
-  navMark: { width: 24, height: 24, borderRadius: 7, backgroundColor: ACCENT },
-  navBrandText: { color: '#fff', fontSize: 18, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
-  navLinks: { flexDirection: 'row', gap: 26 },
-  navLink: { color: MUTE, fontSize: 14, fontFamily: Fonts.medium },
-  navActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  navLoginBtn: { paddingVertical: 9, paddingHorizontal: 15, borderRadius: 999, borderWidth: 1, borderColor: LINE },
-  navLoginText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.semibold },
-  navJoinBtn: { paddingVertical: 9, paddingHorizontal: 17, borderRadius: 999, backgroundColor: ACCENT },
-  navJoinText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold },
+  nav: { position: 'sticky', top: 0, zIndex: 80, backgroundColor: 'rgba(8,8,11,0.86)' },
+  navInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 30 },
+  navBrand: { flexDirection: 'row', alignItems: 'center', gap: 10, marginRight: 'auto' },
+  navMark: { width: 28, height: 28, borderRadius: 10, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' },
+  navMarkDot: { width: 10, height: 10, borderRadius: 4, backgroundColor: '#fff' },
+  navBrandText: { color: '#fff', fontSize: 23, fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  navLinks: { flexDirection: 'row', gap: 24 },
+  navLink: { color: '#C9C9D2', fontSize: 14, fontFamily: Fonts.semibold },
+  navCta: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999, backgroundColor: '#F4F4F6' },
+  navCtaText: { color: '#111116', fontSize: 14, fontFamily: Fonts.extrabold },
 
   // Typography
   h1: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
   h2: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
-  lead: { color: MUTE, fontSize: 17, lineHeight: 26, fontFamily: Fonts.regular, marginTop: 22, maxWidth: 460 },
+  lead: { color: '#C2C0D6', fontSize: 17, lineHeight: 27, fontFamily: Fonts.regular, marginTop: 22, maxWidth: 460 },
   leadSmall: { color: MUTE, fontSize: 15, lineHeight: 23, fontFamily: Fonts.regular },
 
-  rowBetween: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, marginBottom: 36 },
+  rowBetween: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 24, marginBottom: 32 },
 
   // CTAs
   heroCtaRow: { flexDirection: 'row', gap: 12, marginTop: 30, flexWrap: 'wrap' },
-  ctaFilled: { backgroundColor: ACCENT, paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
-  ctaFilledText: { color: '#fff', fontSize: 15, fontFamily: Fonts.bold },
-  ctaOutline: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
-  ctaOutlineText: { color: '#fff', fontSize: 15, fontFamily: Fonts.semibold },
-  ctaOutlineLight: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 999 },
-  ctaOutlineLightText: { color: '#fff', fontSize: 14, fontFamily: Fonts.bold },
+  ctaFilled: { backgroundColor: '#F4F4F6', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 999 },
+  ctaFilledText: { color: '#111116', fontSize: 15, fontFamily: Fonts.extrabold },
+  ctaOutline: { backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 999 },
+  ctaOutlineText: { color: '#fff', fontSize: 15, fontFamily: Fonts.extrabold },
+  ctaOutlineLight: { backgroundColor: '#fff', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 999 },
+  ctaOutlineLightText: { color: '#111116', fontSize: 13.5, fontFamily: Fonts.extrabold },
 
-  // Hero layout
-  heroTopRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 56, marginBottom: 56 },
-  heroSideCol: { width: 290, gap: 14, paddingBottom: 8 },
-  heroSideImg: { height: 210, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
-  heroAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarStack: { flexDirection: 'row' },
-  heroAvatarCaption: { color: MUTE, fontSize: 13, lineHeight: 17, fontFamily: Fonts.regular },
-  heroBottomRow: { flexDirection: 'row', gap: 16, alignItems: 'stretch' },
-  heroTallImg: { width: 328, minHeight: 420, borderRadius: 28, overflow: 'hidden', backgroundColor: RAISE },
+  // Hero
+  heroBg: { position: 'relative', overflow: 'hidden', paddingBottom: 40 },
+  heroBlobLeft: { position: 'absolute', left: -90, top: 220, width: 220, height: 220, borderRadius: 999, backgroundColor: 'rgba(108,92,231,0.16)' },
+  heroBlobRight: { position: 'absolute', right: -70, top: 120, width: 150, height: 150, borderRadius: 999, backgroundColor: 'rgba(183,173,255,0.1)' },
+  heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingVertical: 7, paddingHorizontal: 15, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.07)', marginBottom: 24 },
+  heroBadgeDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: '#7BE3A8' },
+  heroBadgeText: { color: '#DCD9F5', fontSize: 13, fontFamily: Fonts.bold },
 
-  // Hero explore mockup
-  exploreMock: { flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 28, backgroundColor: SURFACE, padding: 18 },
-  exploreMockTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
+  heroCluster: { width: '100%', maxWidth: 1180, alignSelf: 'center', position: 'relative' },
+  heroClusterLeft: { position: 'absolute', left: 0, top: 24, width: 230, height: 300, borderRadius: 24, overflow: 'hidden', backgroundColor: RAISE },
+  heroClusterRight: { position: 'absolute', right: 0, top: 80, width: 210, height: 270, borderRadius: 24, overflow: 'hidden', backgroundColor: RAISE },
+  heroCard: { position: 'absolute', left: '50%', top: 0, transform: [{ translateX: -380 }], width: 760, maxWidth: '100%', borderRadius: 24, backgroundColor: '#101015', borderWidth: 1, borderColor: LINE, padding: 16 },
+  heroCardTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' },
   trafficDots: { flexDirection: 'row', gap: 6 },
   trafficDot: { width: 9, height: 9, borderRadius: 99, backgroundColor: '#2C2C34' },
-  exploreSearchBar: { flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: RAISE, borderWidth: 1, borderColor: LINE, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14 },
-  exploreSearchText: { color: MUTE, fontSize: 13.5, fontFamily: Fonts.regular },
-  exploreBadge: { paddingVertical: 9, paddingHorizontal: 14, borderRadius: 999, backgroundColor: ACCENT },
-  exploreBadgeText: { color: '#fff', fontSize: 13, fontFamily: Fonts.bold },
-  exploreFilterRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  explorePill: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: LINE },
-  explorePillActive: { backgroundColor: 'rgba(108,92,231,0.15)', borderColor: 'rgba(108,92,231,0.35)' },
-  explorePillText: { color: MUTE, fontSize: 12.5, fontFamily: Fonts.semibold },
-  explorePillTextActive: { color: '#B7ADFF' },
+  exploreSearchBar: { flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: RAISE, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 15 },
+  exploreSearchText: { color: MUTE, fontSize: 13, fontFamily: Fonts.regular },
+  exploreBadge: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 999, backgroundColor: ACCENT },
+  exploreBadgeText: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  exploreFilterRow: { flexDirection: 'row', gap: 7, marginBottom: 14, flexWrap: 'wrap' },
+  explorePill: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, backgroundColor: RAISE },
+  explorePillActive: { backgroundColor: 'rgba(108,92,231,0.2)' },
+  explorePillText: { color: MUTE, fontSize: 12, fontFamily: Fonts.bold },
+  explorePillTextActive: { color: '#C3BAFF' },
   exploreCardsRow: { flexDirection: 'row', gap: 12 },
-  exploreCard: { flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
-  exploreCardImg: { height: 100, backgroundColor: RAISE2 },
+  exploreCard: { flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: RAISE },
+  exploreCardImg: { height: 100, backgroundColor: '#0E0E15' },
   exploreCardBody: { padding: 12 },
-  exploreCardCat: { color: '#B7ADFF', fontSize: 10.5, fontFamily: Fonts.bold, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 5 },
-  exploreCardTitle: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold, lineHeight: 18 },
-  exploreCardMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 10 },
-  exploreMiniAvatar: { width: 18, height: 18, borderRadius: 99, backgroundColor: '#3A3947', borderWidth: 1.5, borderColor: RAISE },
-  exploreCardMetaText: { color: MUTE, fontSize: 11, fontFamily: Fonts.regular },
+  exploreCardCat: { color: LAVENDER, fontSize: 10, fontFamily: Fonts.extrabold, letterSpacing: 0.6 },
+  exploreCardTitle: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold, lineHeight: 18, marginTop: 6 },
+  exploreCardMetaText: { color: MUTE, fontSize: 11, fontFamily: Fonts.regular, marginTop: 8 },
+  heroJoinedPill: { position: 'absolute', left: '50%', marginLeft: 130, top: 366, flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 999, backgroundColor: '#F4F4F6' },
+  heroJoinedDot: { width: 20, height: 20, borderRadius: 99, backgroundColor: ACCENT },
+  heroJoinedText: { color: '#111116', fontSize: 13, fontFamily: Fonts.extrabold },
 
-  // Ticker
-  tickerWrap: { marginTop: 64, borderTopWidth: 1, borderBottomWidth: 1, borderColor: LINE, paddingVertical: 16, overflow: 'hidden' },
-  tickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  tickerText: { color: MUTE, fontSize: 13.5, fontFamily: Fonts.semibold },
-  tickerSlash: { color: ACCENT, fontSize: 13.5, fontFamily: Fonts.semibold, marginHorizontal: 8 },
+  // Feature bands
+  bandsWrap: { backgroundColor: '#0E0B22', paddingTop: 40, paddingBottom: 100, marginTop: -1 },
+  band: { flexDirection: 'row', borderRadius: 32, backgroundColor: BAND, padding: 40, gap: 40, alignItems: 'center' },
+  bandMockWrap: { position: 'relative' },
+  bandCopy: {},
+  bandBody: { color: '#B9B7CE', fontSize: 16, lineHeight: 26, fontFamily: Fonts.regular, marginTop: 18 },
+  bandCard: { borderRadius: 24, backgroundColor: BAND_CARD, padding: 16 },
+  bandCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  bandCardHeaderMute: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.extrabold },
+  bandCardHeaderAccent: { color: LAVENDER, fontSize: 11.5, fontFamily: Fonts.extrabold },
+  bandRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: BAND_ROW, borderRadius: 18, padding: 11 },
+  bandRowThumb: { width: 62, height: 62, borderRadius: 16, overflow: 'hidden', backgroundColor: RAISE },
+  bandRowTitle: { color: '#fff', fontSize: 14, fontFamily: Fonts.bold },
+  bandRowMeta: { color: MUTE, fontSize: 12, fontFamily: Fonts.regular, marginTop: 6 },
+  bandFloatImg: { position: 'absolute', right: -30, bottom: -24, width: 130, height: 130, borderRadius: 22, overflow: 'hidden' },
+  bandHeroImg: { height: 150, borderRadius: 18, overflow: 'hidden', marginBottom: 14, backgroundColor: RAISE },
+  bandJoinRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  bandEventTitle: { color: '#fff', fontSize: 16, fontFamily: Fonts.extrabold },
+  bandJoinBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999, backgroundColor: ACCENT },
+  bandJoinBtnText: { color: '#fff', fontSize: 13, fontFamily: Fonts.extrabold },
+  bandDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 16 },
+  bandGoingLabel: { color: MUTE, fontSize: 11, fontFamily: Fonts.extrabold, letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 12 },
+  bandAttendeeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  attendeeCell: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: BAND_ROW, borderRadius: 16, padding: 10, width: '48%' },
+  attendeeName: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.bold },
+  attendeeSub: { color: MUTE, fontSize: 10.5, fontFamily: Fonts.regular },
+  bandFloatPill: { position: 'absolute', left: -28, top: -22, paddingVertical: 11, paddingHorizontal: 16, borderRadius: 999, backgroundColor: '#F4F4F6' },
+  bandFloatPillText: { color: '#111116', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  bandTallImg: { borderRadius: 24, overflow: 'hidden', height: 310, backgroundColor: RAISE },
+  bandGoingCard: { position: 'absolute', right: -26, bottom: -22, width: 230, borderRadius: 20, backgroundColor: '#F4F4F6', padding: 16 },
+  bandGoingCardLabel: { color: ACCENT, fontSize: 10.5, fontFamily: Fonts.extrabold, letterSpacing: 0.6 },
+  bandGoingCardTitle: { color: '#111116', fontSize: 15, fontFamily: Fonts.extrabold, marginTop: 7 },
+  bandGoingCardSub: { color: '#5A5A66', fontSize: 12, fontFamily: Fonts.regular, marginTop: 5, lineHeight: 17 },
+  bandGoingCardBtnRow: { flexDirection: 'row', gap: 7, marginTop: 12 },
+  bandGoingCardBtn: { flex: 1, paddingVertical: 8, borderRadius: 999, backgroundColor: '#EAEAEF', alignItems: 'center' },
+  bandGoingCardBtnText: { color: '#111116', fontSize: 11, fontFamily: Fonts.extrabold },
+
+  // Marquee
+  marqueeWrap: { backgroundColor: ACCENT, paddingVertical: 20, overflow: 'hidden' },
+  marqueeRow: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  marqueeText: { color: '#fff', fontSize: 30, fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  marqueeDot: { width: 8, height: 8, borderRadius: 99, backgroundColor: 'rgba(255,255,255,0.6)' },
 
   // Categories
-  catCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
-  catCardLabel: { position: 'absolute', left: 22, bottom: 20 },
-  catCardTitle: { color: '#fff', fontSize: 22, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
-  catCardSub: { color: 'rgba(244,244,246,0.6)', fontSize: 12.5, marginTop: 4, fontFamily: Fonts.medium },
-  educationCard: { borderRadius: 20, borderWidth: 1, borderColor: LINE, backgroundColor: SURFACE, padding: 22, justifyContent: 'space-between' },
-  educationTitle: { color: '#fff', fontSize: 22, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
-  educationBody: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular },
-
-  // Story
-  storyRow: { flexDirection: 'row', gap: 26, justifyContent: 'space-between' },
-  storyCol: { marginBottom: 26 },
-  storyCaptionRow: { flexDirection: 'row', gap: 12, marginTop: 24 },
-  storyNum: { color: ACCENT, fontSize: 13, fontFamily: Fonts.extrabold, letterSpacing: 0.5 },
-  storyTitle: { color: '#fff', fontSize: 20, fontFamily: Fonts.bold, letterSpacing: -0.3 },
-  storyBody: { color: MUTE, fontSize: 14.5, lineHeight: 22, fontFamily: Fonts.regular, marginTop: 7 },
-
-  // Story phone mockups
-  phoneCard: { borderRadius: 28, backgroundColor: SURFACE, borderWidth: 1, borderColor: LINE, padding: 20, paddingBottom: 0, overflow: 'hidden' },
-  phoneScreen: { borderRadius: 20, backgroundColor: RAISE2, borderWidth: 1, borderColor: LINE, borderBottomWidth: 0, padding: 16, paddingBottom: 26, height: 420 },
-  phoneStatusRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  phoneStatusText: { color: MUTE, fontSize: 11, fontFamily: Fonts.bold },
-  phoneSearchPill: { backgroundColor: RAISE, borderWidth: 1, borderColor: LINE, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 13, marginBottom: 12 },
-  phoneSearchText: { color: MUTE, fontSize: 12.5, fontFamily: Fonts.regular },
-  phoneListRow: { flexDirection: 'row', gap: 11, backgroundColor: RAISE, borderWidth: 1, borderColor: LINE, borderRadius: 16, padding: 10, alignItems: 'center' },
-  phoneListThumb: { width: 58, height: 58, borderRadius: 16, overflow: 'hidden', backgroundColor: RAISE2 },
-  phoneListTitle: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold, lineHeight: 17 },
-  phoneListMeta: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.regular, marginTop: 5 },
-  phoneHeroImg: { height: 112, borderRadius: 16, overflow: 'hidden', marginBottom: 14, backgroundColor: RAISE },
-  phoneEventTitle: { color: '#fff', fontSize: 15, fontFamily: Fonts.extrabold, letterSpacing: -0.3 },
-  phoneEventSub: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.regular, marginTop: 5 },
-  phoneDivider: { height: 1, backgroundColor: LINE, marginVertical: 14 },
-  phoneGoingLabel: { color: MUTE, fontSize: 11, fontFamily: Fonts.bold, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10 },
-  attendeeRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  attendeeName: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.semibold },
-  attendeeSub: { color: MUTE, fontSize: 10.5, fontFamily: Fonts.regular },
-  phoneJoinBtn: { marginTop: 16, backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 11, alignItems: 'center' },
-  phoneJoinBtnText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold },
-  goingChip: { alignSelf: 'flex-start', backgroundColor: 'rgba(108,92,231,0.16)', borderRadius: 999, paddingVertical: 6, paddingHorizontal: 12, marginBottom: 14 },
-  goingChipText: { color: '#B7ADFF', fontSize: 11.5, fontFamily: Fonts.bold },
-  eventBox: { borderWidth: 1, borderColor: LINE, borderRadius: 16, backgroundColor: RAISE, padding: 14 },
-  eventBoxTitle: { color: '#fff', fontSize: 14, fontFamily: Fonts.extrabold },
-  eventBoxSub: { color: MUTE, fontSize: 12, fontFamily: Fonts.regular, marginTop: 6, lineHeight: 18 },
-  eventBoxBtnRow: { flexDirection: 'row', gap: 7, marginTop: 12 },
-  eventBoxBtn: { flex: 1, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: LINE, alignItems: 'center' },
-  eventBoxBtnText: { color: '#fff', fontSize: 11.5, fontFamily: Fonts.semibold },
-  phoneFlexImg: { flex: 1, borderRadius: 16, overflow: 'hidden', marginTop: 12, backgroundColor: RAISE, minHeight: 60 },
-  shareBtn: { marginTop: 12, paddingVertical: 11, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center' },
-  shareBtnText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold },
+  catCard: { borderRadius: 28, overflow: 'hidden', backgroundColor: RAISE },
+  catCardLabel: { position: 'absolute', left: 24, bottom: 20 },
+  catCardTitle: { color: '#fff', fontSize: 24, fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  catCardSub: { color: 'rgba(244,244,246,0.6)', fontSize: 12.5, marginTop: 6, fontFamily: Fonts.semibold },
+  educationCard: { borderRadius: 28, backgroundColor: ACCENT, padding: 22, justifyContent: 'space-between' },
+  educationTitle: { color: '#fff', fontSize: 24, fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  educationBody: { color: 'rgba(255,255,255,0.85)', fontSize: 13, lineHeight: 20, fontFamily: Fonts.regular },
 
   // Experiences
   expBand: { backgroundColor: ACCENT, paddingVertical: 90 },
-  expGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 8, alignItems: 'flex-start' },
-  expCol: { gap: 14 },
-  expCard: { backgroundColor: '#0A0A0C', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', overflow: 'hidden' },
-  expHighlightCard: { backgroundColor: '#F4F4F6', borderRadius: 18, padding: 22 },
-  expImageWrap: { height: 230, backgroundColor: RAISE },
-  expPhotoOnly: { borderRadius: 18, overflow: 'hidden', backgroundColor: RAISE },
-  expPhotoOverlay: { position: 'absolute', left: 14, right: 14, bottom: 14, padding: 12, borderRadius: 16, backgroundColor: 'rgba(10,10,12,0.72)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
-  expPhotoOverlayTitle: { color: '#fff', fontSize: 13, fontFamily: Fonts.bold },
+  expGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 8, alignItems: 'flex-start' },
+  expCol: { gap: 16 },
+  expCard: { backgroundColor: '#0A0A0C', borderRadius: 22, overflow: 'hidden' },
+  expHighlightCard: { backgroundColor: '#F4F4F6', borderRadius: 22, padding: 24 },
+  expImageWrap: { backgroundColor: RAISE },
+  expPhotoOnly: { borderRadius: 22, overflow: 'hidden', backgroundColor: RAISE },
+  expPhotoOverlay: { position: 'absolute', left: 14, right: 14, bottom: 14, padding: 13, borderRadius: 18, backgroundColor: 'rgba(10,10,12,0.74)' },
+  expPhotoOverlayTitle: { color: '#fff', fontSize: 13, fontFamily: Fonts.extrabold },
   expPhotoOverlaySub: { color: 'rgba(244,244,246,0.62)', fontSize: 11.5, fontFamily: Fonts.regular, marginTop: 4 },
-  expHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 10 },
-  expUser: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.bold },
-  expUserTime: { color: MUTE, fontFamily: Fonts.regular },
-  expQuote: { color: '#DEDEE4', fontSize: 14, lineHeight: 20, fontFamily: Fonts.regular },
-  expHighlightQuote: { color: '#141419', fontSize: 18, lineHeight: 25, fontFamily: Fonts.bold, letterSpacing: -0.3 },
-  expFooter: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
-  expFooterText: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.semibold },
+  expHeader: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 12 },
+  expUser: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  expUserTime: { color: MUTE, fontFamily: Fonts.semibold },
+  expQuote: { color: '#DEDEE4', fontSize: 14, lineHeight: 21.5, fontFamily: Fonts.regular },
+  expHighlightQuote: { color: '#141419', fontSize: 19, lineHeight: 26, fontFamily: Fonts.extrabold, letterSpacing: -0.3 },
+  expFooterText: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.semibold, marginTop: 12 },
 
   // Statement
   statement: { overflow: 'hidden', justifyContent: 'center' },
@@ -937,66 +918,67 @@ const styles = StyleSheet.create({
   statementText: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Nearby
-  mapBox: { borderRadius: 28, overflow: 'hidden', marginTop: 4, borderWidth: 1, borderColor: LINE, backgroundColor: '#0C0C10' },
+  mapBox: { borderRadius: 32, overflow: 'hidden', marginTop: 4, backgroundColor: '#0B0B14' },
   mapPin: { position: 'absolute', left: '50%', top: '50%', marginLeft: -8, marginTop: -8, width: 16, height: 16, alignItems: 'center', justifyContent: 'center' },
   mapPinPulse: { position: 'absolute', width: 16, height: 16, borderRadius: 99, backgroundColor: ACCENT },
-  mapPinDot: { width: 16, height: 16, borderRadius: 99, backgroundColor: ACCENT, borderWidth: 3, borderColor: '#0C0C10' },
-  mapChip: { position: 'absolute', flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 13, paddingLeft: 8, borderRadius: 999, backgroundColor: 'rgba(18,18,22,0.92)', borderWidth: 1, borderColor: LINE },
-  mapChipIcon: { width: 22, height: 22, borderRadius: 99, backgroundColor: 'rgba(108,92,231,0.2)', alignItems: 'center', justifyContent: 'center' },
-  mapChipIconText: { color: '#B7ADFF', fontSize: 11 },
-  mapChipText: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.bold },
-  mapCards: { position: 'absolute', right: 28, top: 28, width: 300, gap: 12 },
-  mapCard: { flexDirection: 'row', gap: 12, backgroundColor: 'rgba(18,18,22,0.95)', borderWidth: 1, borderColor: LINE, borderRadius: 20, padding: 12 },
-  mapCardThumb: { width: 64, height: 64, borderRadius: 16, overflow: 'hidden', backgroundColor: RAISE },
-  mapCardDist: { color: '#B7ADFF', fontSize: 11, fontFamily: Fonts.bold, letterSpacing: 0.4, textTransform: 'uppercase' },
-  mapCardTitle: { color: '#fff', fontSize: 14, fontFamily: Fonts.bold, marginTop: 5 },
-  mapCardGoing: { color: MUTE, fontSize: 11.5, marginTop: 8, fontFamily: Fonts.regular },
+  mapPinDot: { width: 16, height: 16, borderRadius: 99, backgroundColor: ACCENT, borderWidth: 3, borderColor: '#0B0B14' },
+  mapChip: { position: 'absolute', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 999, backgroundColor: 'rgba(20,20,28,0.94)' },
+  mapChipLight: { backgroundColor: '#F4F4F6' },
+  mapChipText: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  mapChipTextDark: { color: '#111116', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  mapCards: { position: 'absolute', right: 28, top: 28, width: 308, gap: 12 },
+  mapCard: { flexDirection: 'row', gap: 13, backgroundColor: 'rgba(18,18,26,0.96)', borderRadius: 22, padding: 13 },
+  mapCardThumb: { width: 66, height: 66, borderRadius: 16, overflow: 'hidden', backgroundColor: RAISE },
+  mapCardDist: { color: LAVENDER, fontSize: 10.5, fontFamily: Fonts.extrabold, letterSpacing: 0.5 },
+  mapCardTitle: { color: '#fff', fontSize: 14, fontFamily: Fonts.extrabold, marginTop: 6 },
+  mapCardGoing: { color: MUTE, fontSize: 11.5, marginTop: 7, fontFamily: Fonts.regular },
   mapFilters: { position: 'absolute', left: 26, bottom: 26, flexDirection: 'row', gap: 8 },
-  mapFilterPill: { paddingVertical: 9, paddingHorizontal: 15, borderRadius: 999, backgroundColor: 'rgba(18,18,22,0.92)', borderWidth: 1, borderColor: LINE },
+  mapFilterPill: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(20,20,28,0.94)' },
   mapFilterText: { color: MUTE, fontSize: 12.5, fontFamily: Fonts.semibold },
   mapFilterTextActive: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.semibold },
 
   // Create
-  createRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 30 },
-  createCollage: { gap: 12 },
-  createImgWide: { height: 200, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
+  createPanel: { flexDirection: 'row', borderRadius: 32, backgroundColor: BAND, padding: 40, gap: 40, alignItems: 'center' },
+  createCollageWrap: { position: 'relative' },
+  createGrid: { gap: 12 },
+  createImgWide: { height: 180, borderRadius: 22, overflow: 'hidden', backgroundColor: RAISE },
   createImgRow: { flexDirection: 'row', gap: 12 },
-  createImgHalf: { flex: 1, height: 200, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
-  createCopy: { marginTop: 24 },
-  mockForm: { borderWidth: 1, borderColor: LINE, borderRadius: 24, backgroundColor: SURFACE, padding: 20 },
-  mockFormLabel: { color: MUTE, fontSize: 10.5, fontFamily: Fonts.bold, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 14 },
-  mockField: { borderWidth: 1, borderColor: LINE, borderRadius: 14, backgroundColor: RAISE, padding: 12, marginTop: 10 },
-  mockFieldLabel: { color: MUTE, fontSize: 10, fontFamily: Fonts.bold, letterSpacing: 0.5, textTransform: 'uppercase' },
+  createImgHalf: { flex: 1, height: 180, borderRadius: 22, overflow: 'hidden', backgroundColor: RAISE },
+  createFloatPill: { position: 'absolute', right: -22, top: -20, paddingVertical: 11, paddingHorizontal: 17, borderRadius: 999, backgroundColor: '#F4F4F6' },
+  createFloatPillText: { color: '#111116', fontSize: 12.5, fontFamily: Fonts.extrabold },
+  createCopy: {},
+  mockForm: { borderRadius: 24, backgroundColor: BAND_CARD, padding: 20 },
+  mockFormLabel: { color: MUTE, fontSize: 10.5, fontFamily: Fonts.extrabold, letterSpacing: 0.9, textTransform: 'uppercase', marginBottom: 14 },
+  mockField: { borderRadius: 14, backgroundColor: BAND_ROW, padding: 12, marginTop: 10 },
+  mockFieldLabel: { color: MUTE, fontSize: 10, fontFamily: Fonts.extrabold, letterSpacing: 0.6, textTransform: 'uppercase' },
   mockFieldValue: { color: '#fff', fontSize: 14, fontFamily: Fonts.semibold, marginTop: 4 },
   mockPillsRow: { flexDirection: 'row', gap: 7, marginTop: 9, flexWrap: 'wrap' },
-  mockPill: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: LINE },
+  mockPill: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, backgroundColor: BAND_ROW },
   mockPillText: { color: MUTE, fontSize: 12.5, fontFamily: Fonts.semibold },
   mockPillTextActive: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.semibold },
-  mockSliderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: LINE, borderRadius: 16, backgroundColor: RAISE, padding: 12, marginTop: 12 },
-  mockSliderTrackRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  mockSliderTrack: { width: 120, height: 4, borderRadius: 99, backgroundColor: '#26262F' },
+  mockSliderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderRadius: 16, backgroundColor: BAND_ROW, padding: 13, marginTop: 12 },
+  mockSliderTrackRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  mockSliderTrack: { width: 120, height: 4, borderRadius: 99, backgroundColor: '#2A2745' },
   mockSliderFill: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '58%', backgroundColor: ACCENT, borderRadius: 99 },
   mockSliderThumb: { position: 'absolute', left: '58%', top: -5, width: 14, height: 14, borderRadius: 99, backgroundColor: '#fff', marginLeft: -7 },
-  mockCreateBtn: { marginTop: 18, backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
+  mockCreateBtn: { marginTop: 18, backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 15, alignItems: 'center' },
 
   // FAQ
   faqGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  faqItem: { borderWidth: 1, borderColor: LINE, borderRadius: 18, backgroundColor: SURFACE, padding: 18 },
+  faqItem: { borderRadius: 22, backgroundColor: PANEL, padding: 20 },
   faqHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
-  faqQ: { color: '#fff', fontSize: 15, fontFamily: Fonts.bold, letterSpacing: -0.2, flex: 1 },
-  faqA: { color: MUTE, fontSize: 13.5, lineHeight: 21, fontFamily: Fonts.regular, marginTop: 12 },
+  faqQ: { color: '#fff', fontSize: 15.5, fontFamily: Fonts.extrabold, flex: 1 },
+  faqPlus: { color: LAVENDER, fontSize: 20, fontFamily: Fonts.regular },
+  faqA: { color: MUTE, fontSize: 14, lineHeight: 22, fontFamily: Fonts.regular, marginTop: 12 },
 
-  // Final CTA
-  finalBox: { borderRadius: 26, overflow: 'hidden', justifyContent: 'flex-end' },
-  finalInner: { padding: 40 },
-  finalText: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
-  finalSub: { color: 'rgba(244,244,246,0.72)', fontSize: 16, fontFamily: Fonts.regular, marginTop: 16 },
+  // Scroll end
+  endImg: { width: '100%', maxWidth: 1000, borderRadius: 32, overflow: 'hidden', backgroundColor: RAISE },
 
   // Footer
   footerRow: { flexDirection: 'row', justifyContent: 'space-between' },
   footerCol: { gap: 10 },
-  footerHeading: { color: '#5E5E68', fontSize: 10.5, fontFamily: Fonts.bold, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 },
+  footerHeading: { color: '#5E5E68', fontSize: 10.5, fontFamily: Fonts.extrabold, letterSpacing: 0.9, textTransform: 'uppercase', marginBottom: 2 },
   footerLink: { color: MUTE, fontSize: 13.5, fontFamily: Fonts.medium },
   footerTagline: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 12 },
-  copyright: { color: '#5E5E68', fontSize: 12, fontFamily: Fonts.regular, marginTop: 36 },
+  copyright: { color: '#5E5E68', fontSize: 12.5, fontFamily: Fonts.regular, marginTop: 40, paddingTop: 20, borderTopWidth: 1, borderTopColor: LINE },
 });

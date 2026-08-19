@@ -10,6 +10,7 @@ import manropeSemiBold from '../src/assets/fonts/Manrope-SemiBold.ttf';
 import manropeBold from '../src/assets/fonts/Manrope-Bold.ttf';
 import manropeExtraBold from '../src/assets/fonts/Manrope-ExtraBold.ttf';
 import funkYeah from './Funk Yeah.otf';
+import jeffesta from './Jeffesta-Regular.ttf';
 
 import ionicons from 'react-native-vector-icons/Fonts/Ionicons.ttf';
 import materialCommunityIcons from 'react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf';
@@ -25,6 +26,7 @@ const FONT_FACES = [
   ['Manrope-Bold', manropeBold],
   ['Manrope-ExtraBold', manropeExtraBold],
   ['FunkYeah', funkYeah],
+  ['Jeffesta', jeffesta],
   ['Ionicons', ionicons],
   ['MaterialCommunityIcons', materialCommunityIcons],
   ['Feather', feather],
