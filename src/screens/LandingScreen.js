@@ -17,6 +17,11 @@ import LinearGradient from 'react-native-linear-gradient';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 
+// Web-only display font for headings — mirrors the design source's
+// h1/h2 rule (font-family: 'Jeffesta','Manrope'; text-transform: uppercase),
+// registered in web/fonts.js since it's only linked for the web build.
+const TITLE_FONT = 'FunkYeah';
+
 const ACCENT = '#6C5CE7';
 const BG = '#0A0A0C';
 const SURFACE = '#121216';
@@ -801,8 +806,8 @@ const styles = StyleSheet.create({
   navJoinText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold },
 
   // Typography
-  h1: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
-  h2: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
+  h1: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
+  h2: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
   lead: { color: MUTE, fontSize: 17, lineHeight: 26, fontFamily: Fonts.regular, marginTop: 22, maxWidth: 460 },
   leadSmall: { color: MUTE, fontSize: 15, lineHeight: 23, fontFamily: Fonts.regular },
 
@@ -929,7 +934,7 @@ const styles = StyleSheet.create({
   // Statement
   statement: { overflow: 'hidden', justifyContent: 'center' },
   statementInner: { paddingHorizontal: 20, maxWidth: 1240, width: '100%', alignSelf: 'center' },
-  statementText: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
+  statementText: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   // Nearby
   mapBox: { borderRadius: 28, overflow: 'hidden', marginTop: 4, borderWidth: 1, borderColor: LINE, backgroundColor: '#0C0C10' },
@@ -984,7 +989,7 @@ const styles = StyleSheet.create({
   // Final CTA
   finalBox: { borderRadius: 26, overflow: 'hidden', justifyContent: 'flex-end' },
   finalInner: { padding: 40 },
-  finalText: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
+  finalText: { color: '#fff', fontFamily: TITLE_FONT, textTransform: 'uppercase', letterSpacing: 0.5 },
   finalSub: { color: 'rgba(244,244,246,0.72)', fontSize: 16, fontFamily: Fonts.regular, marginTop: 16 },
 
   // Footer
