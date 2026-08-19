@@ -101,6 +101,7 @@ export default function PostsRail() {
               key={post.id}
               post={post}
               compact
+              hideUsername
               onLike={handleLike}
             />
           ))

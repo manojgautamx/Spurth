@@ -15,6 +15,8 @@ import axiosInstance from '../utils/axiosInstance';
 import PostCard from '../components/PostCard';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
+import WebSidebar from '../components/web/WebSidebar';
+import PostsRail from '../components/web/PostsRail';
 
 export default function CommentScreen({ route, navigation }) {
   const { post: initialPost } = route.params;
@@ -133,18 +135,36 @@ export default function CommentScreen({ route, navigation }) {
     </KeyboardAvoidingView>
   );
 
+  const header = (
+    <View style={styles.header}>
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={24} color="#fff" />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Post</Text>
+      <View style={{ width: 24 }} />
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Post</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      {isWideWeb ? <View style={styles.webCenterWrap}>{body}</View> : body}
+      {isWideWeb ? (
+        <View style={styles.webRow}>
+          <WebSidebar />
+          <View style={styles.webContent}>
+            <View style={styles.webCenterWrap}>
+              {header}
+              {body}
+            </View>
+            <PostsRail />
+          </View>
+        </View>
+      ) : (
+        <>
+          {header}
+          {body}
+        </>
+      )}
     </View>
   );
 }
@@ -154,13 +174,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
-    paddingTop: StatusBar.currentHeight || 44,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
+    paddingTop: StatusBar.currentHeight || 44,
     marginBottom: 12,
   },
   backButton: {
@@ -171,11 +192,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: Fonts.semibold,
   },
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
   webCenterWrap: {
     flex: 1,
-    width: '100%',
     maxWidth: 680,
-    alignSelf: 'center',
   },
   listContent: {
     paddingHorizontal: 20,
