@@ -67,6 +67,19 @@ const CATEGORIES = {
   tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: unsplash('hackathon,coding', 900, 400) },
 };
 
+const CREATE_FEATURES = [
+  { title: 'Four fields', body: 'What, when, where, category — that\'s the whole form.' },
+  { title: 'No approval queue', body: "It's visible to nearby people the moment you post it." },
+  { title: 'Matched by interest', body: 'Shown first to people already into the same thing.' },
+];
+
+const NEARBY_DOTS = [
+  { left: '26%', top: '22%', label: 'Pickup futsal · 12 going' },
+  { left: '63%', top: '16%', label: 'Study room, open now' },
+  { left: '70%', top: '62%', label: 'Sunset bouldering' },
+  { left: '18%', top: '70%', label: 'Board games night' },
+];
+
 const FAQS = [
   { q: 'Is Spurth free to use?', a: "Discovering, joining and creating activities is free. Some hosts charge for their own costs — venue, gear, entry — and that's shown on the activity before you join." },
   { q: 'Do I have to know someone to join?', a: "No. Most people arrive on their own. You can see who else is going and what they're into before you commit." },
@@ -96,8 +109,8 @@ function CategoryCard({ item, style, big, scrollY, scrollOffsetRef, reduced, ind
       distance={distance}
       rotateFrom={rotateFrom}
       delay={index * 26}
-      style={[styles.catCard, style]}
-      innerStyle={StyleSheet.absoluteFillObject}
+      style={style}
+      innerStyle={[styles.catCard, StyleSheet.absoluteFillObject]}
     >
       <Image source={{ uri: item.img }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
       <LinearGradient
@@ -506,24 +519,8 @@ export default function LandingScreen({ navigation }) {
       {/* STORY — three scroll-parallax photo sections, no fake UI */}
       <Section id="story" style={{ marginTop: isWide ? 140 : 80 }}>
         <View style={{ gap: isWide ? 60 : 44 }}>
-          {STORY_STEPS.map((s, i) => (
-            <View key={s.n} style={[styles.parallaxRow, !isWide && { flexDirection: 'column' }, isWide && i % 2 === 1 && { flexDirection: 'row-reverse' }]}>
-              <Reveal
-                scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
-                from={!isWide ? 'up' : i % 2 === 0 ? 'left' : 'right'}
-                distance={isWide ? 70 : 40}
-                delay={90}
-                style={isWide ? { flex: 1.1 } : { width: '100%' }}
-                innerStyle={{ flex: 1 }}
-              >
-                <ParallaxPhoto
-                  uri={s.img}
-                  height={isWide ? 360 : 240}
-                  scrollY={scrollY}
-                  scrollOffsetRef={scrollOffsetRef}
-                  style={{ flex: 1 }}
-                />
-              </Reveal>
+          {STORY_STEPS.map((s) => (
+            <View key={s.n} style={[styles.parallaxRow, !isWide && { flexDirection: 'column' }]}>
               <Reveal
                 scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
                 from="up" distance={22} delay={0}
@@ -533,6 +530,22 @@ export default function LandingScreen({ navigation }) {
                 <Text style={styles.storyNum}>{s.n}</Text>
                 <Text style={styles.storyTitle}>{s.title}</Text>
                 <Text style={styles.storyBody}>{s.body}</Text>
+              </Reveal>
+              <Reveal
+                scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
+                from={!isWide ? 'up' : 'right'}
+                distance={isWide ? 70 : 40}
+                delay={60}
+                style={isWide ? { flex: 1.1, height: 360 } : { width: '100%', height: 240 }}
+                innerStyle={{ flex: 1 }}
+              >
+                <ParallaxPhoto
+                  uri={s.img}
+                  height={isWide ? 360 : 240}
+                  scrollY={scrollY}
+                  scrollOffsetRef={scrollOffsetRef}
+                  style={{ flex: 1 }}
+                />
               </Reveal>
             </View>
           ))}
@@ -667,8 +680,7 @@ export default function LandingScreen({ navigation }) {
       <Section id="nearby" style={{ marginTop: isWide ? 140 : 80 }}>
         <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start' }]}>
           <View style={{ maxWidth: 520 }}>
-            <Text style={[styles.h2, { fontSize: isWide ? 58 : 30 }]}>Something's probably happening near you.</Text>
-            <Text style={[styles.leadSmall, { marginTop: 14 }]}>Nine activities inside a twenty-minute walk, right now.</Text>
+            <Text style={[styles.h2, { fontSize: isWide ? 58 : 30 }]}>Something is happening near you.</Text>
           </View>
           <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, !isWide && { marginTop: 18 }]}>
             <Text style={styles.ctaFilledText}>Explore Nearby</Text>
@@ -700,10 +712,16 @@ export default function LandingScreen({ navigation }) {
               <View style={styles.mapPinDot} />
             </View>
 
-            {/* Just a few unlabeled glowing dots — "what's happening around",
-                no cards or text, per request — that light up one after another. */}
-            {[{ left: '26%', top: '22%' }, { left: '63%', top: '16%' }, { left: '70%', top: '62%' }, { left: '18%', top: '70%' }].map((p, i) => (
-              <Animated.View key={i} pointerEvents="none" style={[styles.mapDot, p, mapDotStyle(i)]} />
+            {/* A few glowing dots with a short made-up activity name each —
+                "what's happening around", light-touch, not a full card —
+                that light up one after another. */}
+            {NEARBY_DOTS.map((p, i) => (
+              <React.Fragment key={i}>
+                <Animated.View pointerEvents="none" style={[styles.mapDot, p, mapDotStyle(i)]} />
+                <Animated.View pointerEvents="none" style={[styles.mapLabel, { left: p.left, top: p.top }, mapDotStyle(i)]}>
+                  <Text style={styles.mapLabelText}>{p.label}</Text>
+                </Animated.View>
+              </React.Fragment>
             ))}
           </Animated.View>
         </View>
@@ -726,54 +744,26 @@ export default function LandingScreen({ navigation }) {
             </View>
           </Animated.View>
 
-          <Animated.View style={[styles.createCopy, isWide && { width: '46%' }, copyStyle]}>
+          <Animated.View style={[styles.createCopy, isWide && { width: '46%', justifyContent: 'center' }, copyStyle]}>
             <Text style={[styles.h2, { fontSize: isWide ? 42 : 30 }]}>Can't find your thing? Start it.</Text>
-            <Text style={[styles.leadSmall, { marginTop: 14, marginBottom: 26 }]}>
+            <Text style={[styles.leadSmall, { marginTop: 14, marginBottom: 30 }]}>
               Four fields and it's live. Spurth puts it in front of people nearby who are into the same thing.
             </Text>
 
-            <View style={styles.mockForm}>
-              <Text style={styles.mockFormLabel}>New activity</Text>
-              <Animated.View style={[styles.mockField, fieldStyle(0)]}>
-                <Text style={styles.mockFieldLabel}>What</Text>
-                <Text style={styles.mockFieldValue}>Sunset bouldering session</Text>
-              </Animated.View>
-              <Animated.View style={[{ flexDirection: 'row', gap: 12, marginTop: 12 }, fieldStyle(0.2)]}>
-                <View style={[styles.mockField, { flex: 1 }]}>
-                  <Text style={styles.mockFieldLabel}>When</Text>
-                  <Text style={styles.mockFieldValue}>Today · 5:30 PM</Text>
-                </View>
-                <View style={[styles.mockField, { flex: 1 }]}>
-                  <Text style={styles.mockFieldLabel}>Where</Text>
-                  <Text style={styles.mockFieldValue}>Astro Wall</Text>
-                </View>
-              </Animated.View>
-              <Animated.View style={[{ marginTop: 12 }, fieldStyle(0.4)]}>
-                <Text style={styles.mockFieldLabel}>Category</Text>
-                <View style={styles.mockPillsRow}>
-                  <View style={[styles.mockPill, { backgroundColor: ACCENT }]}><Text style={styles.mockPillTextActive}>Sports</Text></View>
-                  <View style={styles.mockPill}><Text style={styles.mockPillText}>Adventure</Text></View>
-                  <View style={styles.mockPill}><Text style={styles.mockPillText}>Gaming</Text></View>
-                  <View style={styles.mockPill}><Text style={styles.mockPillText}>Arts</Text></View>
-                  <View style={styles.mockPill}><Text style={styles.mockPillText}>Tech</Text></View>
-                </View>
-              </Animated.View>
-              <Animated.View style={[styles.mockSliderRow, fieldStyle(0.6)]}>
-                <Text style={styles.mockFieldValue}>Group size</Text>
-                <View style={styles.mockSliderTrackRow}>
-                  <View style={styles.mockSliderTrack}>
-                    <View style={styles.mockSliderFill} />
-                    <View style={styles.mockSliderThumb} />
-                  </View>
-                  <Text style={[styles.mockFieldValue, { fontSize: 13.5 }]}>8</Text>
-                </View>
-              </Animated.View>
-              <Animated.View style={fieldStyle(0.75)}>
-                <TouchableOpacity onPress={goJoin} style={styles.mockCreateBtn} activeOpacity={0.85}>
-                  <Text style={styles.ctaFilledText}>Create an Activity</Text>
-                </TouchableOpacity>
-              </Animated.View>
+            <View style={{ gap: 22 }}>
+              {CREATE_FEATURES.map((f, i) => (
+                <Animated.View key={f.title} style={fieldStyle(i * 0.22)}>
+                  <Text style={styles.createFeatureTitle}>{f.title}</Text>
+                  <Text style={styles.createFeatureBody}>{f.body}</Text>
+                </Animated.View>
+              ))}
             </View>
+
+            <Animated.View style={[{ marginTop: 30, alignSelf: 'flex-start' }, fieldStyle(0.7)]}>
+              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+                <Text style={styles.ctaFilledText}>Create an Activity</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </Animated.View>
         </View>
       </Section>
@@ -932,6 +922,8 @@ const styles = StyleSheet.create({
   mapPinPulse: { position: 'absolute', width: 16, height: 16, borderRadius: 99, backgroundColor: ACCENT },
   mapPinDot: { width: 16, height: 16, borderRadius: 99, backgroundColor: ACCENT, borderWidth: 3, borderColor: '#0C0C10' },
   mapDot: { position: 'absolute', width: 8, height: 8, borderRadius: 99, backgroundColor: 'rgba(183,173,255,0.8)' },
+  mapLabel: { position: 'absolute', marginLeft: 14, marginTop: -10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(12,12,16,0.8)', borderWidth: 1, borderColor: LINE, maxWidth: 170 },
+  mapLabelText: { color: '#DEDEE4', fontSize: 11, fontFamily: Fonts.semibold },
 
   // Create
   createRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 30 },
@@ -940,21 +932,8 @@ const styles = StyleSheet.create({
   createImgRow: { flexDirection: 'row', gap: 12 },
   createImgHalf: { flex: 1, height: 200, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
   createCopy: { marginTop: 24 },
-  mockForm: { borderWidth: 1, borderColor: LINE, borderRadius: 24, backgroundColor: SURFACE, padding: 20 },
-  mockFormLabel: { color: MUTE, fontSize: 10.5, fontFamily: Fonts.bold, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 14 },
-  mockField: { borderWidth: 1, borderColor: LINE, borderRadius: 14, backgroundColor: RAISE, padding: 12, marginTop: 10 },
-  mockFieldLabel: { color: MUTE, fontSize: 10, fontFamily: Fonts.bold, letterSpacing: 0.5, textTransform: 'uppercase' },
-  mockFieldValue: { color: '#fff', fontSize: 14, fontFamily: Fonts.semibold, marginTop: 4 },
-  mockPillsRow: { flexDirection: 'row', gap: 7, marginTop: 9, flexWrap: 'wrap' },
-  mockPill: { paddingVertical: 7, paddingHorizontal: 13, borderRadius: 999, borderWidth: 1, borderColor: LINE },
-  mockPillText: { color: MUTE, fontSize: 12.5, fontFamily: Fonts.semibold },
-  mockPillTextActive: { color: '#fff', fontSize: 12.5, fontFamily: Fonts.semibold },
-  mockSliderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: LINE, borderRadius: 16, backgroundColor: RAISE, padding: 12, marginTop: 12 },
-  mockSliderTrackRow: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  mockSliderTrack: { width: 120, height: 4, borderRadius: 99, backgroundColor: '#26262F' },
-  mockSliderFill: { position: 'absolute', left: 0, top: 0, bottom: 0, width: '58%', backgroundColor: ACCENT, borderRadius: 99 },
-  mockSliderThumb: { position: 'absolute', left: '58%', top: -5, width: 14, height: 14, borderRadius: 99, backgroundColor: '#fff', marginLeft: -7 },
-  mockCreateBtn: { marginTop: 18, backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 13, alignItems: 'center' },
+  createFeatureTitle: { color: '#fff', fontSize: 16, fontFamily: Fonts.bold, letterSpacing: -0.2 },
+  createFeatureBody: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 4, maxWidth: 360 },
 
   // FAQ
   faqGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
