@@ -53,38 +53,10 @@ const unsplash = (keywords, w = 800, h = 600) => {
 };
 
 const STORY_STEPS = [
-  { n: '01', title: 'Find something nearby', body: "Open the app, see what's actually happening within walking distance today." },
+  { n: '01', title: 'Find something nearby', body: "Open the app, see what's actually happening within walking distance today.", img: unsplash('walking,city,street', 900, 700) },
   { n: '02', title: 'Find your people', body: "See who's going and what they're into before you commit. No cold rooms.", img: unsplash('friends,group,laughing', 900, 700) },
+  { n: '03', title: 'Make it happen', body: 'Show up, do the thing, then post it back so the next person finds it.', img: unsplash('friends,celebrating,activity', 900, 700) },
 ];
-
-const MAKE_IT_HAPPEN = { n: '03', title: 'Make it happen', body: 'Show up, do the thing, then post it back so the next person finds it.', img: unsplash('friends,celebrating,activity', 900, 700) };
-
-// Section 01's right side — a loose cluster of ambient markers and small
-// activity cards that build up in place of a single static photo, so
-// scrolling in reads as "activity gradually appearing nearby" rather than
-// one image just fading in.
-const CLUSTER_BG_IMG = unsplash('city,pavement,evening', 900, 700);
-const CLUSTER_MARKERS = [
-  { top: '16%', left: '24%' },
-  { top: '68%', left: '14%' },
-  { top: '40%', left: '82%' },
-];
-const CLUSTER_CARDS = [
-  { title: 'Sunset bouldering', meta: 'Today · 5:30 PM', top: '10%', left: '34%', rotateTo: -3, from: 'right' },
-  { title: 'Pickup futsal', meta: '12 going', top: '58%', left: '4%', rotateTo: 2.5, from: 'left' },
-  { title: 'Study group', meta: 'Starts in 20 min', top: '66%', left: '46%', rotateTo: -2, from: 'down' },
-];
-
-// Section 02 — "Can't find your thing? Start it." One person's activity
-// card emerges from behind the photo, then people join it one by one.
-const HERO_ACTIVITY = { title: 'Saturday Football', meta: '7:00 PM · 5 spots left', cta: 'Join Activity' };
-const HERO_PROFILES = [
-  { text: 'AR', bg: '#33323F' },
-  { text: 'NK', bg: '#3A3947' },
-  { text: 'PL', bg: '#46445A' },
-  { text: '+6', bg: ACCENT },
-];
-const HERO_LINES = ['One person started it', 'People found it', "Now they're doing it together"];
 
 const CATEGORIES = {
   sports: { label: 'Sports', sub: '148 activities · futsal, climbing, laps', img: unsplash('futsal,sports', 900, 800) },
@@ -94,6 +66,12 @@ const CATEGORIES = {
   lifestyle: { label: 'Lifestyle', img: unsplash('rooftop,dinner', 500, 400) },
   tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: unsplash('hackathon,coding', 900, 400) },
 };
+
+const CREATE_FEATURES = [
+  { title: 'Four fields', body: 'What, when, where, category — that\'s the whole form.' },
+  { title: 'No approval queue', body: "It's visible to nearby people the moment you post it." },
+  { title: 'Matched by interest', body: 'Shown first to people already into the same thing.' },
+];
 
 const NEARBY_DOTS = [
   { left: '26%', top: '22%', label: 'Pickup futsal · 12 going' },
@@ -203,22 +181,6 @@ function settleDeg(progress, reduced, fromDeg, toDeg) {
   return progress.interpolate({ inputRange: [0, 1], outputRange: [`${fromDeg}deg`, `${toDeg}deg`] });
 }
 
-// Same idea as settle/settleDeg but for a single stage within a larger
-// multi-beat sequence — the caller picks where in the parent 0→1 progress
-// this particular beat starts and ends, so several beats can be staggered
-// off one shared scroll-progress value instead of each needing their own
-// measurement.
-function stage(progress, reduced, start, end, from, to) {
-  if (reduced) return to;
-  if (progress == null) return from;
-  return progress.interpolate({ inputRange: [start, end], outputRange: [from, to], extrapolate: 'clamp' });
-}
-function stageDeg(progress, reduced, start, end, fromDeg, toDeg) {
-  if (reduced) return `${toDeg}deg`;
-  if (progress == null) return `${fromDeg}deg`;
-  return progress.interpolate({ inputRange: [start, end], outputRange: [`${fromDeg}deg`, `${toDeg}deg`], extrapolate: 'clamp' });
-}
-
 // Generic scroll-progress entrance: children ease in (opacity, a slide from
 // one direction, a slight scale, an optional rotation settling to its final
 // resting angle) as the page scrolls them into view. Tied continuously to
@@ -285,90 +247,6 @@ function ParallaxPhoto({ uri, height, scrollY, scrollOffsetRef, amount = 36, sty
         resizeMode="cover"
         style={{ position: 'absolute', left: 0, right: 0, top: -amount, height: height + amount * 2, transform: [{ translateY }] }}
       />
-    </View>
-  );
-}
-
-// Section 01's right side — an almost-empty dark box that fills in as the
-// user scrolls: a couple of ambient markers appear first, then small
-// activity cards slide in from different directions and settle into an
-// overlapping cluster, each staggered so it reads as things gradually
-// showing up nearby rather than one static photo.
-function ActivityCluster({ scrollY, scrollOffsetRef, reduced, isWide }) {
-  const viewportH = useViewportHeight();
-  const [ref, top] = useScrollTop(scrollOffsetRef);
-  const height = isWide ? 360 : 260;
-
-  const progress = (reduced || top == null) ? null : scrollY.interpolate({
-    inputRange: [top - viewportH * 0.9, top - viewportH * 0.4],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  // Once revealed, the whole cluster keeps drifting up slightly for as
-  // long as the section is on screen, so it feels alive rather than static.
-  const drift = (reduced || top == null) ? 0 : scrollY.interpolate({
-    inputRange: [top - viewportH * 0.4, top + height + viewportH * 0.7],
-    outputRange: [0, -70],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <View ref={ref} style={{ flex: isWide ? 1 : undefined, width: isWide ? undefined : '100%', height, position: 'relative' }}>
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFillObject,
-          styles.clusterBase,
-          { opacity: stage(progress, reduced, 0, 0.35, 0, 1), transform: [{ translateY: drift }] },
-        ]}
-      >
-        <Image source={{ uri: CLUSTER_BG_IMG }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-        <LinearGradient colors={['rgba(6,6,8,0.3)', 'rgba(6,6,8,0.86)']} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
-      </Animated.View>
-
-      {CLUSTER_MARKERS.map((m, i) => {
-        const s = 0.08 + i * 0.1;
-        return (
-          <Animated.View
-            key={i}
-            pointerEvents="none"
-            style={[
-              styles.clusterDot,
-              m,
-              {
-                opacity: stage(progress, reduced, s, s + 0.2, 0, 1),
-                transform: [{ scale: stage(progress, reduced, s, s + 0.2, 0.3, 1) }, { translateY: drift }],
-              },
-            ]}
-          />
-        );
-      })}
-
-      {CLUSTER_CARDS.map((c, i) => {
-        const s = 0.32 + i * 0.16;
-        const e = s + 0.34;
-        const axisKey = c.from === 'left' || c.from === 'right' ? 'translateX' : 'translateY';
-        const fromVal = c.from === 'left' ? -60 : c.from === 'right' ? 60 : -40;
-        return (
-          <Animated.View
-            key={c.title}
-            style={[
-              styles.clusterCard,
-              { top: c.top, left: c.left },
-              {
-                opacity: stage(progress, reduced, s, e, 0, 1),
-                transform: [
-                  { [axisKey]: stage(progress, reduced, s, e, fromVal, 0) },
-                  { rotate: stageDeg(progress, reduced, s, e, c.rotateTo * 3, c.rotateTo) },
-                  { translateY: drift },
-                ],
-              },
-            ]}
-          >
-            <Text style={styles.clusterCardTitle}>{c.title}</Text>
-            <Text style={styles.clusterCardMeta}>{c.meta}</Text>
-          </Animated.View>
-        );
-      })}
     </View>
   );
 }
@@ -481,85 +359,32 @@ export default function LandingScreen({ navigation }) {
     return { opacity: o, transform: [{ scale: o.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] };
   };
 
-  // Section 02 hero — "Can't find your thing? Start it." One shared
-  // progress value drives every beat of the sequence: the photo settles,
-  // an activity card emerges from behind it, a glow travels outward from
-  // the card, people join one after another, then the narrative line and
-  // CTA land last. A long scroll span (viewport + most of the section's
-  // own height) gives each beat room to read as distinct rather than
-  // rushed.
-  const [startRef, startTop] = useScrollTop(scrollOffsetRef);
-  const startHeight = isWide ? 560 : 460;
-  // Purely viewport-based (not section-height-based) so every beat,
-  // including the final narrative lines, finishes resolving while the
-  // section is still comfortably on screen — not after it's 90% scrolled
-  // past, which is what happens if the range is wider than the section's
-  // actual on-screen scroll budget.
-  const startProgress = (reduced || startTop == null) ? null : scrollY.interpolate({
-    inputRange: [startTop - viewportH * 0.85, startTop - viewportH * 0.1],
+  // Create — the character banner slides in horizontally (flies in from
+  // the left with a little cape-flutter rotation) and settles onto its
+  // poster panel; the headline and features rise in underneath it.
+  const [createRef, createTop] = useScrollTop(scrollOffsetRef);
+  const createProgress = (reduced || createTop == null) ? null : scrollY.interpolate({
+    inputRange: [createTop - viewportH * 0.8, createTop - viewportH * 0.35],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
-  const startImgStyle = {
-    opacity: stage(startProgress, reduced, 0, 0.1, 0, 1),
-    transform: [{ scale: stage(startProgress, reduced, 0, 1, 0.92, 1) }],
-  };
-  const startCardStyle = {
-    opacity: stage(startProgress, reduced, 0.12, 0.32, 0, 1),
+  const charStyle = {
+    opacity: settle(createProgress, reduced, 0, 1),
     transform: [
-      { translateY: stage(startProgress, reduced, 0.12, 0.32, 26, 0) },
-      { scale: stage(startProgress, reduced, 0.12, 0.5, 0.82, 1) },
+      { translateX: settle(createProgress, reduced, -90, 0) },
+      { rotate: settleDeg(createProgress, reduced, -5, 0) },
+      { scale: settle(createProgress, reduced, 0.9, 1) },
     ],
   };
-  const startGlowStyle = {
-    opacity: stage(startProgress, reduced, 0.28, 0.42, 0, 0.9),
-    transform: [{ scaleX: stage(startProgress, reduced, 0.28, 0.48, 0.15, 1) }],
+  const bodyStyle = {
+    opacity: settle(createProgress, reduced, 0, 1),
+    transform: [{ translateY: settle(createProgress, reduced, 24, 0) }],
   };
-  const startProfileStyle = (i) => {
-    const s = 0.4 + i * 0.09;
-    const e = s + 0.22;
-    return {
-      opacity: stage(startProgress, reduced, s, e, 0, 1),
-      transform: [
-        { translateX: stage(startProgress, reduced, s, e, 18, 0) },
-        { translateY: stage(startProgress, reduced, s, e, 14, 0) },
-        { scale: stage(startProgress, reduced, s, e, 0.5, 1) },
-      ],
-    };
-  };
-  const startLineStyle = (i) => {
-    const s = 0.68 + i * 0.06;
-    const e = s + 0.14;
-    return {
-      opacity: stage(startProgress, reduced, s, e, 0, 1),
-      transform: [{ translateY: stage(startProgress, reduced, s, e, 14, 0) }],
-    };
-  };
-  const startBtnStyle = {
-    opacity: stage(startProgress, reduced, 0.88, 1, 0, 1),
-    transform: [{ translateY: stage(startProgress, reduced, 0.88, 1, 14, 0) }],
-  };
-
-  // Section 03 payoff — "Make it happen". A stronger entrance than the
-  // other story photos (starts noticeably smaller and settles wider) so
-  // it reads as the planning-to-doing payoff continuing straight out of
-  // the hero section above it.
-  const [payoffRef, payoffTop] = useScrollTop(scrollOffsetRef);
-  const payoffProgress = (reduced || payoffTop == null) ? null : scrollY.interpolate({
-    inputRange: [payoffTop - viewportH * 0.85, payoffTop - viewportH * 0.45],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const payoffImgStyle = {
-    opacity: stage(payoffProgress, reduced, 0, 1, 0, 1),
-    transform: [
-      { translateX: stage(payoffProgress, reduced, 0, 1, isWide ? 70 : 0, 0) },
-      { scale: stage(payoffProgress, reduced, 0, 1, 0.82, 1) },
-    ],
-  };
-  const payoffTextStyle = {
-    opacity: stage(payoffProgress, reduced, 0, 0.7, 0, 1),
-    transform: [{ translateY: stage(payoffProgress, reduced, 0, 0.7, 20, 0) }],
+  const fieldStyle = (d) => {
+    if (reduced) return { opacity: 1 };
+    if (createProgress == null) return { opacity: 0, transform: [{ translateY: 14 }] };
+    const o = createProgress.interpolate({ inputRange: [d, Math.min(1, d + 0.3)], outputRange: [0, 1], extrapolate: 'clamp' });
+    return { opacity: o, transform: [{ translateY: o.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
   };
 
   // Final CTA — the closing shot: image settles from a slight zoom, the
@@ -708,103 +533,24 @@ export default function LandingScreen({ navigation }) {
                 <Text style={styles.storyTitle}>{s.title}</Text>
                 <Text style={styles.storyBody}>{s.body}</Text>
               </Reveal>
-              {s.img ? (
-                <Reveal
-                  scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
-                  from={!isWide ? 'up' : 'right'}
-                  distance={isWide ? 70 : 40}
-                  delay={60}
-                  style={isWide ? { flex: 1.1, height: 360 } : { width: '100%', height: 240 }}
-                  innerStyle={{ flex: 1 }}
-                >
-                  <ParallaxPhoto
-                    uri={s.img}
-                    height={isWide ? 360 : 240}
-                    scrollY={scrollY}
-                    scrollOffsetRef={scrollOffsetRef}
-                    style={{ flex: 1 }}
-                  />
-                </Reveal>
-              ) : (
-                <ActivityCluster scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} isWide={isWide} />
-              )}
+              <Reveal
+                scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
+                from={!isWide ? 'up' : 'right'}
+                distance={isWide ? 70 : 40}
+                delay={60}
+                style={isWide ? { flex: 1.1, height: 360 } : { width: '100%', height: 240 }}
+                innerStyle={{ flex: 1 }}
+              >
+                <ParallaxPhoto
+                  uri={s.img}
+                  height={isWide ? 360 : 240}
+                  scrollY={scrollY}
+                  scrollOffsetRef={scrollOffsetRef}
+                  style={{ flex: 1 }}
+                />
+              </Reveal>
             </View>
           ))}
-        </View>
-      </Section>
-
-      {/* SECTION 02 — "Can't find your thing? Start it." One person's
-          activity card emerges from behind the photo, a glow travels
-          outward from it, people join one after another, then the
-          narrative line and CTA settle in. */}
-      <Section style={{ marginTop: isWide ? 140 : 90 }}>
-        <View ref={startRef} style={[styles.startRow, !isWide && { flexDirection: 'column', alignItems: 'stretch' }]}>
-          <View style={[styles.startComposition, { height: startHeight }, isWide ? { flex: 1.1 } : { width: '100%' }]}>
-            <Animated.View style={[styles.startImageBox, startImgStyle]}>
-              <Image source={{ uri: unsplash('group,chat,phone,start', 900, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-            </Animated.View>
-
-            <Animated.View style={[styles.startGlow, startGlowStyle]}>
-              <LinearGradient
-                colors={[ACCENT, 'rgba(108,92,231,0)']}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={StyleSheet.absoluteFillObject}
-              />
-            </Animated.View>
-
-            <Animated.View style={[styles.startProfilesRow, startProfileStyle(3)]}>
-              {HERO_PROFILES.map((p, i) => (
-                <Animated.View key={p.text} style={[{ marginLeft: i === 0 ? 0 : -10 }, startProfileStyle(i)]}>
-                  <InitialsAvatar text={p.text} size={34} bg={p.bg} color="#fff" style={{ borderWidth: 2, borderColor: BG }} />
-                </Animated.View>
-              ))}
-            </Animated.View>
-
-            <Animated.View style={[styles.startCard, startCardStyle]}>
-              <Text style={styles.startCardTitle}>{HERO_ACTIVITY.title}</Text>
-              <Text style={styles.startCardMeta}>{HERO_ACTIVITY.meta}</Text>
-              <View style={styles.startCardCta}>
-                <Text style={styles.startCardCtaText}>{HERO_ACTIVITY.cta}</Text>
-              </View>
-            </Animated.View>
-          </View>
-
-          <View style={[styles.startCopy, isWide ? { flex: 0.85 } : { width: '100%', marginTop: 28 }]}>
-            <Text style={[styles.h2, { fontSize: isWide ? 42 : 30 }]}>Can't find your thing? Start it.</Text>
-            <View style={{ marginTop: 26, gap: 10 }}>
-              {HERO_LINES.map((line, i) => (
-                <Animated.Text key={line} style={[styles.startLine, startLineStyle(i)]}>{line}</Animated.Text>
-              ))}
-            </View>
-            <Animated.View style={[{ marginTop: 26, alignSelf: 'flex-start' }, startBtnStyle]}>
-              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>Create an Activity</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </View>
-        </View>
-      </Section>
-
-      {/* SECTION 03 — "Make it happen", the payoff continuing straight out
-          of the hero above: the photo grows large and prominent instead
-          of just appearing. */}
-      <Section style={{ marginTop: isWide ? 140 : 90 }}>
-        <View ref={payoffRef} style={[styles.parallaxRow, !isWide && { flexDirection: 'column' }]}>
-          <Animated.View style={[styles.parallaxCopy, isWide ? { flex: 0.9 } : { width: '100%' }, payoffTextStyle]}>
-            <Text style={styles.storyNum}>{MAKE_IT_HAPPEN.n}</Text>
-            <Text style={styles.storyTitle}>{MAKE_IT_HAPPEN.title}</Text>
-            <Text style={styles.storyBody}>{MAKE_IT_HAPPEN.body}</Text>
-          </Animated.View>
-          <Animated.View style={[isWide ? { flex: 1.1, height: 360 } : { width: '100%', height: 240 }, payoffImgStyle]}>
-            <ParallaxPhoto
-              uri={MAKE_IT_HAPPEN.img}
-              height={isWide ? 360 : 240}
-              scrollY={scrollY}
-              scrollOffsetRef={scrollOffsetRef}
-              style={{ flex: 1 }}
-            />
-          </Animated.View>
         </View>
       </Section>
 
@@ -983,6 +729,42 @@ export default function LandingScreen({ navigation }) {
         </View>
       </Section>
 
+      {/* CREATE — a hero-poster panel: the character flies in horizontally,
+          the "be the hero" headline lands underneath. */}
+      <Section id="create" style={{ marginTop: isWide ? 140 : 80 }}>
+        <View ref={createRef}>
+          <Animated.View style={[styles.heroCharBox, { height: isWide ? 320 : 200 }, charStyle]}>
+            <LinearGradient colors={['#251A40', '#0D0A16']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
+            <Image source={require('../assets/character.png')} style={styles.heroCharImg} resizeMode="contain" />
+          </Animated.View>
+
+          <Animated.View style={[styles.heroCharCopy, bodyStyle]}>
+            <Text style={[styles.h2, styles.heroCharHeadline, { fontSize: isWide ? 46 : 28 }]}>
+              Can't find your thing?{'\n'}
+              <Text style={{ color: ACCENT }}>Start now. Be the hero the world needs.</Text>
+            </Text>
+            <Text style={[styles.leadSmall, styles.heroCharSub]}>
+              Four fields and it's live. Spurth puts it in front of people nearby who are into the same thing.
+            </Text>
+
+            <View style={[styles.heroCharFeatures, !isWide && { flexDirection: 'column' }]}>
+              {CREATE_FEATURES.map((f, i) => (
+                <Animated.View key={f.title} style={[isWide && { flex: 1 }, fieldStyle(i * 0.22)]}>
+                  <Text style={[styles.createFeatureTitle, { textAlign: isWide ? 'center' : 'left' }]}>{f.title}</Text>
+                  <Text style={[styles.createFeatureBody, { textAlign: isWide ? 'center' : 'left' }]}>{f.body}</Text>
+                </Animated.View>
+              ))}
+            </View>
+
+            <Animated.View style={[{ marginTop: 30, alignSelf: 'center' }, fieldStyle(0.7)]}>
+              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+                <Text style={styles.ctaFilledText}>Create an Activity</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </Animated.View>
+        </View>
+      </Section>
+
       {/* FAQ */}
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
         <Text style={[styles.h2, { fontSize: isWide ? 54 : 30, marginBottom: 32 }]}>Questions</Text>
@@ -1140,26 +922,15 @@ const styles = StyleSheet.create({
   mapLabel: { position: 'absolute', marginLeft: 14, marginTop: -10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(12,12,16,0.8)', borderWidth: 1, borderColor: LINE, maxWidth: 170 },
   mapLabelText: { color: '#DEDEE4', fontSize: 11, fontFamily: Fonts.semibold },
 
-  // Section 01's activity cluster
-  clusterBase: { borderRadius: 24, overflow: 'hidden', backgroundColor: RAISE },
-  clusterDot: { position: 'absolute', width: 9, height: 9, borderRadius: 99, backgroundColor: '#fff' },
-  clusterCard: { position: 'absolute', width: 168, borderRadius: 16, backgroundColor: SURFACE, borderWidth: 1, borderColor: LINE, padding: 12 },
-  clusterCardTitle: { color: '#fff', fontSize: 13, fontFamily: Fonts.bold },
-  clusterCardMeta: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.medium, marginTop: 3 },
-
-  // Section 02 — "Can't find your thing? Start it." hero
-  startRow: { flexDirection: 'row', alignItems: 'center', gap: 48 },
-  startComposition: { position: 'relative' },
-  startImageBox: { position: 'absolute', top: 0, left: 0, width: '72%', height: '66%', borderRadius: 26, overflow: 'hidden', backgroundColor: RAISE },
-  startGlow: { position: 'absolute', width: 200, height: 3, left: '18%', bottom: '30%', transform: [{ rotate: '-28deg' }] },
-  startProfilesRow: { position: 'absolute', flexDirection: 'row', right: '10%', bottom: '30%' },
-  startCard: { position: 'absolute', right: 0, bottom: 0, width: 220, borderRadius: 20, backgroundColor: SURFACE, borderWidth: 1, borderColor: LINE, padding: 18 },
-  startCardTitle: { color: '#fff', fontSize: 17, fontFamily: Fonts.bold, letterSpacing: -0.2 },
-  startCardMeta: { color: MUTE, fontSize: 13, fontFamily: Fonts.medium, marginTop: 4 },
-  startCardCta: { marginTop: 14, backgroundColor: ACCENT, borderRadius: 999, paddingVertical: 10, alignItems: 'center' },
-  startCardCtaText: { color: '#fff', fontSize: 13, fontFamily: Fonts.bold },
-  startCopy: { gap: 2 },
-  startLine: { color: '#fff', fontSize: 14.5, fontFamily: Fonts.extrabold, letterSpacing: 0.4, textTransform: 'uppercase' },
+  // Create — hero-poster character banner
+  heroCharBox: { width: '100%', borderRadius: 28, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  heroCharImg: { width: '68%', height: '76%' },
+  heroCharCopy: { marginTop: 36, alignItems: 'center' },
+  heroCharHeadline: { textAlign: 'center', maxWidth: 760, alignSelf: 'center' },
+  heroCharSub: { textAlign: 'center', marginTop: 16, maxWidth: 480, alignSelf: 'center' },
+  heroCharFeatures: { flexDirection: 'row', gap: 30, marginTop: 32, maxWidth: 820, alignSelf: 'center' },
+  createFeatureTitle: { color: '#fff', fontSize: 16, fontFamily: Fonts.bold, letterSpacing: -0.2 },
+  createFeatureBody: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 4, maxWidth: 360 },
 
   // FAQ
   faqGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
