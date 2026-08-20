@@ -95,7 +95,7 @@ function CategoryCard({ item, style, big, scrollY, scrollOffsetRef, reduced, ind
       from={from}
       distance={distance}
       rotateFrom={rotateFrom}
-      delay={index * 70}
+      delay={index * 26}
       style={[styles.catCard, style]}
       innerStyle={StyleSheet.absoluteFillObject}
     >
@@ -179,8 +179,15 @@ function Reveal({ children, scrollY, scrollOffsetRef, reduced, style, innerStyle
   const viewportH = useViewportHeight();
   const [ref, top] = useScrollTop(scrollOffsetRef);
 
+  // Reveal window is anchored to when the element is actually entering the
+  // viewport (top edge ~90% down the screen) and finishes well before it
+  // would need to scroll back out the top, so nothing sits blank waiting
+  // for a scroll position it'll never comfortably reach. `delay` staggers
+  // siblings but is capped relative to viewport height so a long index
+  // list can never push the reveal past the visible window.
+  const safeDelay = Math.min(delay, viewportH * 0.2);
   const progress = (reduced || top == null) ? null : scrollY.interpolate({
-    inputRange: [top - viewportH * 0.85 + delay, top - viewportH * 0.45 + delay],
+    inputRange: [top - viewportH * 0.92 + safeDelay, top - viewportH * 0.58 + safeDelay],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
@@ -472,7 +479,7 @@ export default function LandingScreen({ navigation }) {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" distance={40} rotateFrom={1.4} delay={280} style={{ flex: 1, height: 200 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" distance={40} rotateFrom={1.4} delay={104} style={{ flex: 1, height: 200 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
                 <Text style={styles.educationTitle}>Education</Text>
                 <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
               </Reveal>
@@ -486,7 +493,7 @@ export default function LandingScreen({ navigation }) {
             <CategoryCard item={CATEGORIES.adventure} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={1} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.gaming} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={2} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.arts} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={3} from="up" distance={36} />
-            <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" distance={36} delay={280} style={{ width: '100%', height: 150 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
+            <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" distance={36} delay={104} style={{ width: '100%', height: 150 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
               <Text style={styles.educationTitle}>Education</Text>
               <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
             </Reveal>
@@ -563,14 +570,14 @@ export default function LandingScreen({ navigation }) {
                   </View>
                 </View>
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={-10} rotateTo={-1.6} delay={130} style={{ height: 180 }} innerStyle={[styles.expPhotoOnly, { height: 180 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={-10} rotateTo={-1.6} delay={54} style={{ height: 180 }} innerStyle={[styles.expPhotoOnly, { height: 180 }]}>
                 <Image source={{ uri: unsplash('bus,window,travel', 500, 380) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
             </View>
 
             {/* Column 2 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 34 }]}>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-9} rotateTo={-1.4} delay={40} innerStyle={styles.expHighlightCard}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-9} rotateTo={-1.4} delay={17} innerStyle={styles.expHighlightCard}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="PL" size={28} bg="rgba(20,20,25,0.1)" color="#141419" />
                   <Text style={[styles.expUser, { color: '#141419' }]}>Prisha L. <Text style={[styles.expUserTime, { color: 'rgba(20,20,25,0.55)' }]}>· yesterday</Text></Text>
@@ -580,10 +587,10 @@ export default function LandingScreen({ navigation }) {
                   <Text style={[styles.expFooterText, { color: ACCENT, fontFamily: Fonts.semibold }]}>♥ 512 · Pottery, beginners</Text>
                 </View>
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={8} rotateTo={1.1} delay={170} style={{ height: 300 }} innerStyle={[styles.expPhotoOnly, { height: 300 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={8} rotateTo={1.1} delay={70} style={{ height: 300 }} innerStyle={[styles.expPhotoOnly, { height: 300 }]}>
                 <Image source={{ uri: unsplash('pottery,hands,clay', 500, 620) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-7} rotateTo={-0.9} delay={300} innerStyle={[styles.expCard, { padding: 18 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-7} rotateTo={-0.9} delay={125} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="KT" size={28} bg="#2E2E38" />
                   <Text style={styles.expUser}>Kiran T. <Text style={styles.expUserTime}>· 3d</Text></Text>
@@ -595,14 +602,14 @@ export default function LandingScreen({ navigation }) {
 
             {/* Column 3 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={-9} rotateTo={-1.2} delay={80} style={{ height: 320 }} innerStyle={[styles.expPhotoOnly, { height: 320 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={-9} rotateTo={-1.2} delay={33} style={{ height: 320 }} innerStyle={[styles.expPhotoOnly, { height: 320 }]}>
                 <Image source={{ uri: unsplash('hike,summit,backlit', 500, 660) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 <View style={styles.expPhotoOverlay}>
                   <Text style={styles.expPhotoOverlayTitle}>Sunrise hike to Shivapuri</Text>
                   <Text style={styles.expPhotoOverlaySub}>23 went · 41 photos shared</Text>
                 </View>
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={9} rotateTo={1.3} delay={210} innerStyle={[styles.expCard, { padding: 18 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={9} rotateTo={1.3} delay={87} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="SM" size={28} bg="#46445A" />
                   <Text style={styles.expUser}>Sneha M. <Text style={styles.expUserTime}>· 5d</Text></Text>
@@ -610,17 +617,17 @@ export default function LandingScreen({ navigation }) {
                 <Text style={styles.expQuote}>"Left the house at 4 a.m. with five strangers. Watched the valley wake up."</Text>
                 <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 331 · Sunrise hike to Shivapuri</Text>
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={10} rotateTo={1.5} delay={340} style={{ height: 170 }} innerStyle={[styles.expPhotoOnly, { height: 170 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={10} rotateTo={1.5} delay={140} style={{ height: 170 }} innerStyle={[styles.expPhotoOnly, { height: 170 }]}>
                 <Image source={{ uri: unsplash('tea,break,conversation', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
             </View>
 
             {/* Column 4 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 52 }]}>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-8} rotateTo={-1.1} delay={120} style={{ height: 260 }} innerStyle={[styles.expPhotoOnly, { height: 260 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-8} rotateTo={-1.1} delay={50} style={{ height: 260 }} innerStyle={[styles.expPhotoOnly, { height: 260 }]}>
                 <Image source={{ uri: unsplash('screen,lit,gaming,night', 500, 520) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-9} rotateTo={-1.4} delay={250} innerStyle={[styles.expCard, { padding: 18 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-9} rotateTo={-1.4} delay={104} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="DJ" size={28} bg="#3A3947" />
                   <Text style={styles.expUser}>Dev J. <Text style={styles.expUserTime}>· 1w</Text></Text>
