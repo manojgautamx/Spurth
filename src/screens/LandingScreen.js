@@ -10,7 +10,7 @@
 // picked per keyword via a deterministic hash — source.unsplash.com's old
 // keyword-search redirect now 503s (deprecated in 2023).
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import Svg, { Rect, Path, Circle, G } from 'react-native-svg';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -86,9 +86,19 @@ function InitialsAvatar({ text, size = 28, bg = '#2A2A33', color = '#ccc', style
   );
 }
 
-function CategoryCard({ item, style, big }) {
+function CategoryCard({ item, style, big, scrollY, scrollOffsetRef, reduced, index = 0, from = 'up', distance = 46, rotateFrom = 0 }) {
   return (
-    <View style={[styles.catCard, style]}>
+    <Reveal
+      scrollY={scrollY}
+      scrollOffsetRef={scrollOffsetRef}
+      reduced={reduced}
+      from={from}
+      distance={distance}
+      rotateFrom={rotateFrom}
+      delay={index * 70}
+      style={[styles.catCard, style]}
+      innerStyle={StyleSheet.absoluteFillObject}
+    >
       <Image source={{ uri: item.img }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
       <LinearGradient
         colors={['rgba(6,6,8,0.05)', 'rgba(6,6,8,0.88)']}
@@ -100,29 +110,107 @@ function CategoryCard({ item, style, big }) {
         <Text style={[styles.catCardTitle, big && { fontSize: 34 }]}>{item.label}</Text>
         {item.sub ? <Text style={styles.catCardSub}>{item.sub}</Text> : null}
       </View>
+    </Reveal>
+  );
+}
+
+function useViewportHeight() {
+  const [h, setH] = useState(() => Dimensions.get('window').height);
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => setH(window.height));
+    return () => sub?.remove?.();
+  }, []);
+  return h;
+}
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
+    return () => (mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange));
+  }, []);
+  return reduced;
+}
+
+// Measures an element's absolute document position once, so scroll-tied
+// animations can compute "how far until this enters/leaves the viewport"
+// purely from the live scrollY value (Animated has no synchronous read,
+// hence the scrollOffsetRef mirror kept alongside scrollY).
+function useScrollTop(scrollOffsetRef) {
+  const ref = useRef(null);
+  const [top, setTop] = useState(null);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (ref.current && ref.current.measureInWindow) {
+        ref.current.measureInWindow((x, y) => setTop(y + (scrollOffsetRef.current || 0)));
+      }
+    }, 50);
+    return () => clearTimeout(id);
+  }, []);
+  return [ref, top];
+}
+
+// Resolves a scroll-progress Animated value (0→1, or null before it's
+// measured) to a concrete style value, collapsing to the resting value
+// immediately when reduced-motion is on instead of animating to it.
+function settle(progress, reduced, from, to) {
+  if (reduced) return to;
+  if (progress == null) return from;
+  return progress.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
+}
+function settleDeg(progress, reduced, fromDeg, toDeg) {
+  if (reduced) return `${toDeg}deg`;
+  if (progress == null) return `${fromDeg}deg`;
+  return progress.interpolate({ inputRange: [0, 1], outputRange: [`${fromDeg}deg`, `${toDeg}deg`] });
+}
+
+// Generic scroll-progress entrance: children ease in (opacity, a slide from
+// one direction, a slight scale, an optional rotation settling to its final
+// resting angle) as the page scrolls them into view. Tied continuously to
+// scrollY rather than firing once, so it reads as physical motion instead
+// of a triggered CSS animation. Outer plain View holds the measurement ref
+// and the caller's sizing (so flex/height layout is untouched); inner
+// Animated.View carries the actual motion.
+function Reveal({ children, scrollY, scrollOffsetRef, reduced, style, innerStyle, from = 'up', distance = 46, delay = 0, rotateFrom = 0, rotateTo = 0 }) {
+  const viewportH = useViewportHeight();
+  const [ref, top] = useScrollTop(scrollOffsetRef);
+
+  const progress = (reduced || top == null) ? null : scrollY.interpolate({
+    inputRange: [top - viewportH * 0.85 + delay, top - viewportH * 0.45 + delay],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const axisKey = from === 'left' || from === 'right' ? 'translateX' : 'translateY';
+  const fromVal = from === 'left' ? -distance : from === 'right' ? distance : from === 'down' ? -distance : distance;
+
+  return (
+    <View ref={ref} style={style}>
+      <Animated.View
+        style={[innerStyle, {
+          opacity: settle(progress, reduced, 0, 1),
+          transform: [
+            { [axisKey]: settle(progress, reduced, fromVal, 0) },
+            { scale: settle(progress, reduced, 0.94, 1) },
+            { rotate: settleDeg(progress, reduced, rotateFrom, rotateTo) },
+          ],
+        }]}
+      >
+        {children}
+      </Animated.View>
     </View>
   );
 }
 
 // Ties an image's vertical offset to page scroll position for a subtle
-// parallax effect. `scrollY` is a shared Animated.Value fed by the page's
-// onScroll; `scrollOffsetRef` mirrors it as a plain number (Animated.Value
-// has no synchronous read) so a freshly-mounted photo can compute its
-// absolute document position via measureInWindow + current scroll offset.
+// parallax effect — the image is oversized within an overflow:hidden box so
+// the drift never reveals an edge.
 function ParallaxPhoto({ uri, height, scrollY, scrollOffsetRef, amount = 36, style }) {
-  const wrapRef = useRef(null);
-  const [top, setTop] = useState(null);
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      if (wrapRef.current && wrapRef.current.measureInWindow) {
-        wrapRef.current.measureInWindow((x, y) => {
-          setTop(y + (scrollOffsetRef.current || 0));
-        });
-      }
-    }, 50);
-    return () => clearTimeout(id);
-  }, []);
+  const [ref, top] = useScrollTop(scrollOffsetRef);
 
   const translateY = top == null
     ? 0
@@ -133,7 +221,7 @@ function ParallaxPhoto({ uri, height, scrollY, scrollOffsetRef, amount = 36, sty
       });
 
   return (
-    <View ref={wrapRef} style={[{ height, borderRadius: 24, overflow: 'hidden', backgroundColor: RAISE }, style]}>
+    <View ref={ref} style={[{ height, borderRadius: 24, overflow: 'hidden', backgroundColor: RAISE }, style]}>
       <Animated.Image
         source={{ uri }}
         resizeMode="cover"
@@ -161,11 +249,39 @@ function MapPulse() {
   );
 }
 
+function FaqItem({ f, open, onPress, isWide }) {
+  const anim = useRef(new Animated.Value(open ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(anim, { toValue: open ? 1 : 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [open]);
+  return (
+    <TouchableOpacity
+      style={[styles.faqItem, isWide && { width: '48%' }]}
+      activeOpacity={0.8}
+      onPress={onPress}
+    >
+      <View style={styles.faqHeader}>
+        <Text style={styles.faqQ}>{f.q}</Text>
+        <Ionicons name={open ? 'remove' : 'add'} size={20} color={ACCENT} />
+      </View>
+      {open && (
+        <Animated.Text
+          style={[styles.faqA, { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}
+        >
+          {f.a}
+        </Animated.Text>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 export default function LandingScreen({ navigation }) {
   const isWide = useIsWideWeb();
   const [openFaq, setOpenFaq] = useState(null);
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollOffsetRef = useRef(0);
+  const reduced = usePrefersReducedMotion();
+  const viewportH = useViewportHeight();
 
   const goJoin = () => navigation.navigate('Welcome');
   const goLogin = () => navigation.navigate('Login');
@@ -174,6 +290,96 @@ export default function LandingScreen({ navigation }) {
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     { useNativeDriver: true, listener: (e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; } }
   );
+
+  // Hero — headline stays put; everything around it drifts at its own speed
+  // as the user leaves the top of the page, so it reads as layered rather
+  // than flat. Always defined (no measurement lag) since it's driven off
+  // raw scrollY, and the hero is always at the top of the document.
+  const heroLeadStyle = reduced ? null : {
+    transform: [{ translateY: scrollY.interpolate({ inputRange: [0, 700], outputRange: [0, 22], extrapolate: 'clamp' }) }],
+  };
+  const heroImgStyle = reduced ? null : {
+    opacity: scrollY.interpolate({ inputRange: [0, 500, 750], outputRange: [1, 1, 0.55], extrapolate: 'clamp' }),
+    transform: [
+      { translateY: scrollY.interpolate({ inputRange: [0, 700], outputRange: [0, -60], extrapolate: 'clamp' }) },
+      { scale: scrollY.interpolate({ inputRange: [0, 700], outputRange: [1, 0.92], extrapolate: 'clamp' }) },
+    ],
+  };
+  const heroAvatarStyle = reduced ? null : {
+    transform: [{ translateY: scrollY.interpolate({ inputRange: [0, 700], outputRange: [0, 42], extrapolate: 'clamp' }) }],
+  };
+
+  // Statement banner — cinematic: the image slowly de-zooms as it crosses
+  // the viewport, the overlay lightens, the line settles up slightly.
+  const [stmtRef, stmtTop] = useScrollTop(scrollOffsetRef);
+  const stmtHeight = isWide ? 460 : 320;
+  const stmtProgress = (reduced || stmtTop == null) ? null : scrollY.interpolate({
+    inputRange: [stmtTop - viewportH, stmtTop + stmtHeight * 0.6],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const stmtImgScale = settle(stmtProgress, reduced, 1.18, 1);
+  const stmtOverlayOpacity = settle(stmtProgress, reduced, 1, 0.78);
+  const stmtTextTranslate = settle(stmtProgress, reduced, 26, -6);
+
+  // Nearby map — rises into place, then its ambient "something's
+  // happening" dots light up one after another instead of all at once.
+  const [mapRef, mapTop] = useScrollTop(scrollOffsetRef);
+  const mapProgress = (reduced || mapTop == null) ? null : scrollY.interpolate({
+    inputRange: [mapTop - viewportH * 0.75, mapTop - viewportH * 0.3],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const mapRiseStyle = { opacity: settle(mapProgress, reduced, 0, 1), transform: [{ translateY: settle(mapProgress, reduced, 46, 0) }] };
+  const mapDotStyle = (i) => {
+    const d = i * 0.18;
+    if (reduced) return { opacity: 1, transform: [{ scale: 1 }] };
+    if (mapProgress == null) return { opacity: 0, transform: [{ scale: 0.4 }] };
+    const o = mapProgress.interpolate({ inputRange: [d, Math.min(1, d + 0.35)], outputRange: [0, 1], extrapolate: 'clamp' });
+    return { opacity: o, transform: [{ scale: o.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] };
+  };
+
+  // Create — collage and copy slide in from opposite sides and settle into
+  // place, like the interface is assembling itself; fields inside the mock
+  // form stagger in after.
+  const [createRef, createTop] = useScrollTop(scrollOffsetRef);
+  const createProgress = (reduced || createTop == null) ? null : scrollY.interpolate({
+    inputRange: [createTop - viewportH * 0.8, createTop - viewportH * 0.35],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const createAxis = isWide ? 'translateX' : 'translateY';
+  const createSpan = isWide ? 60 : 34;
+  const collageStyle = {
+    opacity: settle(createProgress, reduced, 0, 1),
+    transform: [{ [createAxis]: settle(createProgress, reduced, -createSpan, 0) }, { scale: settle(createProgress, reduced, 0.95, 1) }],
+  };
+  const copyStyle = {
+    opacity: settle(createProgress, reduced, 0, 1),
+    transform: [{ [createAxis]: settle(createProgress, reduced, createSpan, 0) }],
+  };
+  const fieldStyle = (d) => {
+    if (reduced) return { opacity: 1 };
+    if (createProgress == null) return { opacity: 0, transform: [{ translateY: 14 }] };
+    const o = createProgress.interpolate({ inputRange: [d, Math.min(1, d + 0.3)], outputRange: [0, 1], extrapolate: 'clamp' });
+    return { opacity: o, transform: [{ translateY: o.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
+  };
+
+  // Final CTA — the closing shot: image settles from a slight zoom, the
+  // overlay eases back, the line and button land last.
+  const [finalRef, finalTop] = useScrollTop(scrollOffsetRef);
+  const finalHeight = isWide ? 600 : 340;
+  const finalProgress = (reduced || finalTop == null) ? null : scrollY.interpolate({
+    inputRange: [finalTop - viewportH * 0.7, finalTop + finalHeight * 0.25],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+  const finalImgScale = settle(finalProgress, reduced, 1.12, 1);
+  const finalOverlayOpacity = settle(finalProgress, reduced, 1, 0.85);
+  const finalTextOpacity = settle(finalProgress, reduced, 0, 1);
+  const finalTextTranslate = settle(finalProgress, reduced, 22, 0);
+  const finalBtnOpacity = reduced ? 1 : (finalProgress == null ? 0 : finalProgress.interpolate({ inputRange: [0.4, 1], outputRange: [0, 1], extrapolate: 'clamp' }));
+  const finalBtnTranslate = reduced ? 0 : (finalProgress == null ? 14 : finalProgress.interpolate({ inputRange: [0.4, 1], outputRange: [14, 0], extrapolate: 'clamp' }));
 
   return (
     <Animated.ScrollView
@@ -213,9 +419,9 @@ export default function LandingScreen({ navigation }) {
         <View style={[styles.heroTopRow, !isWide && { flexDirection: 'column' }]}>
           <View style={{ flex: 1, maxWidth: isWide ? 660 : undefined }}>
             <Text style={[styles.h1, { fontSize: isWide ? 72 : 42 }]}>Find something{'\n'}worth doing.</Text>
-            <Text style={styles.lead}>
+            <Animated.Text style={[styles.lead, heroLeadStyle]}>
               Discover activities around you, meet people who are into the same things, and make experiences worth sharing.
-            </Text>
+            </Animated.Text>
             <View style={styles.heroCtaRow}>
               <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
                 <Text style={styles.ctaFilledText}>Explore Activities</Text>
@@ -228,17 +434,17 @@ export default function LandingScreen({ navigation }) {
 
           {isWide && (
             <View style={styles.heroSideCol}>
-              <View style={styles.heroSideImg}>
+              <Animated.View style={[styles.heroSideImg, heroImgStyle]}>
                 <Image source={{ uri: unsplash('friends,bouldering,film', 580, 420) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
-              <View style={styles.heroAvatarRow}>
+              </Animated.View>
+              <Animated.View style={[styles.heroAvatarRow, heroAvatarStyle]}>
                 <View style={styles.avatarStack}>
                   <InitialsAvatar text="AR" size={28} bg="#2A2A33" style={{ borderWidth: 2, borderColor: BG }} />
                   <InitialsAvatar text="NK" size={28} bg="#33323F" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
                   <InitialsAvatar text="+9" size={28} bg={ACCENT} color="#fff" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
                 </View>
                 <Text style={styles.heroAvatarCaption}>joined something{'\n'}in the last hour</Text>
-              </View>
+              </Animated.View>
             </View>
           )}
         </View>
@@ -256,36 +462,36 @@ export default function LandingScreen({ navigation }) {
         {isWide ? (
           <View style={{ gap: 14 }}>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <CategoryCard item={CATEGORIES.sports} big style={{ flex: 1, height: 414 }} />
+              <CategoryCard item={CATEGORIES.sports} big style={{ flex: 1, height: 414 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={0} from="up" distance={60} />
               <View style={{ flex: 1, gap: 14 }}>
-                <CategoryCard item={CATEGORIES.adventure} style={{ height: 200 }} />
+                <CategoryCard item={CATEGORIES.adventure} style={{ height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={1} from="right" distance={50} rotateFrom={-2} />
                 <View style={{ flexDirection: 'row', gap: 14 }}>
-                  <CategoryCard item={CATEGORIES.gaming} style={{ flex: 1, height: 200 }} />
-                  <CategoryCard item={CATEGORIES.arts} style={{ flex: 1, height: 200 }} />
+                  <CategoryCard item={CATEGORIES.gaming} style={{ flex: 1, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={2} from="down" distance={40} rotateFrom={2} />
+                  <CategoryCard item={CATEGORIES.arts} style={{ flex: 1, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={3} from="down" distance={40} rotateFrom={-2} />
                 </View>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <View style={[styles.educationCard, { flex: 1, height: 200 }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" distance={40} rotateFrom={1.4} delay={280} style={{ flex: 1, height: 200 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
                 <Text style={styles.educationTitle}>Education</Text>
                 <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
-              </View>
-              <CategoryCard item={CATEGORIES.lifestyle} style={{ flex: 1, height: 200 }} />
-              <CategoryCard item={CATEGORIES.tech} style={{ flex: 2, height: 200 }} />
+              </Reveal>
+              <CategoryCard item={CATEGORIES.lifestyle} style={{ flex: 1, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={5} from="up" distance={36} rotateFrom={-1.5} />
+              <CategoryCard item={CATEGORIES.tech} style={{ flex: 2, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={6} from="right" distance={46} rotateFrom={1} />
             </View>
           </View>
         ) : (
           <View style={{ gap: 14 }}>
-            <CategoryCard item={CATEGORIES.sports} big style={{ width: '100%', height: 220 }} />
-            <CategoryCard item={CATEGORIES.adventure} style={{ width: '100%', height: 190 }} />
-            <CategoryCard item={CATEGORIES.gaming} style={{ width: '100%', height: 190 }} />
-            <CategoryCard item={CATEGORIES.arts} style={{ width: '100%', height: 190 }} />
-            <View style={[styles.educationCard, { width: '100%', height: 150 }]}>
+            <CategoryCard item={CATEGORIES.sports} big style={{ width: '100%', height: 220 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={0} from="up" distance={40} />
+            <CategoryCard item={CATEGORIES.adventure} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={1} from="up" distance={36} />
+            <CategoryCard item={CATEGORIES.gaming} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={2} from="up" distance={36} />
+            <CategoryCard item={CATEGORIES.arts} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={3} from="up" distance={36} />
+            <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" distance={36} delay={280} style={{ width: '100%', height: 150 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
               <Text style={styles.educationTitle}>Education</Text>
               <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
-            </View>
-            <CategoryCard item={CATEGORIES.lifestyle} style={{ width: '100%', height: 190 }} />
-            <CategoryCard item={CATEGORIES.tech} style={{ width: '100%', height: 190 }} />
+            </Reveal>
+            <CategoryCard item={CATEGORIES.lifestyle} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={5} from="up" distance={36} />
+            <CategoryCard item={CATEGORIES.tech} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={6} from="up" distance={36} />
           </View>
         )}
       </Section>
@@ -295,18 +501,32 @@ export default function LandingScreen({ navigation }) {
         <View style={{ gap: isWide ? 60 : 44 }}>
           {STORY_STEPS.map((s, i) => (
             <View key={s.n} style={[styles.parallaxRow, !isWide && { flexDirection: 'column' }, isWide && i % 2 === 1 && { flexDirection: 'row-reverse' }]}>
-              <ParallaxPhoto
-                uri={s.img}
-                height={isWide ? 360 : 240}
-                scrollY={scrollY}
-                scrollOffsetRef={scrollOffsetRef}
+              <Reveal
+                scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
+                from={!isWide ? 'up' : i % 2 === 0 ? 'left' : 'right'}
+                distance={isWide ? 70 : 40}
+                delay={90}
                 style={isWide ? { flex: 1.1 } : { width: '100%' }}
-              />
-              <View style={[styles.parallaxCopy, isWide && { flex: 0.9 }]}>
+                innerStyle={{ flex: 1 }}
+              >
+                <ParallaxPhoto
+                  uri={s.img}
+                  height={isWide ? 360 : 240}
+                  scrollY={scrollY}
+                  scrollOffsetRef={scrollOffsetRef}
+                  style={{ flex: 1 }}
+                />
+              </Reveal>
+              <Reveal
+                scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced}
+                from="up" distance={22} delay={0}
+                style={isWide ? { flex: 0.9 } : { width: '100%' }}
+                innerStyle={styles.parallaxCopy}
+              >
                 <Text style={styles.storyNum}>{s.n}</Text>
                 <Text style={styles.storyTitle}>{s.title}</Text>
                 <Text style={styles.storyBody}>{s.body}</Text>
-              </View>
+              </Reveal>
             </View>
           ))}
         </View>
@@ -327,7 +547,7 @@ export default function LandingScreen({ navigation }) {
           <View style={[styles.expGrid, !isWide && { flexDirection: 'column' }]}>
             {/* Column 1 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
-              <View style={[styles.expCard, { transform: [{ rotate: '1.2deg' }] }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={8} rotateTo={1.2} delay={0} innerStyle={styles.expCard}>
                 <View style={styles.expImageWrap}>
                   <Image source={{ uri: unsplash('sweaty,group,futsal', 500, 460) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 </View>
@@ -342,15 +562,15 @@ export default function LandingScreen({ navigation }) {
                     <Text style={styles.expFooterText}>214 · linked to <Text style={{ color: '#DEDEE4', fontFamily: Fonts.semibold }}>Sunday 6 a-side</Text></Text>
                   </View>
                 </View>
-              </View>
-              <View style={[styles.expPhotoOnly, { height: 180, transform: [{ rotate: '-1.6deg' }] }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={-10} rotateTo={-1.6} delay={130} style={{ height: 180 }} innerStyle={[styles.expPhotoOnly, { height: 180 }]}>
                 <Image source={{ uri: unsplash('bus,window,travel', 500, 380) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
+              </Reveal>
             </View>
 
             {/* Column 2 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 34 }]}>
-              <View style={[styles.expHighlightCard, { transform: [{ rotate: '-1.4deg' }] }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-9} rotateTo={-1.4} delay={40} innerStyle={styles.expHighlightCard}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="PL" size={28} bg="rgba(20,20,25,0.1)" color="#141419" />
                   <Text style={[styles.expUser, { color: '#141419' }]}>Prisha L. <Text style={[styles.expUserTime, { color: 'rgba(20,20,25,0.55)' }]}>· yesterday</Text></Text>
@@ -359,74 +579,81 @@ export default function LandingScreen({ navigation }) {
                 <View style={[styles.expFooter, { borderTopWidth: 0, marginTop: 16, paddingTop: 0 }]}>
                   <Text style={[styles.expFooterText, { color: ACCENT, fontFamily: Fonts.semibold }]}>♥ 512 · Pottery, beginners</Text>
                 </View>
-              </View>
-              <View style={[styles.expPhotoOnly, { height: 300, transform: [{ rotate: '1.1deg' }] }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={8} rotateTo={1.1} delay={170} style={{ height: 300 }} innerStyle={[styles.expPhotoOnly, { height: 300 }]}>
                 <Image source={{ uri: unsplash('pottery,hands,clay', 500, 620) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
-              <View style={[styles.expCard, { transform: [{ rotate: '-0.9deg' }], padding: 18 }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-7} rotateTo={-0.9} delay={300} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="KT" size={28} bg="#2E2E38" />
                   <Text style={styles.expUser}>Kiran T. <Text style={styles.expUserTime}>· 3d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Hosted a chess table in the park expecting two people. Sixteen showed up."</Text>
                 <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 189 · Chess in the park</Text>
-              </View>
+              </Reveal>
             </View>
 
             {/* Column 3 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
-              <View style={[styles.expPhotoOnly, { height: 320, transform: [{ rotate: '-1.2deg' }] }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={-9} rotateTo={-1.2} delay={80} style={{ height: 320 }} innerStyle={[styles.expPhotoOnly, { height: 320 }]}>
                 <Image source={{ uri: unsplash('hike,summit,backlit', 500, 660) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 <View style={styles.expPhotoOverlay}>
                   <Text style={styles.expPhotoOverlayTitle}>Sunrise hike to Shivapuri</Text>
                   <Text style={styles.expPhotoOverlaySub}>23 went · 41 photos shared</Text>
                 </View>
-              </View>
-              <View style={[styles.expCard, { transform: [{ rotate: '1.3deg' }], padding: 18 }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={9} rotateTo={1.3} delay={210} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="SM" size={28} bg="#46445A" />
                   <Text style={styles.expUser}>Sneha M. <Text style={styles.expUserTime}>· 5d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Left the house at 4 a.m. with five strangers. Watched the valley wake up."</Text>
                 <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 331 · Sunrise hike to Shivapuri</Text>
-              </View>
-              <View style={[styles.expPhotoOnly, { height: 170, transform: [{ rotate: '1.5deg' }] }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={10} rotateTo={1.5} delay={340} style={{ height: 170 }} innerStyle={[styles.expPhotoOnly, { height: 170 }]}>
                 <Image source={{ uri: unsplash('tea,break,conversation', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
+              </Reveal>
             </View>
 
             {/* Column 4 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 52 }]}>
-              <View style={[styles.expPhotoOnly, { height: 260, transform: [{ rotate: '-1.1deg' }] }]}>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-8} rotateTo={-1.1} delay={120} style={{ height: 260 }} innerStyle={[styles.expPhotoOnly, { height: 260 }]}>
                 <Image source={{ uri: unsplash('screen,lit,gaming,night', 500, 520) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </View>
-              <View style={[styles.expCard, { transform: [{ rotate: '-1.4deg' }], padding: 18 }]}>
+              </Reveal>
+              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-9} rotateTo={-1.4} delay={250} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
                   <InitialsAvatar text="DJ" size={28} bg="#3A3947" />
                   <Text style={styles.expUser}>Dev J. <Text style={styles.expUserTime}>· 1w</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Found a 5-stack that actually communicates. We've played every Friday since."</Text>
                 <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 96 · Valorant 5-stack</Text>
-              </View>
+              </Reveal>
             </View>
           </View>
         </Section>
       </View>
 
-      {/* BRAND STATEMENT */}
-      <View style={[styles.statement, { marginTop: isWide ? 140 : 80, height: isWide ? 460 : 320 }]}>
-        <Image source={{ uri: unsplash('group,walking,dusk', 1400, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-        <LinearGradient
-          colors={['rgba(8,8,10,0.92)', 'rgba(8,8,10,0.3)']}
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          style={StyleSheet.absoluteFillObject}
+      {/* BRAND STATEMENT — cinematic: image de-zooms as it crosses the
+          viewport rather than just fading in. */}
+      <View ref={stmtRef} style={[styles.statement, { marginTop: isWide ? 140 : 80, height: stmtHeight }]}>
+        <Animated.Image
+          source={{ uri: unsplash('group,walking,dusk', 1400, 700) }}
+          style={[StyleSheet.absoluteFillObject, { transform: [{ scale: stmtImgScale }] }]}
+          resizeMode="cover"
         />
-        <View style={styles.statementInner}>
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: stmtOverlayOpacity }]}>
+          <LinearGradient
+            colors={['rgba(8,8,10,0.92)', 'rgba(8,8,10,0.3)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
+        <Animated.View style={[styles.statementInner, { transform: [{ translateY: stmtTextTranslate }] }]}>
           <Text style={[styles.statementText, { fontSize: isWide ? 64 : 34 }]}>
             Less scrolling.{'\n'}<Text style={{ color: ACCENT }}>More doing.</Text>
           </Text>
-        </View>
+        </Animated.View>
       </View>
 
       {/* NEARBY */}
@@ -441,42 +668,44 @@ export default function LandingScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <View style={[styles.mapBox, { height: isWide ? 560 : 340 }]}>
-          <Svg width="100%" height="100%" viewBox="0 0 1200 560" preserveAspectRatio="none" style={StyleSheet.absoluteFillObject}>
-            <Rect width="1200" height="560" fill="#0C0C10" />
-            <G stroke="#1B1B22" strokeWidth="1">
-              <Path d="M0 90H1200M0 210H1200M0 330H1200M0 450H1200" />
-              <Path d="M120 0V560M300 0V560M480 0V560M660 0V560M840 0V560M1020 0V560" />
-            </G>
-            <G stroke="#23232C" strokeWidth="7" strokeLinecap="round" fill="none">
-              <Path d="M-20 300 Q 280 250 520 320 T 1220 260" />
-              <Path d="M400 -20 Q 460 200 380 380 T 460 580" />
-              <Path d="M760 -20 L 820 560" />
-              <Path d="M0 470 L 1200 430" />
-            </G>
-            <Path d="M60 60 L 260 40 L 300 170 L 90 200 Z" fill="#12131A" stroke="#1F2029" />
-            <Path d="M900 340 L 1140 320 L 1180 500 L 940 520 Z" fill="#101519" stroke="#1B2228" />
-            <Circle cx="600" cy="280" r="150" fill={ACCENT} fillOpacity={0.07} />
-            <Circle cx="600" cy="280" r="150" fill="none" stroke={ACCENT} strokeOpacity={0.22} strokeDasharray="6 8" />
-          </Svg>
+        <View ref={mapRef} style={[styles.mapBox, { height: isWide ? 560 : 340 }]}>
+          <Animated.View style={[StyleSheet.absoluteFillObject, mapRiseStyle]}>
+            <Svg width="100%" height="100%" viewBox="0 0 1200 560" preserveAspectRatio="none" style={StyleSheet.absoluteFillObject}>
+              <Rect width="1200" height="560" fill="#0C0C10" />
+              <G stroke="#1B1B22" strokeWidth="1">
+                <Path d="M0 90H1200M0 210H1200M0 330H1200M0 450H1200" />
+                <Path d="M120 0V560M300 0V560M480 0V560M660 0V560M840 0V560M1020 0V560" />
+              </G>
+              <G stroke="#23232C" strokeWidth="7" strokeLinecap="round" fill="none">
+                <Path d="M-20 300 Q 280 250 520 320 T 1220 260" />
+                <Path d="M400 -20 Q 460 200 380 380 T 460 580" />
+                <Path d="M760 -20 L 820 560" />
+                <Path d="M0 470 L 1200 430" />
+              </G>
+              <Path d="M60 60 L 260 40 L 300 170 L 90 200 Z" fill="#12131A" stroke="#1F2029" />
+              <Path d="M900 340 L 1140 320 L 1180 500 L 940 520 Z" fill="#101519" stroke="#1B2228" />
+              <Circle cx="600" cy="280" r="150" fill={ACCENT} fillOpacity={0.07} />
+              <Circle cx="600" cy="280" r="150" fill="none" stroke={ACCENT} strokeOpacity={0.22} strokeDasharray="6 8" />
+            </Svg>
 
-          <View style={styles.mapPin} pointerEvents="none">
-            <MapPulse />
-            <View style={styles.mapPinDot} />
-          </View>
+            <View style={styles.mapPin} pointerEvents="none">
+              <MapPulse />
+              <View style={styles.mapPinDot} />
+            </View>
 
-          {/* Just a few unlabeled glowing dots — "what's happening around",
-              no cards or text, per request. */}
-          {[{ left: '26%', top: '22%' }, { left: '63%', top: '16%' }, { left: '70%', top: '62%' }, { left: '18%', top: '70%' }].map((p, i) => (
-            <View key={i} pointerEvents="none" style={[styles.mapDot, p]} />
-          ))}
+            {/* Just a few unlabeled glowing dots — "what's happening around",
+                no cards or text, per request — that light up one after another. */}
+            {[{ left: '26%', top: '22%' }, { left: '63%', top: '16%' }, { left: '70%', top: '62%' }, { left: '18%', top: '70%' }].map((p, i) => (
+              <Animated.View key={i} pointerEvents="none" style={[styles.mapDot, p, mapDotStyle(i)]} />
+            ))}
+          </Animated.View>
         </View>
       </Section>
 
       {/* CREATE */}
       <Section id="create" style={{ marginTop: isWide ? 140 : 80 }}>
-        <View style={[styles.createRow, !isWide && { flexDirection: 'column' }]}>
-          <View style={[styles.createCollage, isWide && { width: '46%' }]}>
+        <View ref={createRef} style={[styles.createRow, !isWide && { flexDirection: 'column' }]}>
+          <Animated.View style={[styles.createCollage, isWide && { width: '46%' }, collageStyle]}>
             <View style={styles.createImgWide}>
               <Image source={{ uri: unsplash('rallying,friends,phone', 900, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
             </View>
@@ -488,9 +717,9 @@ export default function LandingScreen({ navigation }) {
                 <Image source={{ uri: unsplash('small,group,arriving', 450, 400) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </View>
             </View>
-          </View>
+          </Animated.View>
 
-          <View style={[styles.createCopy, isWide && { width: '46%' }]}>
+          <Animated.View style={[styles.createCopy, isWide && { width: '46%' }, copyStyle]}>
             <Text style={[styles.h2, { fontSize: isWide ? 42 : 30 }]}>Can't find your thing? Start it.</Text>
             <Text style={[styles.leadSmall, { marginTop: 14, marginBottom: 26 }]}>
               Four fields and it's live. Spurth puts it in front of people nearby who are into the same thing.
@@ -498,11 +727,11 @@ export default function LandingScreen({ navigation }) {
 
             <View style={styles.mockForm}>
               <Text style={styles.mockFormLabel}>New activity</Text>
-              <View style={styles.mockField}>
+              <Animated.View style={[styles.mockField, fieldStyle(0)]}>
                 <Text style={styles.mockFieldLabel}>What</Text>
                 <Text style={styles.mockFieldValue}>Sunset bouldering session</Text>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+              </Animated.View>
+              <Animated.View style={[{ flexDirection: 'row', gap: 12, marginTop: 12 }, fieldStyle(0.2)]}>
                 <View style={[styles.mockField, { flex: 1 }]}>
                   <Text style={styles.mockFieldLabel}>When</Text>
                   <Text style={styles.mockFieldValue}>Today · 5:30 PM</Text>
@@ -511,8 +740,8 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.mockFieldLabel}>Where</Text>
                   <Text style={styles.mockFieldValue}>Astro Wall</Text>
                 </View>
-              </View>
-              <View style={{ marginTop: 12 }}>
+              </Animated.View>
+              <Animated.View style={[{ marginTop: 12 }, fieldStyle(0.4)]}>
                 <Text style={styles.mockFieldLabel}>Category</Text>
                 <View style={styles.mockPillsRow}>
                   <View style={[styles.mockPill, { backgroundColor: ACCENT }]}><Text style={styles.mockPillTextActive}>Sports</Text></View>
@@ -521,8 +750,8 @@ export default function LandingScreen({ navigation }) {
                   <View style={styles.mockPill}><Text style={styles.mockPillText}>Arts</Text></View>
                   <View style={styles.mockPill}><Text style={styles.mockPillText}>Tech</Text></View>
                 </View>
-              </View>
-              <View style={styles.mockSliderRow}>
+              </Animated.View>
+              <Animated.View style={[styles.mockSliderRow, fieldStyle(0.6)]}>
                 <Text style={styles.mockFieldValue}>Group size</Text>
                 <View style={styles.mockSliderTrackRow}>
                   <View style={styles.mockSliderTrack}>
@@ -531,12 +760,14 @@ export default function LandingScreen({ navigation }) {
                   </View>
                   <Text style={[styles.mockFieldValue, { fontSize: 13.5 }]}>8</Text>
                 </View>
-              </View>
-              <TouchableOpacity onPress={goJoin} style={styles.mockCreateBtn} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>Create an Activity</Text>
-              </TouchableOpacity>
+              </Animated.View>
+              <Animated.View style={fieldStyle(0.75)}>
+                <TouchableOpacity onPress={goJoin} style={styles.mockCreateBtn} activeOpacity={0.85}>
+                  <Text style={styles.ctaFilledText}>Create an Activity</Text>
+                </TouchableOpacity>
+              </Animated.View>
             </View>
-          </View>
+          </Animated.View>
         </View>
       </Section>
 
@@ -544,41 +775,37 @@ export default function LandingScreen({ navigation }) {
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
         <Text style={[styles.h2, { fontSize: isWide ? 54 : 30, marginBottom: 32 }]}>Questions</Text>
         <View style={[styles.faqGrid, !isWide && { flexDirection: 'column' }]}>
-          {FAQS.map((f, i) => {
-            const open = openFaq === i;
-            return (
-              <TouchableOpacity
-                key={f.q}
-                style={[styles.faqItem, isWide && { width: '48%' }]}
-                activeOpacity={0.8}
-                onPress={() => setOpenFaq(open ? null : i)}
-              >
-                <View style={styles.faqHeader}>
-                  <Text style={styles.faqQ}>{f.q}</Text>
-                  <Ionicons name={open ? 'remove' : 'add'} size={20} color={ACCENT} />
-                </View>
-                {open && <Text style={styles.faqA}>{f.a}</Text>}
-              </TouchableOpacity>
-            );
-          })}
+          {FAQS.map((f, i) => (
+            <FaqItem key={f.q} f={f} isWide={isWide} open={openFaq === i} onPress={() => setOpenFaq(openFaq === i ? null : i)} />
+          ))}
         </View>
       </Section>
 
       {/* FINAL CTA */}
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
-        <View style={[styles.finalBox, { height: isWide ? 600 : 340 }]}>
-          <Image source={{ uri: unsplash('faces,mid,laugh,group', 1200, 700) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-          <LinearGradient
-            colors={['rgba(8,8,10,0.25)', 'rgba(8,8,10,0.95)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFillObject}
+        <View ref={finalRef} style={[styles.finalBox, { height: finalHeight }]}>
+          <Animated.Image
+            source={{ uri: unsplash('faces,mid,laugh,group', 1200, 700) }}
+            style={[StyleSheet.absoluteFillObject, { transform: [{ scale: finalImgScale }] }]}
+            resizeMode="cover"
           />
+          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: finalOverlayOpacity }]}>
+            <LinearGradient
+              colors={['rgba(8,8,10,0.25)', 'rgba(8,8,10,0.95)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
           <View style={styles.finalInner}>
-            <Text style={[styles.finalText, { fontSize: isWide ? 56 : 34 }]}>You can't scroll{'\n'}anymore. Better{'\n'}go out.</Text>
-            <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, { marginTop: 26, alignSelf: 'flex-start' }]} activeOpacity={0.85}>
-              <Text style={styles.ctaFilledText}>Explore Spurth</Text>
-            </TouchableOpacity>
+            <Animated.Text style={[styles.finalText, { fontSize: isWide ? 56 : 34 }, { opacity: finalTextOpacity, transform: [{ translateY: finalTextTranslate }] }]}>
+              You can't scroll{'\n'}anymore. Better{'\n'}go out.
+            </Animated.Text>
+            <Animated.View style={{ marginTop: 26, alignSelf: 'flex-start', opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
+              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+                <Text style={styles.ctaFilledText}>Explore Spurth</Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
         </View>
       </Section>
