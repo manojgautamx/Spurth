@@ -67,12 +67,6 @@ const CATEGORIES = {
   tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: unsplash('hackathon,coding', 900, 400) },
 };
 
-const CREATE_FEATURES = [
-  { title: 'Four fields', body: 'What, when, where, category — that\'s the whole form.' },
-  { title: 'No approval queue', body: "It's visible to nearby people the moment you post it." },
-  { title: 'Matched by interest', body: 'Shown first to people already into the same thing.' },
-];
-
 const NEARBY_DOTS = [
   { left: '26%', top: '22%', label: 'Pickup futsal · 12 going' },
   { left: '63%', top: '16%', label: 'Study room, open now' },
@@ -251,6 +245,31 @@ function ParallaxPhoto({ uri, height, scrollY, scrollOffsetRef, amount = 36, sty
   );
 }
 
+// The character floats free with no background panel: a continuous gentle
+// up-down bob (loops forever, like MapPulse below) suggests flight, layered
+// on top of the one-time scroll entrance passed in via `style`.
+function FlyingCharacter({ style, reduced, imgStyle }) {
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bob, { toValue: 1, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(bob, { toValue: 0, duration: 1700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduced]);
+  const bobY = bob.interpolate({ inputRange: [0, 1], outputRange: [10, -10] });
+
+  return (
+    <Animated.View style={{ opacity: style.opacity, transform: [...style.transform, { translateY: bobY }] }}>
+      <Image source={require('../assets/character.png')} style={imgStyle} resizeMode="contain" />
+    </Animated.View>
+  );
+}
+
 function MapPulse() {
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.55)).current;
@@ -359,9 +378,10 @@ export default function LandingScreen({ navigation }) {
     return { opacity: o, transform: [{ scale: o.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }) }] };
   };
 
-  // Create — the character banner slides in horizontally (flies in from
-  // the left with a little cape-flutter rotation) and settles onto its
-  // poster panel; the headline and features rise in underneath it.
+  // Create — one-time entrance the first time the character scrolls into
+  // view (flies in from the left with a little cape-flutter rotation);
+  // FlyingCharacter layers its own continuous bob on top of this. The
+  // headline and CTA rise in underneath it.
   const [createRef, createTop] = useScrollTop(scrollOffsetRef);
   const createProgress = (reduced || createTop == null) ? null : scrollY.interpolate({
     inputRange: [createTop - viewportH * 0.8, createTop - viewportH * 0.35],
@@ -729,34 +749,24 @@ export default function LandingScreen({ navigation }) {
         </View>
       </Section>
 
-      {/* CREATE — a hero-poster panel: the character flies in horizontally,
-          the "be the hero" headline lands underneath. */}
+      {/* CREATE — the character floats free (no panel/box), with a
+          continuous gentle bob suggesting flight, plus a one-time
+          horizontal entrance the first time it scrolls into view. */}
       <Section id="create" style={{ marginTop: isWide ? 140 : 80 }}>
         <View ref={createRef}>
-          <Animated.View style={[styles.heroCharBox, { height: isWide ? 320 : 200 }, charStyle]}>
-            <LinearGradient colors={['#251A40', '#0D0A16']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFillObject} />
-            <Image source={require('../assets/character.png')} style={styles.heroCharImg} resizeMode="contain" />
-          </Animated.View>
+          <FlyingCharacter
+            reduced={reduced}
+            style={charStyle}
+            imgStyle={{ width: isWide ? 480 : 300, aspectRatio: 3168 / 1344, alignSelf: 'center' }}
+          />
 
           <Animated.View style={[styles.heroCharCopy, bodyStyle]}>
             <Text style={[styles.h2, styles.heroCharHeadline, { fontSize: isWide ? 46 : 28 }]}>
               Can't find your thing?{'\n'}
               <Text style={{ color: ACCENT }}>Start now. Be the hero the world needs.</Text>
             </Text>
-            <Text style={[styles.leadSmall, styles.heroCharSub]}>
-              Four fields and it's live. Spurth puts it in front of people nearby who are into the same thing.
-            </Text>
 
-            <View style={[styles.heroCharFeatures, !isWide && { flexDirection: 'column' }]}>
-              {CREATE_FEATURES.map((f, i) => (
-                <Animated.View key={f.title} style={[isWide && { flex: 1 }, fieldStyle(i * 0.22)]}>
-                  <Text style={[styles.createFeatureTitle, { textAlign: isWide ? 'center' : 'left' }]}>{f.title}</Text>
-                  <Text style={[styles.createFeatureBody, { textAlign: isWide ? 'center' : 'left' }]}>{f.body}</Text>
-                </Animated.View>
-              ))}
-            </View>
-
-            <Animated.View style={[{ marginTop: 30, alignSelf: 'center' }, fieldStyle(0.7)]}>
+            <Animated.View style={[{ marginTop: 30, alignSelf: 'center' }, fieldStyle(0.4)]}>
               <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
                 <Text style={styles.ctaFilledText}>Create an Activity</Text>
               </TouchableOpacity>
@@ -922,15 +932,10 @@ const styles = StyleSheet.create({
   mapLabel: { position: 'absolute', marginLeft: 14, marginTop: -10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(12,12,16,0.8)', borderWidth: 1, borderColor: LINE, maxWidth: 170 },
   mapLabelText: { color: '#DEDEE4', fontSize: 11, fontFamily: Fonts.semibold },
 
-  // Create — hero-poster character banner
-  heroCharBox: { width: '100%', borderRadius: 28, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  heroCharImg: { width: '68%', height: '76%' },
-  heroCharCopy: { marginTop: 36, alignItems: 'center' },
+  // Create — free-floating character
+  heroCharCopy: { marginTop: 20, alignItems: 'center' },
   heroCharHeadline: { textAlign: 'center', maxWidth: 760, alignSelf: 'center' },
   heroCharSub: { textAlign: 'center', marginTop: 16, maxWidth: 480, alignSelf: 'center' },
-  heroCharFeatures: { flexDirection: 'row', gap: 30, marginTop: 32, maxWidth: 820, alignSelf: 'center' },
-  createFeatureTitle: { color: '#fff', fontSize: 16, fontFamily: Fonts.bold, letterSpacing: -0.2 },
-  createFeatureBody: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 4, maxWidth: 360 },
 
   // FAQ
   faqGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
