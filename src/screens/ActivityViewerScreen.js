@@ -17,6 +17,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../context/AuthContext';
 import useAxios from '../utils/useAxios';
+import { promptSignIn } from '../utils/requireAuth';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
 import LeafletMap from '../components/LeafletMap';
@@ -53,7 +54,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const isWideWeb = useIsWideWeb();
   const { activity: initialActivity, activityId } = route.params;
   const [activity, setActivity] = useState(initialActivity);
-  const { user } = useContext(AuthContext);
+  const { user, userToken } = useContext(AuthContext);
   const axios = useAxios();
 
   const [loading, setLoading] = useState(true);
@@ -222,6 +223,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   };
 
   const handleJoin = async () => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to join this activity.');
     try {
       setJoining(true);
       await axios.post(`${BASE_URL}/api/join-activity/${activity.id}/`);
@@ -327,7 +329,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
       setPostsLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
       const res = await fetch(`${BASE_URL}/api/posts/?activity=${activity.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
       const normalized = (data.results || data).map(p => ({
@@ -344,6 +346,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   };
 
   const handleLike = async (postId) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     try {
       const token = await AsyncStorage.getItem('accessToken');
       await fetch(`${BASE_URL}/api/posts/${postId}/like/`, {
@@ -357,6 +360,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   };
 
   const handleVote = async (postId, choiceId) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to vote on polls.');
     try {
       const token = await AsyncStorage.getItem('accessToken');
       await fetch(`${BASE_URL}/api/posts/${postId}/vote/`, {

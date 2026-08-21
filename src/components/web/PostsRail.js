@@ -9,6 +9,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../../utils/axiosInstance';
 import { LocationContext, filterActivitiesByDistance } from '../../context/LocationContext';
 import { useDistance } from '../../context/DistanceContext';
+import { AuthContext } from '../../context/AuthContext';
+import { promptSignIn } from '../../utils/requireAuth';
 import PostCard from '../PostCard';
 import { Fonts } from '../../theme/fonts';
 
@@ -18,10 +20,21 @@ export default function PostsRail() {
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
   const { distanceKm } = useDistance();
+  const { userToken } = useContext(AuthContext);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // `my-activities/`/`joined-activities/` (used to compute "nearby") are
+    // self-only, and an unfiltered `posts/` list stays authenticated by
+    // design (see PostViewSet.get_permissions on the backend) — this rail
+    // is a personalized widget, not public content, so it just renders its
+    // empty state for an anonymous visitor rather than 401ing.
+    if (!userToken) {
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
 
     const fetchPosts = async () => {
@@ -56,9 +69,10 @@ export default function PostsRail() {
 
     fetchPosts();
     return () => { cancelled = true; };
-  }, [location, distanceKm]);
+  }, [location, distanceKm, userToken]);
 
   const handleLike = async (postId) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     setPosts(prev => prev.map(p =>
       p.id === postId
         ? { ...p, is_liked: !p.is_liked, likes_count: (p.likes_count || 0) + (p.is_liked ? -1 : 1) }

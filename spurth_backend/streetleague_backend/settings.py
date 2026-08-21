@@ -203,3 +203,37 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'noreply@spurth.com')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = 'Spurth <noreply@spurth.com>'
 
+# Django's default logging config only sends output to console when
+# DEBUG=True, and routes unhandled 500s (django.request) to an email-based
+# AdminEmailHandler otherwise — with DEBUG=False in production and no email
+# backend for admins configured, that meant crashes left no trace anywhere.
+# This makes exceptions and request errors print to stdout unconditionally,
+# which Azure App Service (and any other stdout-based log capture) picks up.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '{asctime} {levelname} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+

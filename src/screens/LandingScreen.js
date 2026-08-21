@@ -344,9 +344,6 @@ export default function LandingScreen({ navigation }) {
       { scale: scrollY.interpolate({ inputRange: [0, 700], outputRange: [1, 0.92], extrapolate: 'clamp' }) },
     ],
   };
-  const heroAvatarStyle = reduced ? null : {
-    transform: [{ translateY: scrollY.interpolate({ inputRange: [0, 700], outputRange: [0, 42], extrapolate: 'clamp' }) }],
-  };
 
   // Statement banner — cinematic: the image slowly de-zooms as it crosses
   // the viewport, the overlay lightens, the line settles up slightly.
@@ -407,17 +404,23 @@ export default function LandingScreen({ navigation }) {
     return { opacity: o, transform: [{ translateY: o.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }] };
   };
 
-  // Final CTA — the closing shot: image settles from a slight zoom, the
-  // overlay eases back, the line and button land last.
+  // Final CTA — the illustration settles in from a slight scale as the line
+  // and button land after it. Purely viewport-based (not tied to the card's
+  // own height) so it finishes resolving while the card is still
+  // comfortably on screen — the card used to be a fixed-height full-bleed
+  // image box (600/340) and this window was tuned against that; now it's a
+  // compact content-sized card, so anchoring to the old height meant the
+  // reveal never actually reached 1 until scrolled well past it.
   const [finalRef, finalTop] = useScrollTop(scrollOffsetRef);
-  const finalHeight = isWide ? 600 : 340;
   const finalProgress = (reduced || finalTop == null) ? null : scrollY.interpolate({
-    inputRange: [finalTop - viewportH * 0.7, finalTop + finalHeight * 0.25],
+    inputRange: [finalTop - viewportH * 0.85, finalTop - viewportH * 0.4],
     outputRange: [0, 1],
     extrapolate: 'clamp',
   });
-  const finalImgScale = settle(finalProgress, reduced, 1.12, 1);
-  const finalOverlayOpacity = settle(finalProgress, reduced, 1, 0.85);
+  const finalIllusStyle = {
+    opacity: settle(finalProgress, reduced, 0, 1),
+    transform: [{ scale: settle(finalProgress, reduced, 0.88, 1) }],
+  };
   const finalTextOpacity = settle(finalProgress, reduced, 0, 1);
   const finalTextTranslate = settle(finalProgress, reduced, 22, 0);
   const finalBtnOpacity = reduced ? 1 : (finalProgress == null ? 0 : finalProgress.interpolate({ inputRange: [0.4, 1], outputRange: [0, 1], extrapolate: 'clamp' }));
@@ -476,17 +479,11 @@ export default function LandingScreen({ navigation }) {
 
           {isWide && (
             <View style={styles.heroSideCol}>
-              <Animated.View style={[styles.heroSideImg, heroImgStyle]}>
-                <Image source={{ uri: unsplash('friends,bouldering,film', 580, 420) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
-              </Animated.View>
-              <Animated.View style={[styles.heroAvatarRow, heroAvatarStyle]}>
-                <View style={styles.avatarStack}>
-                  <InitialsAvatar text="AR" size={28} bg="#2A2A33" style={{ borderWidth: 2, borderColor: BG }} />
-                  <InitialsAvatar text="NK" size={28} bg="#33323F" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
-                  <InitialsAvatar text="+9" size={28} bg={ACCENT} color="#fff" style={{ borderWidth: 2, borderColor: BG, marginLeft: -9 }} />
-                </View>
-                <Text style={styles.heroAvatarCaption}>joined something{'\n'}in the last hour</Text>
-              </Animated.View>
+              <Animated.Image
+                source={require('../assets/placeholder.png')}
+                style={[styles.heroSideIllus, heroImgStyle]}
+                resizeMode="contain"
+              />
             </View>
           )}
         </View>
@@ -677,7 +674,7 @@ export default function LandingScreen({ navigation }) {
 
       {/* BRAND STATEMENT — cinematic: image de-zooms as it crosses the
           viewport rather than just fading in. */}
-      <View ref={stmtRef} style={[styles.statement, { marginTop: isWide ? 140 : 80, height: stmtHeight }]}>
+      <View ref={stmtRef} style={[styles.statement, { height: stmtHeight }]}>
         <Animated.Image
           source={{ uri: unsplash('group,walking,dusk', 1400, 700) }}
           style={[StyleSheet.absoluteFillObject, { transform: [{ scale: stmtImgScale }] }]}
@@ -763,7 +760,7 @@ export default function LandingScreen({ navigation }) {
           <Animated.View style={[styles.heroCharCopy, bodyStyle]}>
             <Text style={[styles.h2, styles.heroCharHeadline, { fontSize: isWide ? 46 : 28 }]}>
               Can't find your thing?{'\n'}
-              <Text style={{ color: ACCENT }}>Start now. Be the hero the world needs.</Text>
+              <Text style={{ color: ACCENT }}>Start it. Be the hero.</Text>
             </Text>
 
             <Animated.View style={[{ marginTop: 30, alignSelf: 'center' }, fieldStyle(0.4)]}>
@@ -787,30 +784,20 @@ export default function LandingScreen({ navigation }) {
 
       {/* FINAL CTA */}
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
-        <View ref={finalRef} style={[styles.finalBox, { height: finalHeight }]}>
-          <Animated.Image
-            source={{ uri: unsplash('faces,mid,laugh,group', 1200, 700) }}
-            style={[StyleSheet.absoluteFillObject, { transform: [{ scale: finalImgScale }] }]}
-            resizeMode="cover"
-          />
-          <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: finalOverlayOpacity }]}>
-            <LinearGradient
-              colors={['rgba(8,8,10,0.25)', 'rgba(8,8,10,0.95)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-          </Animated.View>
+        <View ref={finalRef} style={[styles.finalBox, !isWide && styles.finalBoxNarrow]}>
           <View style={styles.finalInner}>
             <Animated.Text style={[styles.finalText, { fontSize: isWide ? 56 : 34 }, { opacity: finalTextOpacity, transform: [{ translateY: finalTextTranslate }] }]}>
               You can't scroll{'\n'}anymore. Better{'\n'}go out.
             </Animated.Text>
             <Animated.View style={{ marginTop: 26, alignSelf: 'flex-start', opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
               <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>Explore Spurth</Text>
+                <Text style={styles.ctaFilledText}>touch some grass</Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
+          <Animated.View style={[styles.finalIllusWrap, !isWide && styles.finalIllusWrapNarrow, finalIllusStyle]}>
+            <Image source={require('../assets/placeholder.png')} style={styles.finalIllus} resizeMode="contain" />
+          </Animated.View>
         </View>
       </Section>
 
@@ -878,11 +865,8 @@ const styles = StyleSheet.create({
 
   // Hero layout
   heroTopRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 56, marginBottom: 56 },
-  heroSideCol: { width: 290, gap: 14, paddingBottom: 8 },
-  heroSideImg: { height: 210, borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
-  heroAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatarStack: { flexDirection: 'row' },
-  heroAvatarCaption: { color: MUTE, fontSize: 13, lineHeight: 17, fontFamily: Fonts.regular },
+  heroSideCol: { width: 340, alignItems: 'center', justifyContent: 'center' },
+  heroSideIllus: { width: '100%', height: 360 },
   // Categories
   catCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
   catCardLabel: { position: 'absolute', left: 22, bottom: 20 },
@@ -945,9 +929,17 @@ const styles = StyleSheet.create({
   faqA: { color: MUTE, fontSize: 13.5, lineHeight: 21, fontFamily: Fonts.regular, marginTop: 12 },
 
   // Final CTA
-  finalBox: { borderRadius: 26, overflow: 'hidden', justifyContent: 'flex-end' },
-  finalInner: { padding: 40 },
+  finalBox: {
+    borderRadius: 26, borderWidth: 1, borderColor: LINE, backgroundColor: RAISE,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 56, paddingHorizontal: 56, gap: 24,
+  },
+  finalBoxNarrow: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 40, paddingHorizontal: 28, gap: 32 },
+  finalInner: { flexShrink: 1 },
   finalText: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
+  finalIllusWrap: { width: 280, aspectRatio: 746 / 714, alignItems: 'center', justifyContent: 'center' },
+  finalIllusWrapNarrow: { width: '100%', alignSelf: 'center' },
+  finalIllus: { width: '100%', height: '100%' },
 
   // Footer
   footerRow: { flexDirection: 'row', justifyContent: 'space-between' },

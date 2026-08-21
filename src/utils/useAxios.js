@@ -11,7 +11,7 @@ const useAxios = () => {
 
   const axiosInstance = axios.create({
     baseURL,
-    headers: { Authorization: `Bearer ${userToken}` },
+    headers: userToken ? { Authorization: `Bearer ${userToken}` } : {},
   });
 
   axiosInstance.interceptors.request.use(async req => {

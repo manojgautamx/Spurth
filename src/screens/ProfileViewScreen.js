@@ -16,6 +16,7 @@ import {
 import axiosInstance from '../utils/axiosInstance';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
+import { promptSignIn } from '../utils/requireAuth';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
@@ -40,7 +41,7 @@ const getCoverSource = (item) => {
 export default function ProfileViewScreen({ route }) {
   const navigation = useNavigation();
   const isWideWeb = useIsWideWeb();
-  const { logout, user } = useContext(AuthContext);
+  const { logout, user, userToken } = useContext(AuthContext);
 
   const userId = route?.params?.userId || null;
   const isMyProfile = !userId || user?.user_id === userId;
@@ -91,16 +92,21 @@ export default function ProfileViewScreen({ route }) {
             setJoinedActivities(res.data.joined || []);
 
             // ── ADD 3: Also fetch the CURRENT user's own activities for the
-            //    invite picker. We need to show activities the inviter belongs to.
-            const [ownCreated, ownJoined] = await Promise.all([
-              axiosInstance.get('my-activities/'),
-              axiosInstance.get('joined-activities/'),
-            ]);
-            if (!active) return;
-            setMyOwnActivities([
-              ...(ownCreated.data || []),
-              ...(ownJoined.data || []),
-            ]);
+            //    invite picker. We need to show activities the inviter belongs
+            //    to — only meaningful (and only authorized) for a logged-in
+            //    visitor; skipping this for anonymous visitors keeps the rest
+            //    of the profile page (which loaded fine) from failing here.
+            if (userToken) {
+              const [ownCreated, ownJoined] = await Promise.all([
+                axiosInstance.get('my-activities/'),
+                axiosInstance.get('joined-activities/'),
+              ]);
+              if (!active) return;
+              setMyOwnActivities([
+                ...(ownCreated.data || []),
+                ...(ownJoined.data || []),
+              ]);
+            }
           }
         } catch (err) {
           console.log('Profile fetch error:', err);
@@ -132,7 +138,7 @@ export default function ProfileViewScreen({ route }) {
       // (PAGE_SIZE=10), since anything posted by other users pushes older
       // posts off that page before the client-side filter ever sees them.
       const res = await fetch(`${BASE_URL}/api/posts/?user=${targetId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
       const normalized = (data.results || data)
@@ -151,6 +157,7 @@ export default function ProfileViewScreen({ route }) {
   };
 
   const handleLike = async (postId) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     try {
       const token = await AsyncStorage.getItem('accessToken');
       await fetch(`${BASE_URL}/api/posts/${postId}/like/`, {
@@ -278,7 +285,13 @@ export default function ProfileViewScreen({ route }) {
                 </TouchableOpacity>
               </>
             ) : (
-              <TouchableOpacity onPress={() => setInviteModalVisible(true)}>
+              <TouchableOpacity
+                onPress={() =>
+                  userToken
+                    ? setInviteModalVisible(true)
+                    : promptSignIn(navigation, 'Sign in to invite people to your events.')
+                }
+              >
                 <Ionicons name="person-add-outline" size={24} color="#fff" />
               </TouchableOpacity>
             )}

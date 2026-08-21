@@ -35,7 +35,7 @@ from django.contrib.auth.backends import ModelBackend
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
+from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
 from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote
 
 @api_view(['POST'])
@@ -448,19 +448,22 @@ class ProfileStatusView(APIView):
         })
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([AllowAny])
 def view_user_profile(request, user_id):
     try:
         user = User.objects.get(id=user_id)
         if not hasattr(user, 'profile'):
             return Response({'detail': 'Profile not found for this user.'}, status=404)
-        serializer = UserProfileSerializer(user.profile)
+        # Trimmed serializer for anonymous/public visitors — excludes
+        # birth_date (only ever consumed by self-editing screens; the public
+        # profile view only reads the already-computed `age` field).
+        serializer = PublicUserProfileSerializer(user.profile)
         return Response(serializer.data)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def user_activities(request, user_id):
     User = get_user_model()
     try:
@@ -647,6 +650,25 @@ class PostViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def get_permissions(self):
+        # Reading a single post, a filtered feed (an activity's or a
+        # profile's own posts — the embedded lists on those public detail
+        # pages), or a post's comments is public content. Everything else
+        # (create/update/destroy/like/vote, and comment creation via the
+        # POST branch of `comments`) stays authenticated — those are all
+        # interactive actions, not reads. An unfiltered `list` call (the
+        # main Experience feed) also stays authenticated; that screen lives
+        # inside MainTabs, which an anonymous visitor can't reach anyway.
+        if self.action == 'retrieve':
+            return [AllowAny()]
+        if self.action == 'list' and (
+            self.request.query_params.get('activity') or self.request.query_params.get('user')
+        ):
+            return [AllowAny()]
+        if self.action == 'comments' and self.request.method == 'GET':
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         queryset = (
             Post.objects
@@ -751,7 +773,7 @@ class PostViewSet(viewsets.ModelViewSet):
             return Response(serializer.errors, status=400)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def activity_detail(request, activity_id):
     try:
         activity = Activity.objects.get(id=activity_id)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   StatusBar,
+  ActivityIndicator,
+  Alert,
+  Share,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
@@ -17,19 +20,46 @@ import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
 import PostsRail from '../components/web/PostsRail';
+import { AuthContext } from '../context/AuthContext';
+import { promptSignIn } from '../utils/requireAuth';
 
 export default function CommentScreen({ route, navigation }) {
-  const { post: initialPost } = route.params;
+  // A deep link (shared post URL) only ever supplies `postId`; in-app
+  // navigation from a feed/card already has the full object on hand and
+  // passes `post` directly so there's no extra round-trip.
+  const { post: initialPost, postId: routePostId } = route.params || {};
+  const postId = initialPost?.id ?? routePostId;
   const isWideWeb = useIsWideWeb();
+  const { userToken } = useContext(AuthContext);
 
-  const [post, setPost] = useState(initialPost);
+  const [post, setPost] = useState(initialPost || null);
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
 
+  // Resolves `post` from just an id (deep-link case) — no-ops once a full
+  // post object is already available. Failure here means there's nothing
+  // to show at all, so it alerts + goes back, unlike the refresh fetch
+  // below which fails silently since it always has a prior `post` to fall
+  // back on.
+  useEffect(() => {
+    if (post || !postId) return;
+    axiosInstance.get(`posts/${postId}/`)
+      .then(res => setPost({
+        ...res.data,
+        activity_id: res.data.activity,
+        event_name: res.data.activity_name,
+      }))
+      .catch(() => {
+        Alert.alert('Error', 'Failed to load post.');
+        navigation.goBack();
+      });
+  }, [postId]);
+
   const fetchPost = useCallback(async () => {
+    if (!postId) return;
     try {
-      const res = await axiosInstance.get(`posts/${initialPost.id}/`);
+      const res = await axiosInstance.get(`posts/${postId}/`);
       setPost(prev => ({
         ...prev,
         ...res.data,
@@ -39,40 +69,43 @@ export default function CommentScreen({ route, navigation }) {
     } catch (err) {
       console.log('Fetch post error:', err);
     }
-  }, [initialPost.id]);
+  }, [postId]);
 
   const fetchComments = useCallback(async () => {
+    if (!postId) return;
     try {
-      const res = await axiosInstance.get(`posts/${initialPost.id}/comments/`);
+      const res = await axiosInstance.get(`posts/${postId}/comments/`);
       setComments(res.data);
     } catch (err) {
       console.log('Fetch comments error:', err);
     } finally {
       setLoading(false);
     }
-  }, [initialPost.id]);
+  }, [postId]);
 
   useEffect(() => {
     fetchPost();
     fetchComments();
   }, [fetchPost, fetchComments]);
 
-  const handleLike = async (postId) => {
+  const handleLike = async (id) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     setPost(prev => ({
       ...prev,
       is_liked: !prev.is_liked,
       likes_count: (prev.likes_count || 0) + (prev.is_liked ? -1 : 1),
     }));
     try {
-      await axiosInstance.post(`posts/${postId}/like/`);
+      await axiosInstance.post(`posts/${id}/like/`);
     } catch (err) {
       console.log('Like error:', err);
     }
   };
 
-  const handleVote = async (postId, choiceId) => {
+  const handleVote = async (id, choiceId) => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to vote on polls.');
     try {
-      await axiosInstance.post(`posts/${postId}/vote/`, { choice_id: choiceId });
+      await axiosInstance.post(`posts/${id}/vote/`, { choice_id: choiceId });
       fetchPost();
     } catch (err) {
       console.log('Vote error:', err.response?.data?.detail || err);
@@ -80,9 +113,10 @@ export default function CommentScreen({ route, navigation }) {
   };
 
   const createComment = async () => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to comment.');
     if (!text.trim()) return;
     try {
-      await axiosInstance.post(`posts/${initialPost.id}/comments/`, { text });
+      await axiosInstance.post(`posts/${postId}/comments/`, { text });
       setText('');
       fetchComments();
       fetchPost();
@@ -90,6 +124,26 @@ export default function CommentScreen({ route, navigation }) {
       console.log('Create comment error:', err.response?.data || err);
     }
   };
+
+  const handleSharePost = async () => {
+    try {
+      await Share.share({
+        title: post?.caption || 'Post on Spurth',
+        message: `Check out this post on Spurth!\n\nspurth://post/${post.id}\n\nWeb: https://spurth.com/post/${post.id}`,
+      });
+    } catch (err) {
+      console.warn('Share post failed', err);
+    }
+  };
+
+  if (!post) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <ActivityIndicator size="large" color="#2CB9B0" />
+      </View>
+    );
+  }
 
   const body = (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -141,7 +195,9 @@ export default function CommentScreen({ route, navigation }) {
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>Post</Text>
-      <View style={{ width: 24 }} />
+      <TouchableOpacity onPress={handleSharePost}>
+        <Ionicons name="share-outline" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -175,6 +231,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
     overflow: 'hidden',
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
