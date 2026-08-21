@@ -239,6 +239,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return None
 
 
+# Public/anonymous variant of UserProfileSerializer — used when viewing
+# someone else's profile (view_user_profile), which is now reachable by
+# unauthenticated visitors via a shared profile link. Drops birth_date
+# (exact date of birth); the already-computed `age` field stays, and that's
+# the only one the profile view screen ever renders — self-editing screens
+# use the full UserProfileSerializer instead, unaffected by this.
+class PublicUserProfileSerializer(UserProfileSerializer):
+    class Meta(UserProfileSerializer.Meta):
+        fields = [f for f in UserProfileSerializer.Meta.fields if f != 'birth_date']
+
+
 # 📰 POSTS
 class PollChoiceSerializer(serializers.ModelSerializer):
     votes_count = serializers.SerializerMethodField()

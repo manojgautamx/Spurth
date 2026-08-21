@@ -20,6 +20,21 @@ import RNBootSplash from "react-native-bootsplash";
 // through this single object, unmodified.
 Alert.alert = (title, message, buttons) => showAlert(title, message, buttons);
 
+// Maps shared/deep-link URLs straight to the screen + params that render
+// them, on both web (browser URL) and native (spurth:// custom scheme).
+// ActivityViewerScreen/ProfileView/Comments are always-registered screens
+// (see AppNavigator.js) so this resolves correctly regardless of whether
+// the visitor is logged in.
+const linking = {
+  prefixes: ['spurth://', 'https://spurth.com', 'https://www.spurth.com'],
+  config: {
+    screens: {
+      ActivityViewerScreen: 'event/:activityId',
+      ProfileView: 'profile/:userId',
+      Comments: 'post/:postId',
+    },
+  },
+};
 
 export default function App() {
   useEffect(() => {
@@ -36,6 +51,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer
         ref={navigationRef}
+        linking={linking}
         documentTitle={{
           // Without this, React Navigation's web integration falls back to
           // the raw route name (e.g. "Landing", "ProfileView") as the

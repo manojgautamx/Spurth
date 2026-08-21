@@ -8,7 +8,6 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
-import { navigationRef } from './navigationRef'; // ← NEW
 
 import SignupScreen from '../screens/SignupScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -50,22 +49,17 @@ export const ProfileStatusContext = createContext();
 const Stack = createStackNavigator();
 const Tab   = createBottomTabNavigator();
 
-// ── Deep link parser ──────────────────────────────────────────────────────────
-// Returns { type, ... } describing the link, or null if unrecognised.
+// ── Deep link parser (verify-email only) ────────────────────────────────────
+// Profile/event/post links are now handled entirely by NavigationContainer's
+// own `linking` config (App.js) — ActivityViewerScreen/ProfileView/Comments
+// are always-registered screens (see the Stack.Navigator below), reachable
+// regardless of auth state, so there's nothing left to hand-roll for those.
+// verify-email isn't a navigation target (it just posts a token and shows an
+// alert), so it stays as its own small listener here.
 //
-// Supported URLs (both schemes):
-//   spurth://verify-email?token=xxx
-//   spurth://profile/42             → ProfileView    { userId: '42' }
-//   spurth://event/17               → ActivityViewerScreen { activityId: '17' }
-//   https://spurth.com/profile/42   → same
-//   https://spurth.com/event/17     → same
+// Supported URL (both schemes): spurth://verify-email?token=xxx
 const parseDeepLink = (url) => {
   if (!url) return null;
-
-  // Normalise to a bare path string by stripping scheme + host. The host
-  // match is generic (not hardcoded to spurth.com) so this also resolves
-  // links opened from wherever the app is actually served — localhost
-  // during development, a staging domain, etc. — not just production.
   const path = url
     .replace(/^spurth:\/\//, '')
     .replace(/^https?:\/\/[^/]+\//, '');
@@ -75,32 +69,7 @@ const parseDeepLink = (url) => {
     return { type: 'verify-email', url };
   }
 
-  const profileMatch = path.match(/^profile\/([^/?#]+)/);
-  if (profileMatch) {
-    return { type: 'profile', userId: profileMatch[1] };
-  }
-
-  const eventMatch = path.match(/^event\/([^/?#]+)/);
-  if (eventMatch) {
-    return { type: 'event', activityId: eventMatch[1] };
-  }
-
   return null;
-};
-
-// ── Navigate using the ref (safe to call before the navigator is ready) ───────
-// A deep link's "immediate" navigate branch fires as soon as an already-
-// logged-in session is detected (a fast localStorage read), which can beat
-// the Stack.Navigator's own mount — navigationRef.isReady() is briefly
-// false, and without a retry the navigate() call was just silently
-// dropped, landing on the default route with no error. Retries for up to
-// ~2s, which comfortably covers that mount window.
-const navigate = (screen, params, attempt = 0) => {
-  if (navigationRef.isReady()) {
-    navigationRef.navigate(screen, params);
-  } else if (attempt < 20) {
-    setTimeout(() => navigate(screen, params, attempt + 1), 100);
-  }
 };
 
 /* ───────────────── TAB NAVIGATOR ───────────────── */
@@ -181,51 +150,24 @@ export default function AppNavigator() {
   const [profileComplete, setProfileComplete] = useState(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
 
-  // Stores a parsed deep link that arrived before the user was logged in
-  // or before their profile was complete. Consumed once the stack is ready.
-  const [pendingDeepLink, setPendingDeepLink] = useState(null);
-
-  // ── Unified deep link handler ─────────────────────────────────────────────
+  // ── Email verification deep link ─────────────────────────────────────────
+  // Not a navigation target — just posts the token and shows a result alert.
+  // Profile/event/post links are handled by NavigationContainer's own
+  // `linking` config (App.js) instead of here.
   const handleUrl = async ({ url }) => {
     const parsed = parseDeepLink(url);
-    if (!parsed) return;
+    if (parsed?.type !== 'verify-email') return;
 
-    // ── Email verification (existing logic, unchanged) ──────────────────────
-    if (parsed.type === 'verify-email') {
-      try {
-        const token = new URL(parsed.url).searchParams.get('token');
-        if (!token) return;
-        await axiosInstance.post('verify-email/', { token });
-        Alert.alert('Email Verified!', 'Your email has been verified successfully.');
-      } catch (err) {
-        Alert.alert(
-          'Verification Failed',
-          err.response?.data?.detail || 'Invalid or expired link.'
-        );
-      }
-      return;
-    }
-
-    // ── Profile / event links ───────────────────────────────────────────────
-    // If the user is fully authenticated and their profile is set up, navigate
-    // immediately. Otherwise, park the link and navigate once they're ready.
-    const canNavigate = userToken && profileComplete;
-
-    if (parsed.type === 'profile') {
-      if (canNavigate) {
-        navigate('ProfileView', { userId: parsed.userId });
-      } else {
-        setPendingDeepLink(parsed);
-      }
-      return;
-    }
-
-    if (parsed.type === 'event') {
-      if (canNavigate) {
-        navigate('ActivityViewerScreen', { activityId: parsed.activityId });
-      } else {
-        setPendingDeepLink(parsed);
-      }
+    try {
+      const token = new URL(parsed.url).searchParams.get('token');
+      if (!token) return;
+      await axiosInstance.post('verify-email/', { token });
+      Alert.alert('Email Verified!', 'Your email has been verified successfully.');
+    } catch (err) {
+      Alert.alert(
+        'Verification Failed',
+        err.response?.data?.detail || 'Invalid or expired link.'
+      );
     }
   };
 
@@ -238,26 +180,7 @@ export default function AppNavigator() {
     });
 
     return () => subscription.remove();
-  }, [userToken, profileComplete]); // re-register when auth state changes
-
-  // ── Consume a deferred deep link once the stack is ready ──────────────────
-  // Runs whenever profileComplete flips to true (i.e. user just finished
-  // onboarding or returned to an already-authenticated session).
-  useEffect(() => {
-    if (!userToken || !profileComplete || !pendingDeepLink) return;
-
-    // Small delay so the authenticated stack has time to mount
-    const timer = setTimeout(() => {
-      if (pendingDeepLink.type === 'profile') {
-        navigate('ProfileView', { userId: pendingDeepLink.userId });
-      } else if (pendingDeepLink.type === 'event') {
-        navigate('ActivityViewerScreen', { activityId: pendingDeepLink.activityId });
-      }
-      setPendingDeepLink(null);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [userToken, profileComplete, pendingDeepLink]);
+  }, []);
 
   // ── Profile status check — also carries host-verification status
   // (phone_verified) from the same response, so screens that need to gate
@@ -307,6 +230,17 @@ export default function AppNavigator() {
     );
   }
 
+  // Governs only the "no matching deep-link path" fallback (a bare `/`, or
+  // native opened with no URL) — `linking` takes precedence whenever the
+  // requested URL actually matches a configured screen path. Computed
+  // explicitly (not left as `undefined`) because the content screens above
+  // are now the first children in JSX; without this, Stack.Navigator would
+  // default to whichever of those happens to be first, which crashes on a
+  // plain cold-boot (no params to render).
+  const initialRouteName = userToken
+    ? (profileComplete ? 'MainTabs' : 'Profile')
+    : (Platform.OS === 'web' ? 'Landing' : 'Welcome');
+
   return (
     <ProfileStatusContext.Provider
       value={{
@@ -323,8 +257,16 @@ export default function AppNavigator() {
           instead of just that screen's own scrollable content. */}
       <Stack.Navigator
         screenOptions={{ headerShown: false, cardStyle: { flex: 1 } }}
-        initialRouteName={!userToken && Platform.OS === 'web' ? 'Landing' : undefined}
+        initialRouteName={initialRouteName}
       >
+        {/* Always registered — deep-link targets (shared activity/profile/
+            post links), reachable regardless of auth state. Each screen
+            renders real content publicly and gates its own interactive
+            actions (join/like/vote/comment/invite) behind a sign-in prompt. */}
+        <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} options={{ title: 'Activity' }} />
+        <Stack.Screen name="ProfileView"          component={ProfileViewScreen} options={{ title: 'Profile' }} />
+        <Stack.Screen name="Comments"              component={CommentsScreen} options={{ headerShown: false, title: 'Post' }} />
+
         {userToken ? (
           profileComplete ? (
             <>
@@ -333,12 +275,9 @@ export default function AppNavigator() {
               <Stack.Screen name="PhoneVerification" component={PhoneVerificationScreen} options={{ title: 'Verify Phone' }} />
               <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} options={{ title: 'Verify Email' }} />
               <Stack.Screen name="MapPicker"         component={MapPickerScreen} options={{ title: 'Choose Location' }} />
-              <Stack.Screen name="ActivityViewerScreen" component={ActivityViewerScreen} options={{ title: 'Activity' }} />
-              <Stack.Screen name="ProfileView"       component={ProfileViewScreen} options={{ title: 'Profile' }} />
               <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
               <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} options={{ title: 'Chat' }} />
               <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false, title: 'Participants' }} />
-              <Stack.Screen name="Comments"          component={CommentsScreen} options={{ headerShown: false, title: 'Post' }} />
               <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} options={{ title: 'Map' }} />
               <Stack.Screen name="Settings"          component={SettingsScreen} options={{ title: 'Settings' }} />
             </>
