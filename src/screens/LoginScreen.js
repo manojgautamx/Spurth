@@ -450,6 +450,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontFamily: Fonts.regular,
+    flex: 1,
   },
   eyeBtn: {
     paddingLeft: 10,
