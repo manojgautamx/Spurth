@@ -32,6 +32,26 @@ const linking = {
       ActivityViewerScreen: 'event/:activityId',
       ProfileView: 'profile/:userId',
       Comments: 'post/:postId',
+      // Landing is the "nothing more specific requested" screen for a
+      // logged-out web visitor — it should live at the bare root, not its
+      // own auto-derived '/Landing' path (which is what it'd otherwise get,
+      // same as every other unlisted screen below).
+      Landing: '',
+      // React Navigation only auto-derives a working path for TOP-LEVEL
+      // screens. MainTabs' children are nested inside its own
+      // Tab.Navigator, so without an explicit map here, navigating in-app
+      // updates the URL fine (e.g. /Chat), but *reloading* that URL can't
+      // resolve which tab was active and silently falls back to the first
+      // one (Home) — the exact "reload always dumps me on Home" bug.
+      MainTabs: {
+        screens: {
+          Home: 'Home',
+          Explore: 'Explore',
+          Experience: 'Experience',
+          Notification: 'Notification',
+          Chat: 'Chat',
+        },
+      },
     },
   },
 };
