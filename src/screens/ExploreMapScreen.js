@@ -143,7 +143,9 @@ const ExploreMapScreen = ({ navigation, route }) => {
       if (data.activityId) {
         const activity = validActivities.find(a => a.id === data.activityId);
         if (activity) {
-          navigation.navigate('ActivityViewerScreen', { activity });
+          // activityId only — see ActivityCard.js's handlePress for why the
+          // full object isn't passed alongside it.
+          navigation.navigate('ActivityViewerScreen', { activityId: activity.id });
         }
       }
     } catch (e) {

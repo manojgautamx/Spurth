@@ -83,7 +83,12 @@ export default function PostCard({
   // every screen that renders a PostCard opens the same dedicated post
   // page consistently — tapping the post body does the same thing as
   // tapping the comment icon.
-  const goToDetail = () => navigation.navigate('Comments', { post });
+  // postId only, not the full post object — React Navigation's web
+  // `linking` integration serializes any param outside the path pattern
+  // (post/:postId) into the URL's query string as literal "[object
+  // Object]" text. CommentScreen re-fetches the full post on mount
+  // regardless of what's passed, so nothing is lost by not passing it.
+  const goToDetail = () => navigation.navigate('Comments', { postId: post.id });
 
   const getImageUrl = (url) => {
     if (!url) return null;
@@ -103,8 +108,8 @@ export default function PostCard({
   };
 
   const goToProfile = () => {
-    if (!post.user) return;
-    navigation.navigate('ProfileView', { userId: post.user });
+    if (!post.user_name) return;
+    navigation.navigate('ProfileView', { username: post.user_name });
   };
 
   const handleDeletePost = () => {

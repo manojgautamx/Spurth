@@ -8,6 +8,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
+import { navigationRef } from './navigationRef';
 
 import SignupScreen from '../screens/SignupScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -220,6 +221,28 @@ export default function AppNavigator() {
 
   useEffect(() => {
     if (userToken) checkProfileStatus();
+  }, [userToken]);
+
+  // Logging out (explicitly, or a token refresh failing mid-session) swaps
+  // this Stack.Navigator's entire logged-in screen set out from under
+  // whatever route was active. Without an explicit redirect, React
+  // Navigation doesn't move the user anywhere — it just tries to keep
+  // rendering the no-longer-registered active route, which lands on
+  // whatever's first among the screens still declared unconditionally
+  // (ActivityViewerScreen) instead of sending them to sign in. Only fires on
+  // a genuine truthy→falsy transition, not the initial mount (userToken
+  // starts null before the AsyncStorage check resolves).
+  const prevUserTokenRef = useRef(userToken);
+  useEffect(() => {
+    const wasLoggedIn = !!prevUserTokenRef.current;
+    const isLoggedIn = !!userToken;
+    if (wasLoggedIn && !isLoggedIn && navigationRef.isReady()) {
+      navigationRef.reset({
+        index: 0,
+        routes: [{ name: Platform.OS === 'web' ? 'Landing' : 'Welcome' }],
+      });
+    }
+    prevUserTokenRef.current = userToken;
   }, [userToken]);
 
   if (isLoading || (userToken && profileComplete === null)) {

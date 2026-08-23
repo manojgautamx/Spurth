@@ -13,6 +13,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Dimensions,
+  Platform,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../context/AuthContext';
@@ -31,6 +32,7 @@ import { Share } from 'react-native';
 import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
 import WebSidebar from '../components/web/WebSidebar';
+import AuthPromptRail from '../components/web/AuthPromptRail';
 import ActivityDetailSkeleton from '../components/skeletons/ActivityDetailSkeleton';
 
 const geocodeLocation = async (location) => {
@@ -52,12 +54,25 @@ const geocodeLocation = async (location) => {
 
 const ActivityViewerScreen = ({ route, navigation }) => {
   const isWideWeb = useIsWideWeb();
-  const { activity: initialActivity, activityId } = route.params;
+  // route.params can be undefined — not just for a bad/missing link, but
+  // also when this screen (an always-registered top-level Stack.Screen)
+  // becomes React Navigation's fallback render target after the navigator's
+  // conditional screen set changes out from under an active route, e.g. a
+  // session expiring mid-browse (userToken flips, MainTabs and everything
+  // in it disappears from the Stack, and the screen that was focused inside
+  // it is no longer reachable). Without the fallback, destructuring here
+  // crashes instead of showing "not found".
+  const { activity: initialActivity, activityId } = route.params || {};
   const [activity, setActivity] = useState(initialActivity);
   const { user, userToken } = useContext(AuthContext);
   const axios = useAxios();
+  // Anonymous visitors get a stripped-down, read-only view of just the
+  // activity — no app chrome (sidebar/rail), no Join button — rather than
+  // the full logged-in layout with actions that just prompt them to sign in.
+  const showChrome = !!userToken;
 
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [joining, setJoining] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
   const [canChat, setCanChat] = useState(false);
@@ -101,14 +116,22 @@ const ActivityViewerScreen = ({ route, navigation }) => {
 
   // ALL useEffects before early return
   useEffect(() => {
-    if (!activity && activityId) {
-      axios.get(`${BASE_URL}/api/activity-detail/${activityId}/`)
-        .then(res => setActivity(res.data))
-        .catch(() => {
-          Alert.alert('Error', 'Failed to load activity.');
-          navigation.goBack();
-        });
+    if (activity) return;
+    if (!activityId) {
+      // Nothing to load and nothing to fetch by — e.g. this screen became
+      // React Navigation's fallback render target with no params at all
+      // (see the route.params comment above). There's no request to retry,
+      // so go straight to "not found" instead of hanging on the skeleton.
+      setNotFound(true);
+      return;
     }
+    axios.get(`${BASE_URL}/api/activity-detail/${activityId}/`)
+      .then(res => setActivity(res.data))
+      // A deep link with no navigation history behind it (the normal case
+      // for a shared link) has nowhere for goBack() to go, which used to
+      // leave the screen stuck on the loading skeleton forever after the
+      // alert was dismissed — render an in-place "not found" state instead.
+      .catch(() => setNotFound(true));
   }, [activityId]);
 
   const handleShare = async () => {
@@ -189,11 +212,28 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   // this screen sits outside MainTabNavigator (which is what normally
   // supplies WebSidebar for tab screens), so without this the sidebar
   // would just be missing for the whole time the skeleton is showing.
+  if (notFound) {
+    return (
+      <View style={styles.container}>
+        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+        <View style={styles.notFoundContainer}>
+          <Text style={styles.notFoundText}>Activity not found</Text>
+          <TouchableOpacity
+            style={styles.notFoundBtn}
+            onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+          >
+            <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   if (!activity) {
     return (
       <View style={styles.container}>
         <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-        {isWideWeb ? (
+        {isWideWeb && showChrome ? (
           <View style={styles.webRow}>
             <WebSidebar />
             <View style={styles.webContent}>
@@ -201,6 +241,19 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                 <ActivityDetailSkeleton />
               </ScrollView>
               <PostsRail />
+            </View>
+          </View>
+        ) : isWideWeb ? (
+          // Anonymous visitor, wide web: same two-column shape as the
+          // logged-in layout, but with the sign-in/sign-up prompt standing
+          // in for WebSidebar + PostsRail (both per-account content an
+          // anonymous visitor can't use).
+          <View style={styles.webRow}>
+            <View style={styles.webContent}>
+              <ScrollView style={styles.webCenter} showsVerticalScrollIndicator={false}>
+                <ActivityDetailSkeleton />
+              </ScrollView>
+              <AuthPromptRail />
             </View>
           </View>
         ) : (
@@ -508,7 +561,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
               <TouchableOpacity
                 style={styles.pill}
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('ProfileView', { userId: activity.created_by?.id })}
+                onPress={() => navigation.navigate('ProfileView', { username: activity.created_by?.username })}
               >
                 <View style={styles.hostAvatar}>
                   <Image
@@ -533,8 +586,14 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                 activeOpacity={0.7}
                 onPress={() => {
                   if (activity.participants?.length > 0) {
+                    // activityId only, not the full participants array — see
+                    // ActivityCard.js's handlePress for why: React
+                    // Navigation's web `linking` serializes any param
+                    // outside the path pattern into the URL's query string,
+                    // and an array of full user objects becomes a wall of
+                    // "[object Object]" there. ParticipantsListScreen
+                    // fetches the activity (and its participants) by id.
                     navigation.navigate('ParticipantsList', {
-                      participants: activity.participants,
                       activityName: activity.name,
                       isOwner: isOwner,
                       activityId: activity.id,
@@ -650,7 +709,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     <View style={styles.container}>
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
-      {isWideWeb ? (
+      {isWideWeb && showChrome ? (
         <View style={styles.webRow}>
           <WebSidebar />
           <View style={styles.webContent}>
@@ -668,6 +727,24 @@ const ActivityViewerScreen = ({ route, navigation }) => {
               </View>
             </View>
             <PostsRail />
+          </View>
+        </View>
+      ) : isWideWeb ? (
+        // Anonymous visitor on wide web: same two-column shape as the
+        // logged-in layout — no sidebar nav (nothing behind it is reachable
+        // while logged out), and the sign-in/sign-up prompt stands in for
+        // PostsRail ("Experiences" column, which is per-account content).
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <View style={styles.webCenterWrap}>
+              <ScrollView style={styles.webCenter} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {mainContent}
+              </ScrollView>
+              <View style={styles.stickyFooter}>
+                {footerButtonsContent}
+              </View>
+            </View>
+            <AuthPromptRail />
           </View>
         </View>
       ) : (
@@ -801,6 +878,28 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+  notFoundContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notFoundText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+    marginBottom: 16,
+  },
+  notFoundBtn: {
+    backgroundColor: '#8575ff',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  notFoundBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
   },
 
   /* ───────── WIDE WEB: 2-column layout (matches Home) ─────────

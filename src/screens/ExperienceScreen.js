@@ -22,6 +22,7 @@ import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import ActivitiesRail from '../components/web/ActivitiesRail';
 import { Fonts } from '../theme/fonts';
+import ExperienceSkeleton from '../components/skeletons/ExperienceSkeleton';
 
 const ExperienceScreen = () => {
   const isWideWeb = useIsWideWeb();
@@ -46,16 +47,20 @@ const ExperienceScreen = () => {
   const [pollHours, setPollHours] = useState(0);
   const [pollMinutes, setPollMinutes] = useState(0);
   const [numberPickerField, setNumberPickerField] = useState(null); // 'days' | 'hours' | 'minutes' | null
+  const [loading, setLoading] = useState(true);
 
   const navigation = useNavigation();
 
   useEffect(() => {
-    axiosInstance.get('profile/').then(res => setProfile(res.data));
-    fetchMyActivities();
-  }, []);
-
-  useEffect(() => {
-    fetchPosts();
+    const load = async () => {
+      await Promise.allSettled([
+        axiosInstance.get('profile/').then(res => setProfile(res.data)),
+        fetchMyActivities(),
+        fetchPosts(),
+      ]);
+      setLoading(false);
+    };
+    load();
   }, []);
 
   const getAvatarUri = () => {
@@ -391,6 +396,15 @@ const ExperienceScreen = () => {
       </View>
     </Modal>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <ExperienceSkeleton />
+      </View>
+    );
+  }
 
   if (isWideWeb) {
     return (

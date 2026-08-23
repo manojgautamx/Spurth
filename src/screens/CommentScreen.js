@@ -20,6 +20,7 @@ import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
 import PostsRail from '../components/web/PostsRail';
+import AuthPromptRail from '../components/web/AuthPromptRail';
 import { AuthContext } from '../context/AuthContext';
 import { promptSignIn } from '../utils/requireAuth';
 
@@ -36,6 +37,7 @@ export default function CommentScreen({ route, navigation }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
+  const [notFound, setNotFound] = useState(false);
 
   // Resolves `post` from just an id (deep-link case) — no-ops once a full
   // post object is already available. Failure here means there's nothing
@@ -50,10 +52,11 @@ export default function CommentScreen({ route, navigation }) {
         activity_id: res.data.activity,
         event_name: res.data.activity_name,
       }))
-      .catch(() => {
-        Alert.alert('Error', 'Failed to load post.');
-        navigation.goBack();
-      });
+      // A deep link with no navigation history behind it (the normal case
+      // for a shared link) has nowhere for goBack() to go, which used to
+      // leave the screen stuck on a spinner forever after the alert was
+      // dismissed — render an in-place "not found" state instead.
+      .catch(() => setNotFound(true));
   }, [postId]);
 
   const fetchPost = useCallback(async () => {
@@ -136,6 +139,21 @@ export default function CommentScreen({ route, navigation }) {
     }
   };
 
+  if (notFound) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        <Text style={styles.notFoundText}>Post not found</Text>
+        <TouchableOpacity
+          style={styles.notFoundBtn}
+          onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+        >
+          <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (!post) {
     return (
       <View style={[styles.container, styles.loadingContainer]}>
@@ -191,7 +209,15 @@ export default function CommentScreen({ route, navigation }) {
 
   const header = (
     <View style={styles.header}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+      <TouchableOpacity
+        onPress={() => {
+          // A deep link (shared post URL) has no navigation history behind
+          // it — goBack() would silently no-op there.
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'));
+        }}
+        style={styles.backButton}
+      >
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>Post</Text>
@@ -204,7 +230,7 @@ export default function CommentScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-      {isWideWeb ? (
+      {isWideWeb && userToken ? (
         <View style={styles.webRow}>
           <WebSidebar />
           <View style={styles.webContent}>
@@ -213,6 +239,19 @@ export default function CommentScreen({ route, navigation }) {
               {body}
             </View>
             <PostsRail />
+          </View>
+        </View>
+      ) : isWideWeb ? (
+        // Anonymous visitor, wide web: same two-column shape, but the
+        // sign-in/sign-up prompt stands in for WebSidebar + PostsRail (both
+        // per-account content an anonymous visitor can't use).
+        <View style={styles.webRow}>
+          <View style={styles.webContent}>
+            <View style={styles.webCenterWrap}>
+              {header}
+              {body}
+            </View>
+            <AuthPromptRail />
           </View>
         </View>
       ) : (
@@ -235,6 +274,23 @@ const styles = StyleSheet.create({
   loadingContainer: {
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  notFoundText: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+    marginBottom: 16,
+  },
+  notFoundBtn: {
+    backgroundColor: '#8575ff',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  notFoundBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
   },
   header: {
     flexDirection: 'row',

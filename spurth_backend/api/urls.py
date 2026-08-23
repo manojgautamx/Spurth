@@ -41,7 +41,7 @@ urlpatterns = [
     path('activity-status/<int:activity_id>/', activity_status, name='activity-status'),
     path('delete-activity/<int:activity_id>/', delete_activity, name='delete-activity'),
     path('can-enter-chat/<int:activity_id>/', can_enter_chat, name='can-enter-chat'),
-    path('profile/<int:user_id>/', view_user_profile),
+    path('profile/<str:username>/', view_user_profile),
     path('me/', me),
     path('users/', PublicUserSearchView.as_view(), name='user-search'),
     path('', include(router.urls)),
@@ -52,7 +52,7 @@ urlpatterns = [
     path('delete-post/<int:post_id>/', delete_post, name='delete-post'),
     path('remove-participant/<int:activity_id>/<int:user_id>/', remove_participant, name='remove-participant'),
     path('firebase-token/', firebase_token),  # becomes /api/firebase-token/
-    path('user-activities/<int:user_id>/', user_activities, name='user-activities'),
+    path('user-activities/<str:username>/', user_activities, name='user-activities'),
     path('auth/google/', google_auth),
     path('set-username/', set_username),
     path('notifications/', get_notifications),

@@ -237,7 +237,7 @@ const ExploreScreen = () => {
                   key={u.id}
                   style={styles.userCard}
                   onPress={() =>
-                    navigation.navigate('ProfileView', { userId: u.id })
+                    navigation.navigate('ProfileView', { username: u.username })
                   }
                 >
                   <Image

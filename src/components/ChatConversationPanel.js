@@ -342,7 +342,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
                 style={styles.memberRow}
                 onPress={() => {
                   setInfoVisible(false);
-                  navigation.navigate('ProfileView', { userId: member.id });
+                  navigation.navigate('ProfileView', { username: member.username });
                 }}
               >
                 <Image
