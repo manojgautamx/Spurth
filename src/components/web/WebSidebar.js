@@ -7,6 +7,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../../theme/fonts';
 import { navigationRef } from '../../navigation/navigationRef';
+import axiosInstance from '../../utils/axiosInstance';
 
 import HomeIcon from '../../assets/icons/HomeIcon';
 import ExploreIcon from '../../assets/icons/ExploreIcon';
@@ -58,11 +59,27 @@ const TAB_ROUTES = new Set(['Home', 'Explore', 'Chat', 'Notification', 'Experien
 
 export default function WebSidebar() {
   const activeRouteName = useActiveRouteName();
+  // ProfileView's route is username-based (profile/:username), but this
+  // sidebar only ever links to the viewer's OWN profile and has no reason
+  // to already know their username — fetched once so that link lands on a
+  // real /profile/<username> URL instead of falling back to a bare
+  // /profile (which the linking config accepts, but username is nicer).
+  const [myUsername, setMyUsername] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    axiosInstance.get('profile/')
+      .then((res) => { if (active) setMyUsername(res.data?.username || null); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const go = (name) => {
     if (!navigationRef.isReady()) return;
     if (TAB_ROUTES.has(name)) {
       navigationRef.navigate('MainTabs', { screen: name });
+    } else if (name === 'ProfileView') {
+      navigationRef.navigate('ProfileView', myUsername ? { username: myUsername } : undefined);
     } else {
       navigationRef.navigate(name);
     }

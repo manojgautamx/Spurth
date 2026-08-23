@@ -30,19 +30,25 @@ const linking = {
   config: {
     screens: {
       ActivityViewerScreen: 'event/:activityId',
-      ProfileView: 'profile/:userId',
+      // Optional — the "my own profile" nav (no route params) degrades to a
+      // bare /profile instead of a broken /profile/undefined when the
+      // caller doesn't have a username on hand yet.
+      ProfileView: 'profile/:username?',
       Comments: 'post/:postId',
       // Landing is the "nothing more specific requested" screen for a
       // logged-out web visitor — it should live at the bare root, not its
       // own auto-derived '/Landing' path (which is what it'd otherwise get,
       // same as every other unlisted screen below).
       Landing: '',
-      // React Navigation only auto-derives a working path for TOP-LEVEL
-      // screens. MainTabs' children are nested inside its own
-      // Tab.Navigator, so without an explicit map here, navigating in-app
-      // updates the URL fine (e.g. /Chat), but *reloading* that URL can't
-      // resolve which tab was active and silently falls back to the first
-      // one (Home) — the exact "reload always dumps me on Home" bug.
+      // React Navigation only reliably resolves a URL back into navigation
+      // state — on a fresh page load/reload, not just in-app navigation —
+      // for screens listed here. AppNavigator.js gates the whole
+      // Stack.Navigator's mount behind an async auth-loading check, and any
+      // top-level screen left OUT of this map falls back to whatever
+      // `initialRouteName` resolves to once that finally mounts (Landing or
+      // MainTabs), regardless of what the URL actually said. Confirmed
+      // empirically: every one of these bounced to the fallback route on
+      // reload before being added here — this isn't unique to one screen.
       MainTabs: {
         screens: {
           Home: 'Home',
@@ -52,6 +58,24 @@ const linking = {
           Chat: 'Chat',
         },
       },
+      // Logged-out branch (AppNavigator.js's `!userToken` screens)
+      Welcome: 'Welcome',
+      Login: 'Login',
+      Signup: 'Signup',
+      GoogleUsername: 'GoogleUsername',
+      ForgotPassword: 'ForgotPassword',
+      ResetPassword: 'ResetPassword',
+      // Logged-in branch
+      Profile: 'Profile',
+      CreateActivity: 'CreateActivity',
+      PhoneVerification: 'PhoneVerification',
+      EmailVerification: 'EmailVerification',
+      MapPicker: 'MapPicker',
+      ProfileEdit: 'ProfileEdit',
+      ActivityChatScreen: 'chat/:activityId',
+      ParticipantsList: 'ParticipantsList',
+      ExploreMap: 'ExploreMap',
+      Settings: 'Settings',
     },
   },
 };

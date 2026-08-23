@@ -7,7 +7,8 @@ import { Alert } from 'react-native';
 // app's own on-brand modal since App.js globally overrides Alert.alert.
 export function promptSignIn(navigation, message = 'Sign in to continue.') {
   Alert.alert('Sign in required', message, [
-    { text: 'Cancel', style: 'cancel' },
+    { text: 'Sign Up', onPress: () => navigation.navigate('Signup') },
     { text: 'Sign In', onPress: () => navigation.navigate('Login') },
+    { text: 'Cancel', style: 'cancel' },
   ]);
 }

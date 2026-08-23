@@ -12,6 +12,7 @@ import {
   Modal,
   FlatList,
   Share,                     // ← ADD 1: import Share
+  Platform,
 } from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -21,11 +22,11 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { jwtDecode } from 'jwt-decode';
 import PostCard from '../components/PostCard';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
+import AuthPromptRail from '../components/web/AuthPromptRail';
 import ProfileSkeleton from '../components/skeletons/ProfileSkeleton';
 
 const getCoverSource = (item) => {
@@ -41,18 +42,25 @@ const getCoverSource = (item) => {
 export default function ProfileViewScreen({ route }) {
   const navigation = useNavigation();
   const isWideWeb = useIsWideWeb();
-  const { logout, user, userToken } = useContext(AuthContext);
+  const { logout, userToken } = useContext(AuthContext);
 
-  const userId = route?.params?.userId || null;
-  const isMyProfile = !userId || user?.user_id === userId;
+  const username = route?.params?.username || null;
+  const isMyProfile = !username;
 
   const [myActivities, setMyActivities] = useState([]);
   const [joinedActivities, setJoinedActivities] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Resolved from the fetched profile's numeric `user_id` — internal APIs
+  // (posts/?user=, invite/) still key off the id, not the username, but the
+  // URL/route param is username-based, so this is filled in once the
+  // profile response comes back rather than being available up front.
+  const [targetUserId, setTargetUserId] = useState(null);
 
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const POSTS_PAGE_SIZE = 2;
+  const [visiblePostCount, setVisiblePostCount] = useState(POSTS_PAGE_SIZE);
 
   // ── ADD 2: Invite state ─────────────────────────────────────────────────────
   // myOwnActivities = the *current user's* activities (created + joined), used to
@@ -71,10 +79,12 @@ export default function ProfileViewScreen({ route }) {
           setLoading(true);
 
           const profileRes = await axiosInstance.get(
-            isMyProfile ? 'profile/' : `profile/${userId}/`
+            isMyProfile ? 'profile/' : `profile/${username}/`
           );
           if (!active) return;
           setProfile(profileRes.data);
+          const resolvedUserId = profileRes.data.user_id;
+          setTargetUserId(resolvedUserId);
 
           if (isMyProfile) {
             const [myRes, joinedRes] = await Promise.all([
@@ -86,7 +96,7 @@ export default function ProfileViewScreen({ route }) {
             setJoinedActivities(joinedRes.data);
           } else {
             // Fetch the viewed user's activities for display
-            const res = await axiosInstance.get(`user-activities/${userId}/`);
+            const res = await axiosInstance.get(`user-activities/${username}/`);
             if (!active) return;
             setMyActivities(res.data.created || []);
             setJoinedActivities(res.data.joined || []);
@@ -108,6 +118,8 @@ export default function ProfileViewScreen({ route }) {
               ]);
             }
           }
+
+          fetchUserPosts(resolvedUserId);
         } catch (err) {
           console.log('Profile fetch error:', err);
           Alert.alert('Error', 'Profile not found');
@@ -116,28 +128,28 @@ export default function ProfileViewScreen({ route }) {
         }
       };
 
+      setVisiblePostCount(POSTS_PAGE_SIZE);
       fetchProfile();
-      fetchUserPosts();
       return () => (active = false);
-    }, [userId])
+    }, [username])
   );
 
-  const fetchUserPosts = async () => {
+  // targetId is passed explicitly right after the profile fetch resolves
+  // (see fetchProfile above); later refresh calls (like/delete callbacks)
+  // call this with no argument and fall back to the already-resolved
+  // targetUserId state instead.
+  const fetchUserPosts = async (targetId) => {
+    const resolvedId = targetId ?? targetUserId;
+    if (!resolvedId) return;
     try {
       setPostsLoading(true);
       const token = await AsyncStorage.getItem('accessToken');
-      // AuthContext only exposes userToken, not a decoded user object — this
-      // screen's `user` destructured from it was always undefined, so
-      // `user?.user_id` never resolved and "my own profile" posts never
-      // fetched. jwt-decode already gets pulled in for the same purpose in
-      // useAxios.js — same pattern here.
-      const targetId = isMyProfile ? jwtDecode(token)?.user_id : userId;
       // Filtered server-side by ?user= — fetching the global feed and
       // filtering client-side (as this used to) silently dropped the user's
       // own posts whenever they weren't within the feed's first page
       // (PAGE_SIZE=10), since anything posted by other users pushes older
       // posts off that page before the client-side filter ever sees them.
-      const res = await fetch(`${BASE_URL}/api/posts/?user=${targetId}`, {
+      const res = await fetch(`${BASE_URL}/api/posts/?user=${resolvedId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -184,8 +196,8 @@ export default function ProfileViewScreen({ route }) {
         title: profile?.full_name,
         message:
           `Check out ${profile?.full_name}'s profile on Spurth!\n\n` +
-          `spurth://profile/${profile?.user_id || userId}\n\n` +
-          `https://spurth.com/profile/${profile?.user_id || userId}`,
+          `spurth://profile/${profile?.username || username}\n\n` +
+          `https://spurth.com/profile/${profile?.username || username}`,
       });
     } catch (err) {
       console.warn('Share profile failed', err);
@@ -200,7 +212,7 @@ export default function ProfileViewScreen({ route }) {
     try {
       setInviting(true);
       await axiosInstance.post('invite/', {
-        invited_user_id: userId,       // the profile being viewed
+        invited_user_id: targetUserId,  // the profile being viewed
         activity_id: activity.id,
       });
       setInviteModalVisible(false);
@@ -228,10 +240,11 @@ export default function ProfileViewScreen({ route }) {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.webRow}>
-          {isWideWeb && <WebSidebar />}
-          <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
+          {isWideWeb && userToken && <WebSidebar />}
+          <View style={[styles.webCol, isWideWeb && (userToken ? styles.webColWide : styles.webColNarrow)]}>
             <ProfileSkeleton />
           </View>
+          {isWideWeb && !userToken && <AuthPromptRail />}
         </View>
       </View>
     );
@@ -240,7 +253,13 @@ export default function ProfileViewScreen({ route }) {
   if (!profile) {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Failed to load profile</Text>
+        <Text style={{ color: '#fff', marginBottom: 16 }}>Profile not found</Text>
+        <TouchableOpacity
+          style={styles.notFoundBtn}
+          onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+        >
+          <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -248,11 +267,13 @@ export default function ProfileViewScreen({ route }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      {/* Wide web: sidebar + centered profile column, matching Settings —
-          no right rail here, just nav + content with space on both sides. */}
+      {/* Wide web, logged in: sidebar + centered profile column, matching
+          Settings — no right rail here, just nav + content with space on
+          both sides. Logged out: no sidebar (nothing behind it is reachable
+          anyway), and the sign-in/sign-up prompt takes the rail's place. */}
       <View style={styles.webRow}>
-      {isWideWeb && <WebSidebar />}
-      <View style={[styles.webCol, isWideWeb && styles.webColWide]}>
+      {isWideWeb && userToken && <WebSidebar />}
+      <View style={[styles.webCol, isWideWeb && (userToken ? styles.webColWide : styles.webColNarrow)]}>
       <ScrollView
         style={styles.safe}
         contentContainerStyle={{ paddingBottom: 60 }}
@@ -368,11 +389,17 @@ export default function ProfileViewScreen({ route }) {
         </Section>
 
         <Section title="Organizer" count={myActivities.length}>
-          <ListCard data={myActivities} navigation={navigation} />
+          <ListCard
+            data={userToken ? myActivities : myActivities.slice(0, 3)}
+            navigation={navigation}
+          />
         </Section>
 
         <Section title="Joined" count={joinedActivities.length}>
-          <ListCard data={joinedActivities} navigation={navigation} />
+          <ListCard
+            data={userToken ? joinedActivities : joinedActivities.slice(0, 3)}
+            navigation={navigation}
+          />
         </Section>
 
         <View style={styles.section}>
@@ -390,18 +417,32 @@ export default function ProfileViewScreen({ route }) {
               <Text style={{ color: '#777', textAlign: 'center' }}>No posts yet</Text>
             </View>
           ) : (
-            posts.map((post) => (
-              <PostCard
-                key={post.id.toString()}
-                post={post}
-                onLike={handleLike}
-                onPostDeleted={fetchUserPosts}
-                navigation={navigation}
-                compact={true}
-                hideUsername={true}
-                isActivityOwner={false}
-              />
-            ))
+            <>
+              {posts.slice(0, visiblePostCount).map((post) => (
+                <PostCard
+                  key={post.id.toString()}
+                  post={post}
+                  onLike={handleLike}
+                  onPostDeleted={fetchUserPosts}
+                  navigation={navigation}
+                  compact={true}
+                  hideUsername={true}
+                  isActivityOwner={false}
+                />
+              ))}
+              {posts.length > visiblePostCount && (
+                <TouchableOpacity
+                  style={styles.ghostCta}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    if (!userToken) return promptSignIn(navigation, 'Sign in to see more experiences.');
+                    setVisiblePostCount(posts.length);
+                  }}
+                >
+                  <Text style={styles.ghostCtaText}>View more</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
@@ -412,6 +453,7 @@ export default function ProfileViewScreen({ route }) {
         )}
       </ScrollView>
       </View>
+      {isWideWeb && !userToken && <AuthPromptRail />}
       </View>
 
       {/* ── ADD: INVITE PICKER MODAL ───────────────────────────────────────────
@@ -520,7 +562,9 @@ const ListCard = ({ data = [], navigation }) => {
           key={item.id}
           style={styles.listItem}
           onPress={() =>
-            navigation.navigate('ActivityViewerScreen', { activity: item })
+            // activityId only — see ActivityCard.js's handlePress for why the
+            // full object isn't passed alongside it.
+            navigation.navigate('ActivityViewerScreen', { activityId: item.id })
           }
           activeOpacity={0.75}
         >
@@ -570,11 +614,29 @@ const styles = StyleSheet.create({
   webColWide: {
     maxWidth: 680 + 360,
   },
+  // Logged-out wide web: content column alone (no sidebar), capped to make
+  // room for AuthPromptRail (360) alongside it — same 680+360 total budget
+  // as every other two-column screen, just split into two columns instead
+  // of one wide one.
+  webColNarrow: {
+    maxWidth: 680,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#0F0F0F',
+  },
+  notFoundBtn: {
+    backgroundColor: '#8575ff',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  notFoundBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
@@ -716,6 +778,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: Fonts.regular,
     marginTop: 2,
+  },
+  ghostCta: {
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    borderRadius: 20,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  ghostCtaText: {
+    color: '#ccc',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
   },
   logoutBtn: {
     borderWidth: 1.5,

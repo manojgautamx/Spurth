@@ -449,9 +449,9 @@ class ProfileStatusView(APIView):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def view_user_profile(request, user_id):
+def view_user_profile(request, username):
     try:
-        user = User.objects.get(id=user_id)
+        user = User.objects.get(username=username)
         if not hasattr(user, 'profile'):
             return Response({'detail': 'Profile not found for this user.'}, status=404)
         # Trimmed serializer for anonymous/public visitors — excludes
@@ -464,10 +464,10 @@ def view_user_profile(request, user_id):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
-def user_activities(request, user_id):
+def user_activities(request, username):
     User = get_user_model()
     try:
-        target = User.objects.get(id=user_id)
+        target = User.objects.get(username=username)
     except User.DoesNotExist:
         return Response({'detail': 'User not found.'}, status=404)
     created = Activity.objects.filter(created_by=target)

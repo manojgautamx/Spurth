@@ -87,7 +87,13 @@ const ActivityCard = ({ activity }) => {
   // server-computed is_owner) — there's no separate owner screen to route
   // to.
   const handlePress = () => {
-    navigation.navigate('ActivityViewerScreen', { activity });
+    // Only activityId, never the full activity object — React Navigation's
+    // web `linking` integration serializes any param that isn't part of the
+    // path pattern (event/:activityId) into the URL's query string, which
+    // for a full object becomes the literal text "[object Object]".
+    // ActivityViewerScreen already fetches by id gracefully (skeleton) when
+    // no object is passed.
+    navigation.navigate('ActivityViewerScreen', { activityId: activity.id });
   };
 
   // Web: a compact horizontal row (thumbnail + info side-by-side) instead of

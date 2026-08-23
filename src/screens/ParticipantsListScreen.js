@@ -1,14 +1,33 @@
-import React, { useState } from 'react';
-import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
+import { useIsWideWeb } from '../utils/responsive';
+import WebSidebar from '../components/web/WebSidebar';
+import PostsRail from '../components/web/PostsRail';
 
 const ParticipantsListScreen = ({ route, navigation }) => {
-  const { participants: initialParticipants = [], activityName, isOwner = false, activityId } = route.params;
+  const { activityName, isOwner = false, activityId } = route.params;
+  const isWideWeb = useIsWideWeb();
 
-  // Local state so list updates instantly after removal
-  const [participants, setParticipants] = useState(initialParticipants);
+  // Fetched by activityId rather than passed through navigation params —
+  // an array of full participant objects would otherwise leak into the web
+  // URL's query string as literal "[object Object]" text (React
+  // Navigation's `linking` integration serializes any param outside the
+  // path pattern). activity-detail/<id>/ already includes `participants`.
+  const [participants, setParticipants] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${BASE_URL}/api/activity-detail/${activityId}/`)
+      .then((res) => res.json())
+      .then((data) => { if (active) setParticipants(data.participants || []); })
+      .catch((err) => console.warn('Failed to fetch participants', err))
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [activityId]);
 
   const getAvatarSource = (avatarPath) => {
     if (!avatarPath) return require('../assets/avatar-placeholder.png');
@@ -54,7 +73,7 @@ const ParticipantsListScreen = ({ route, navigation }) => {
   const renderItem = ({ item }) => (
     <TouchableOpacity
       style={styles.userCard}
-      onPress={() => navigation.navigate('ProfileView', { userId: item.id })}
+      onPress={() => navigation.navigate('ProfileView', { username: item.username })}
       activeOpacity={0.75}
     >
       <Image
@@ -80,29 +99,63 @@ const ParticipantsListScreen = ({ route, navigation }) => {
     </TouchableOpacity>
   );
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Participants</Text>
-        <View style={{ width: 24 }} />
-      </View>
+  const header = (
+    <View style={styles.header}>
+      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+        <Ionicons name="arrow-back" size={24} color="#fff" />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Participants</Text>
+      <View style={{ width: 24 }} />
+    </View>
+  );
 
+  const list = (
+    <>
       <Text style={styles.subHeader}>
         {participants.length} {participants.length === 1 ? 'person' : 'people'} joined in {activityName}
       </Text>
 
-      <FlatList
-        data={participants}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No one has joined yet.</Text>
-        }
-      />
+      {loading ? (
+        <ActivityIndicator color="#36ACA6" style={{ marginTop: 24 }} />
+      ) : (
+        <FlatList
+          data={participants}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No one has joined yet.</Text>
+          }
+        />
+      )}
+    </>
+  );
+
+  // Wide web: same sidebar + centered column + PostsRail shape as the
+  // activity page — this screen is only ever reached from there (and only
+  // while logged in, since it's registered inside AppNavigator's
+  // authenticated-only screen set), so it should read as the same page.
+  if (isWideWeb) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.webRow}>
+          <WebSidebar />
+          <View style={styles.webContent}>
+            <View style={styles.webCenterWrap}>
+              {header}
+              {list}
+            </View>
+            <PostsRail />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {header}
+      {list}
     </View>
   );
 };
@@ -112,6 +165,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
     paddingTop: StatusBar.currentHeight || 40,
+    overflow: 'hidden',
+  },
+  // ── Wide web: sidebar + centered column + PostsRail, matching
+  // ActivityViewerScreen's own webRow/webContent/webCenterWrap values so
+  // the sidebar lands in the exact same on-screen position across pages.
+  webRow: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  webContent: {
+    flex: 1,
+    flexDirection: 'row',
+    maxWidth: 680 + 360,
+    overflow: 'hidden',
+  },
+  webCenterWrap: {
+    flex: 1,
+    maxWidth: 680,
   },
   header: {
     flexDirection: 'row',

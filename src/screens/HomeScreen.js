@@ -406,7 +406,11 @@ const HomeScreen = () => {
   const header = (
     <View style={styles.topHeader}>
       <Text style={styles.headerText}>Home</Text>
-      <TouchableOpacity onPress={() => navigation.navigate('ProfileView')}>
+      <TouchableOpacity
+        onPress={() =>
+          navigation.navigate('ProfileView', profile?.username ? { username: profile.username } : undefined)
+        }
+      >
         {avatarUri ? (
           <Image source={{ uri: avatarUri }} style={styles.profileImage} />
         ) : (
