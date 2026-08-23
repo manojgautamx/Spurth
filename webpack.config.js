@@ -29,6 +29,7 @@ module.exports = (env, argv) => {
         'react-native-webview': path.resolve(__dirname, 'src/shims/webview.web.js'),
         'react-native-modal-datetime-picker': path.resolve(__dirname, 'src/shims/dateTimePicker.web.js'),
         '@react-native-google-signin/google-signin': path.resolve(__dirname, 'src/shims/googleSignin.web.js'),
+        'react-native-maps': path.resolve(__dirname, 'src/shims/maps.web.js'),
       },
       fallback: {
         crypto: false,

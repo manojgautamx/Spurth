@@ -11,10 +11,11 @@ import { LocationContext, filterActivitiesByDistance } from '../../context/Locat
 import { useDistance } from '../../context/DistanceContext';
 import { AuthContext } from '../../context/AuthContext';
 import { promptSignIn } from '../../utils/requireAuth';
+import { rankByInterest } from '../../utils/rankByInterest';
 import PostCard from '../PostCard';
 import { Fonts } from '../../theme/fonts';
 
-const PREVIEW_COUNT = 8;
+const PREVIEW_COUNT = 3;
 
 export default function PostsRail() {
   const navigation = useNavigation();
@@ -25,11 +26,9 @@ export default function PostsRail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // `my-activities/`/`joined-activities/` (used to compute "nearby") are
-    // self-only, and an unfiltered `posts/` list stays authenticated by
-    // design (see PostViewSet.get_permissions on the backend) — this rail
-    // is a personalized widget, not public content, so it just renders its
-    // empty state for an anonymous visitor rather than 401ing.
+    // An unfiltered `posts/` list stays authenticated by design (see
+    // PostViewSet.get_permissions on the backend) — this rail just renders
+    // its empty state for an anonymous visitor rather than 401ing.
     if (!userToken) {
       setLoading(false);
       return;
@@ -39,17 +38,12 @@ export default function PostsRail() {
 
     const fetchPosts = async () => {
       try {
-        const [postsRes, createdRes, joinedRes] = await Promise.all([
+        const [postsRes, profileRes] = await Promise.all([
           axiosInstance.get('posts/'),
-          axiosInstance.get('my-activities/'),
-          axiosInstance.get('joined-activities/'),
+          axiosInstance.get('profile/'),
         ]);
 
-        const allActivities = [...(createdRes.data || []), ...(joinedRes.data || [])];
-        const nearbyIds = new Set(
-          filterActivitiesByDistance(allActivities, location?.latitude, location?.longitude, distanceKm)
-            .map(a => a.id)
-        );
+        if (cancelled) return;
 
         const data = postsRes.data;
         const normalized = (data.results || data).map(p => ({
@@ -58,8 +52,11 @@ export default function PostsRail() {
           event_name: p.activity_name,
         }));
 
-        const filtered = location ? normalized.filter(p => nearbyIds.has(p.activity_id)) : normalized;
-        if (!cancelled) setPosts(filtered.slice(0, PREVIEW_COUNT));
+        // Same algorithm as Home's Nearby tab / Explore's All Categories:
+        // distance-radius filter, then rank by the viewer's interests.
+        const nearby = filterActivitiesByDistance(normalized, location?.latitude, location?.longitude, distanceKm);
+        const ranked = rankByInterest(nearby, profileRes.data?.interests, location);
+        setPosts(ranked.slice(0, PREVIEW_COUNT));
       } catch (err) {
         console.log('PostsRail fetch error:', err);
       } finally {
@@ -91,7 +88,7 @@ export default function PostsRail() {
     <View style={styles.rail}>
       <TouchableOpacity style={styles.createBtn} onPress={goToExperiences} activeOpacity={0.7}>
         <Ionicons name="add-circle-outline" size={18} color="#ccc" style={{ marginRight: 8 }} />
-        <Text style={styles.createBtnText}>Share an Experience</Text>
+        <Text style={styles.createBtnText}>Share Experience</Text>
       </TouchableOpacity>
 
       <Text style={styles.title}>Experiences</Text>
@@ -105,25 +102,23 @@ export default function PostsRail() {
             <Text style={styles.emptySubtitle}>
               Experiences from activities you attend will appear here.
             </Text>
-            <TouchableOpacity style={styles.emptyCta} onPress={goToExperiences} activeOpacity={0.7}>
-              <Text style={styles.emptyCtaText}>Share your experience</Text>
-            </TouchableOpacity>
           </View>
         ) : (
-          posts.map(post => (
-            <PostCard
-              key={post.id}
-              post={post}
-              compact
-              hideUsername
-              onLike={handleLike}
-            />
-          ))
+          <>
+            {posts.map(post => (
+              <PostCard
+                key={post.id}
+                post={post}
+                compact
+                hideUsername
+                onLike={handleLike}
+              />
+            ))}
+            <TouchableOpacity style={styles.seeMoreBtn} onPress={goToExperiences} activeOpacity={0.8}>
+              <Text style={styles.seeMoreText}>See more</Text>
+            </TouchableOpacity>
+          </>
         )}
-
-        <TouchableOpacity style={styles.seeMoreBtn} onPress={goToExperiences} activeOpacity={0.8}>
-          <Text style={styles.seeMoreText}>See more</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -187,19 +182,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     textAlign: 'center',
     lineHeight: 17,
-    marginBottom: 16,
-  },
-  emptyCta: {
-    borderWidth: 1,
-    borderColor: '#1E1E1E',
-    borderRadius: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-  },
-  emptyCtaText: {
-    color: '#ccc',
-    fontSize: 13,
-    fontFamily: Fonts.medium,
   },
   seeMoreBtn: {
     borderWidth: 1,
@@ -207,6 +189,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 12,
     alignItems: 'center',
+    marginTop: 12,
     marginBottom: 40,
   },
   seeMoreText: {

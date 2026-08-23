@@ -29,6 +29,9 @@ import CreateIcon from '../assets/icons/CreateIcon';
 import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
 import HomeSkeleton from '../components/skeletons/HomeSkeleton';
+import { rankByInterest } from '../utils/rankByInterest';
+
+const NEARBY_MAX = 5;
 
 const HomeScreen = () => {
   const isWideWeb = useIsWideWeb();
@@ -51,17 +54,6 @@ const HomeScreen = () => {
   const [verifySending, setVerifySending] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState('');
-
-  const rankByInterest = (activities) => {
-    const interests = (profile?.interests || []).map(i => i.toLowerCase());
-    if (interests.length === 0) return activities;
-
-    return [...activities].sort((a, b) => {
-      const aMatch = interests.includes((a.activity_type || '').toLowerCase()) ? 1 : 0;
-      const bMatch = interests.includes((b.activity_type || '').toLowerCase()) ? 1 : 0;
-      return bMatch - aMatch; // matched ones float to top
-    });
-  };
 
   const fetchActivities = async () => {
     try {
@@ -183,7 +175,7 @@ const HomeScreen = () => {
           location?.longitude,
           distanceKm
         );
-        return rankByInterest(nearbyFiltered); // ← wrap with ranker
+        return rankByInterest(nearbyFiltered, profile?.interests, location).slice(0, NEARBY_MAX);
       
       case 'Going':
         return upcomingJoined;

@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,150 +7,43 @@ import {
   StatusBar,
   SafeAreaView,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 
+// Center + zoom-ish delta that includes every point (markers + optional
+// user location), replacing Leaflet's map.fitBounds(). Padding multiplier
+// keeps points off the very edge; the floor keeps a single point (or
+// tightly clustered points) from producing an unusably tight zoom.
+const regionFromPoints = (points) => {
+  if (points.length === 0) return null;
+  const lats = points.map(p => p.latitude);
+  const lons = points.map(p => p.longitude);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLon + maxLon) / 2,
+    latitudeDelta: Math.max((maxLat - minLat) * 1.4, 0.05),
+    longitudeDelta: Math.max((maxLon - minLon) * 1.4, 0.05),
+  };
+};
+
 const ExploreMapScreen = ({ navigation, route }) => {
   const { activities = [], userLocation = null } = route.params;
-  const webRef = useRef(null);
 
+  const validActivities = activities.filter(a => a.latitude && a.longitude);
 
-  // Build markers JS to inject after map loads
-  const validActivities = activities.filter(
-    a => a.latitude && a.longitude
-  );
+  const initialRegion = useMemo(() => {
+    const points = validActivities.map(a => ({ latitude: a.latitude, longitude: a.longitude }));
+    if (userLocation) points.push(userLocation);
+    return regionFromPoints(points);
+  }, [validActivities, userLocation]);
 
-  const markersJson = JSON.stringify(
-    validActivities.map(a => ({
-      lat: a.latitude,
-      lon: a.longitude,
-      name: a.name,
-      activityType: a.activity_type,
-      id: a.id,
-    }))
-  );
-
-  const html = `
-  <!DOCTYPE html>
-  <html>
-    <head>
-      <meta charset="utf-8"/>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-      <style>
-        html, body, #map {
-          height: 100%;
-          margin: 0;
-          padding: 0;
-          background: #121212;
-        }
-        .leaflet-popup-content-wrapper {
-          background: #1A1A1A;
-          color: #fff;
-          border-radius: 10px;
-          border: 1px solid #333;
-        }
-        .leaflet-popup-tip {
-          background: #1A1A1A;
-        }
-        .leaflet-popup-content {
-          margin: 10px 14px;
-        }
-        .popup-name {
-          font-size: 14px;
-          font-weight: bold;
-          color: #fff;
-          margin-bottom: 4px;
-        }
-        .popup-activity-type {
-          font-size: 12px;
-          color: #2CB9B0;
-        }
-        .popup-btn {
-          display: inline-block;
-          margin-top: 8px;
-          background: #2CB9B0;
-          color: #fff;
-          font-size: 12px;
-          padding: 4px 12px;
-          border-radius: 12px;
-          cursor: pointer;
-          border: none;
-        }
-      </style>
-    </head>
-    <body>
-      <div id="map"></div>
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-      <script>
-        const map = L.map('map').setView([20, 0], 2);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        const markers = ${markersJson};
-
-        if (markers.length > 0) {
-          const bounds = [];
-
-          markers.forEach(m => {
-            const marker = L.marker([m.lat, m.lon]).addTo(map);
-
-            marker.bindPopup(
-              '<div class="popup-name">' + m.name + '</div>' +
-              '<div class="popup-activity-type">' + m.activityType + '</div>' +
-              '<button class="popup-btn" onclick="selectActivity(' + m.id + ')">View Event</button>'
-            );
-
-            bounds.push([m.lat, m.lon]);
-          });
-
-          ${userLocation ? `
-            // Add user location marker
-            L.circleMarker([${userLocation.latitude}, ${userLocation.longitude}], {
-              radius: 10,
-              fillColor: '#2CB9B0',
-              color: '#fff',
-              weight: 2,
-              fillOpacity: 1,
-            }).addTo(map).bindPopup('You are here');
-
-            // Include user location in bounds
-            bounds.push([${userLocation.latitude}, ${userLocation.longitude}]);
-          ` : ''}
-
-          // Fit map to show everything
-          if (bounds.length === 1) {
-            map.setView(bounds[0], 14);
-          } else {
-            map.fitBounds(bounds, { padding: [40, 40] });
-          }
-        }
-
-        function selectActivity(id) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ activityId: id }));
-        }
-      </script>
-    </body>
-  </html>
-  `;
-
-  const handleMessage = (event) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.activityId) {
-        const activity = validActivities.find(a => a.id === data.activityId);
-        if (activity) {
-          // activityId only — see ActivityCard.js's handlePress for why the
-          // full object isn't passed alongside it.
-          navigation.navigate('ActivityViewerScreen', { activityId: activity.id });
-        }
-      }
-    } catch (e) {
-      console.warn('Map message error', e);
-    }
+  const goToActivity = (activityId) => {
+    // activityId only — see ActivityCard.js's handlePress for why the
+    // full object isn't passed alongside it.
+    navigation.navigate('ActivityViewerScreen', { activityId });
   };
 
   return (
@@ -175,15 +68,27 @@ const ExploreMapScreen = ({ navigation, route }) => {
           <Text style={styles.emptyText}>No events with location data</Text>
         </View>
       ) : (
-        <WebView
-          ref={webRef}
-          originWhitelist={['*']}
-          source={{ html }}
-          onMessage={handleMessage}
-          javaScriptEnabled
-          domStorageEnabled
+        <MapView
+          provider={PROVIDER_GOOGLE}
           style={{ flex: 1 }}
-        />
+          initialRegion={initialRegion}
+        >
+          {validActivities.map(a => (
+            <Marker
+              key={a.id}
+              coordinate={{ latitude: a.latitude, longitude: a.longitude }}
+              title={a.name}
+              onPress={() => goToActivity(a.id)}
+            />
+          ))}
+          {userLocation && (
+            <Marker
+              coordinate={userLocation}
+              title="You are here"
+              pinColor="#2CB9B0"
+            />
+          )}
+        </MapView>
       )}
     </SafeAreaView>
   );

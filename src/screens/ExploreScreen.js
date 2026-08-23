@@ -23,6 +23,7 @@ import useAxios from '../utils/useAxios';
 import ActivityCard from '../components/ActivityCard';
 import { Fonts } from '../theme/fonts';
 import { getMainCategory } from '../utils/categoryMapper';
+import { rankByInterest } from '../utils/rankByInterest';
 import { BASE_URL } from '../config';
 import { LocationContext, filterActivitiesByDistance, getDistanceKm } from '../context/LocationContext';
 import { useIsWideWeb } from '../utils/responsive';
@@ -76,10 +77,17 @@ const ExploreScreen = () => {
 
   const [activeDate, setActiveDate] = useState('Upcoming');
   const [activeCategory, setActiveCategory] = useState('All Categories');
+  const [profile, setProfile] = useState(null);
 
   const axios = useAxios();
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
+
+  useEffect(() => {
+    axios.get(`${BASE_URL}/api/profile/`)
+      .then(res => setProfile(res.data))
+      .catch(() => {});
+  }, []);
 
   const fetchActivities = async () => {
     try {
@@ -182,6 +190,12 @@ const ExploreScreen = () => {
     // category tab had no effect on the list.
     if (activeCategory !== 'All Categories') {
       data = data.filter(item => item.mainCategory === activeCategory);
+    } else {
+      // "All Categories" is the one view broad enough for interest-based
+      // priority to mean anything — once a specific category tab is picked
+      // everything shown already belongs to it. Same exact-match →
+      // same-category → everything-else ordering as Home's Nearby tab.
+      data = rankByInterest(data, profile?.interests, location);
     }
 
     if (
@@ -199,7 +213,7 @@ const ExploreScreen = () => {
     }
 
     return data;
-  }, [activities, activeDate, activeCategory, searchQuery, location]);
+  }, [activities, activeDate, activeCategory, searchQuery, location, profile]);
 
 
   if (loading) {

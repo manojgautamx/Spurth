@@ -299,6 +299,9 @@ class PostSerializer(serializers.ModelSerializer):
     comments_count = serializers.IntegerField(read_only=True)
     is_liked = serializers.SerializerMethodField()
     activity_name = serializers.CharField(source='activity.name', read_only=True)
+    activity_type = serializers.CharField(source='activity.activity_type', read_only=True)
+    latitude = serializers.FloatField(source='activity.latitude', read_only=True)
+    longitude = serializers.FloatField(source='activity.longitude', read_only=True)
     cover_image = serializers.SerializerMethodField()
     activity_creator_id = serializers.IntegerField(source='activity.created_by.id', read_only=True)
     activity_is_concluded = serializers.SerializerMethodField()
@@ -312,7 +315,8 @@ class PostSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'user', 'user_name', 'user_avatar',
-            'activity', 'activity_name', 'activity_creator_id',
+            'activity', 'activity_name', 'activity_type', 'activity_creator_id',
+            'latitude', 'longitude',
             'cover_image', 'caption', 'image', 'poll',
             'created_at', 'likes_count', 'comments_count',
             'is_liked', 'is_host',

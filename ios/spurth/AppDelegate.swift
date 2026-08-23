@@ -2,6 +2,7 @@ import UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider
+import GoogleMaps
 
 @main
 class AppDelegate: RCTAppDelegate {
@@ -12,6 +13,10 @@ class AppDelegate: RCTAppDelegate {
     // You can add your custom initial props in the dictionary below.
     // They will be passed down to the ViewController used by React Native.
     self.initialProps = [:]
+
+    // Must be provided before any GMSMapView (react-native-maps' Google
+    // provider) is created.
+    GMSServices.provideAPIKey("AIzaSyA3_dtp1rNdfWEWaEfEZBPrPKtfL1ddlsk")
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

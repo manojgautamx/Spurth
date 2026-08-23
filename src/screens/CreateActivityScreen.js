@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { WebView } from 'react-native-webview';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import * as ImagePicker from 'react-native-image-picker';
@@ -360,24 +360,15 @@ const CreateActivityScreen = ({ navigation, route }) => {
               {/* Map preview */}
               {latitude !== null && longitude !== null && (
                 <View style={styles.mapPreviewContainer}>
-                  <WebView
-                    source={{
-                      html: `
-                        <html><body style="margin:0;">
-                          <div id="map" style="height:400px;width:100%"></div>
-                          <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-                          <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-                          <script>
-                            var map = L.map('map').setView([${latitude}, ${longitude}], 13);
-                            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-                            L.marker([${latitude}, ${longitude}]).addTo(map);
-                          </script>
-                        </body></html>
-                      `,
-                    }}
+                  <MapView
+                    provider={PROVIDER_GOOGLE}
                     style={{ flex: 1 }}
+                    region={{ latitude, longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
                     scrollEnabled={false}
-                  />
+                    zoomEnabled={false}
+                  >
+                    <Marker coordinate={{ latitude, longitude }} />
+                  </MapView>
                 </View>
               )}
 
