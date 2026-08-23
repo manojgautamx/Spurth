@@ -1,8 +1,8 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
-import { navigate } from '../navigation/navigationRef';
 import { BASE_URL } from '../config';
+import { triggerLogout } from './authRef';
 
 // 🔥 Create instance (NO default Content-Type)
 const axiosInstance = axios.create({
@@ -61,12 +61,18 @@ axiosInstance.interceptors.response.use(
         return axiosInstance(originalRequest);
 
       } catch (refreshError) {
-        // ❌ Logout if refresh fails
-        await AsyncStorage.removeItem('accessToken');
-        await AsyncStorage.removeItem('refreshToken');
+        // ❌ Logout if refresh fails — go through AuthContext's real logout
+        // (updates its live userToken state) instead of just clearing
+        // storage. A bare storage clear leaves AppNavigator still rendering
+        // the logged-in screen set, so an imperative navigate('Login') here
+        // silently fails (that screen isn't registered yet) and the user
+        // gets stuck. Flipping userToken to null both swaps in the
+        // logged-out screen set AND fires AppNavigator's own redirect-to
+        // -Landing/Welcome effect, the same path the explicit Log Out
+        // button already uses correctly.
+        await triggerLogout();
 
         Alert.alert('Session expired', 'Please log in again.');
-        navigate('Login');
 
         return Promise.reject(refreshError);
       }
