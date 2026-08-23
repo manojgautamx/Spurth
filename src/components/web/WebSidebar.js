@@ -150,7 +150,13 @@ const styles = StyleSheet.create({
   },
   brandLogo: {
     height: 26,
-    aspectRatio: 528 / 182,
+    // Real logotext.png dimensions (1862x489) — the previous 528/182 value
+    // didn't match the actual asset, and combined with the sidebar's default
+    // stretch alignment (a column flex container with no alignItems set)
+    // let the logo's box balloon to the sidebar's full width, centering the
+    // correctly-proportioned image inside it and visually shifting it right.
+    aspectRatio: 1862 / 489,
+    alignSelf: 'flex-start',
     marginBottom: 28,
     marginLeft: 12,
   },
