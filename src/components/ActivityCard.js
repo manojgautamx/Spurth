@@ -39,7 +39,7 @@ const formatDistance = (km) => {
   return `${km.toFixed(1)} km away`;
 };
 
-const ActivityCard = ({ activity }) => {
+const ActivityCard = ({ activity, compact = false }) => {
   const isWideWeb = useIsWideWeb();
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
@@ -95,6 +95,34 @@ const ActivityCard = ({ activity }) => {
     // no object is passed.
     navigation.navigate('ActivityViewerScreen', { activityId: activity.id });
   };
+
+  // Used only by the 3rd-column rails (ActivitiesRail) — thumbnail + title +
+  // category + date, no time/location/joined count, keeping it scannable in
+  // a narrow 360px column.
+  if (compact) {
+    return (
+      <TouchableOpacity style={styles.cardCompact} onPress={handlePress} activeOpacity={0.85}>
+        <Image source={getCoverImageSource()} style={styles.imageCompact} />
+        <View style={styles.contentCompact}>
+          {distanceLabel && (
+            <View style={styles.distanceRowCompact}>
+              <Ionicons name="navigate" size={8} color="#3CC884" />
+              <Text style={styles.distanceCompact}>{distanceLabel}</Text>
+            </View>
+          )}
+          <Text style={styles.titleCompact} numberOfLines={1}>{activity.name}</Text>
+          <View style={styles.categoryRowCompact}>
+            {getActivityTypeIcon(activity.activity_type, 10, '#ccc')}
+            <Text style={styles.categoryCompact}>{activity.activity_type}</Text>
+          </View>
+          <View style={styles.categoryRowCompact}>
+            <Ionicons name="calendar-outline" size={10} color="#ccc" />
+            <Text style={styles.categoryCompact}>{formatDateTime(activity.date_time).date}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   // Web: a compact horizontal row (thumbnail + info side-by-side) instead of
   // the mobile card's full-width banner-then-stacked-rows layout — at desktop
@@ -308,6 +336,56 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12,
     fontFamily: Fonts.medium,
+  },
+
+  /* ───────── 3rd-column rail: thumbnail + title + category + distance ───────── */
+  cardCompact: {
+    flexDirection: 'row',
+    backgroundColor: '#121212',
+    marginHorizontal: 20,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#262626',
+    gap: 14,
+  },
+  imageCompact: {
+    width: 100,
+    alignSelf: 'stretch',
+    borderRadius: 18,
+    flexShrink: 0,
+  },
+  contentCompact: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  distanceRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 8,
+  },
+  distanceCompact: {
+    color: '#3CC884',
+    fontSize: 10,
+    fontFamily: Fonts.semibold,
+  },
+  titleCompact: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.bold,
+  },
+  categoryRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+  },
+  categoryCompact: {
+    color: '#999',
+    fontSize: 10,
+    fontFamily: Fonts.regular,
   },
 
   /* ───────── Web: compact horizontal row ───────── */

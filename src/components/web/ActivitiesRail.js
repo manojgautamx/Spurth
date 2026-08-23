@@ -7,10 +7,11 @@ import { useNavigation } from '@react-navigation/native';
 import axiosInstance from '../../utils/axiosInstance';
 import { LocationContext, filterActivitiesByDistance } from '../../context/LocationContext';
 import { useDistance } from '../../context/DistanceContext';
+import { rankByInterest } from '../../utils/rankByInterest';
 import ActivityCard from '../ActivityCard';
 import { Fonts } from '../../theme/fonts';
 
-const PREVIEW_COUNT = 8;
+const PREVIEW_COUNT = 3;
 
 export default function ActivitiesRail() {
   const navigation = useNavigation();
@@ -24,18 +25,22 @@ export default function ActivitiesRail() {
 
     const fetchActivities = async () => {
       try {
-        const [otherRes, joinedRes] = await Promise.all([
+        const [otherRes, joinedRes, profileRes] = await Promise.all([
           axiosInstance.get('public-activities/'),
           axiosInstance.get('joined-activities/'),
+          axiosInstance.get('profile/'),
         ]);
 
         const joinedIds = new Set((joinedRes.data || []).map(a => a.id));
         const upcoming = (otherRes.data || []).filter(
           a => !joinedIds.has(a.id) && !a.is_cancelled && new Date(a.date_time) >= new Date()
         );
+        // Same algorithm as Home's Nearby tab / Explore's All Categories:
+        // distance-radius filter, then rank by the viewer's interests.
         const nearby = filterActivitiesByDistance(upcoming, location?.latitude, location?.longitude, distanceKm);
+        const ranked = rankByInterest(nearby, profileRes.data?.interests, location);
 
-        if (!cancelled) setActivities(nearby.slice(0, PREVIEW_COUNT));
+        if (!cancelled) setActivities(ranked.slice(0, PREVIEW_COUNT));
       } catch (err) {
         console.log('ActivitiesRail fetch error:', err);
       } finally {
@@ -70,7 +75,7 @@ export default function ActivitiesRail() {
           </View>
         ) : (
           activities.map(activity => (
-            <ActivityCard key={activity.id} activity={activity} />
+            <ActivityCard key={activity.id} activity={activity} compact />
           ))
         )}
 
@@ -139,6 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 12,
     alignItems: 'center',
+    marginTop: 12,
     marginBottom: 40,
   },
   seeMoreText: {

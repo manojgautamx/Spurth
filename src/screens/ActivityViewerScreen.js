@@ -21,7 +21,7 @@ import useAxios from '../utils/useAxios';
 import { promptSignIn } from '../utils/requireAuth';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
-import LeafletMap from '../components/LeafletMap';
+import ActivityMap from '../components/ActivityMap';
 import { getActivityTypeIcon } from '../utils/activityTypeIcons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import PostCard from '../components/PostCard';
@@ -620,7 +620,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
           </View>
 
           <View style={styles.mapContainer}>
-            <LeafletMap
+            <ActivityMap
               latitude={coords?.latitude}
               longitude={coords?.longitude}
               label={activity.location}

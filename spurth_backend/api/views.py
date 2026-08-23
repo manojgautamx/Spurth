@@ -27,7 +27,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMessage
 from django.conf import settings
 from .models import EmailVerificationToken, generate_verification_code
 from django.contrib.auth.backends import ModelBackend
@@ -514,7 +514,8 @@ def me(request):
         'email_verified': request.user.email_verified,
         "avatar": avatar,
         'location': location,
-        'email_verified': request.user.email_verified,
+        'phone_number': request.user.phone_number,
+        'phone_verified': request.user.phone_verified,
     })
 
 @api_view(['PUT'])
@@ -1034,3 +1035,66 @@ def change_password(request):
     request.user.save()
 
     return Response({'detail': 'Password changed successfully.'})
+
+
+def _check_account_action_password(user, request):
+    # Accounts created via Google Sign-In have no usable password, so
+    # skip the confirmation check for them — there's nothing to check
+    # against and requiring one would lock those users out of this
+    # feature entirely.
+    if not user.has_usable_password():
+        return None
+    password = request.data.get('password', '').strip()
+    if not password:
+        return Response({'detail': 'Password is required.'}, status=400)
+    if not user.check_password(password):
+        return Response({'detail': 'Incorrect password.'}, status=400)
+    return None
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def deactivate_account(request):
+    user = request.user
+    error = _check_account_action_password(user, request)
+    if error:
+        return error
+
+    user.is_active = False
+    user.save(update_fields=['is_active'])
+    return Response({'detail': 'Account deactivated.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def delete_account(request):
+    user = request.user
+    error = _check_account_action_password(user, request)
+    if error:
+        return error
+
+    user.delete()
+    return Response({'detail': 'Account deleted.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def contact_support(request):
+    subject = request.data.get('subject', '').strip()
+    message = request.data.get('message', '').strip()
+    if not subject or not message:
+        return Response({'detail': 'Subject and message are required.'}, status=400)
+
+    user = request.user
+    email = EmailMessage(
+        subject=f'[Spurth Help] {subject}',
+        body=(
+            f'From: {user.username} ({user.email})\n\n'
+            f'{message}'
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=['help@spurth.com'],
+        reply_to=[user.email] if user.email else None,
+    )
+    email.send(fail_silently=False)
+    return Response({'detail': 'Your message has been sent to our support team.'})

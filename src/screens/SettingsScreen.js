@@ -23,6 +23,8 @@ import { useDistance } from '../context/DistanceContext';
 import axiosInstance from '../utils/axiosInstance';
 import { AuthContext } from '../context/AuthContext';
 import { useIsWideWeb } from '../utils/responsive';
+import { ProfileStatusContext } from '../navigation/AppNavigator';
+import PhoneVerifySection from '../components/PhoneVerifySection';
 
 const DISTANCE_KEY = 'user_distance_km';
 
@@ -37,10 +39,13 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const isWideWeb = useIsWideWeb();
   const { logout } = useContext(AuthContext);
+  const { refreshProfileStatus } = useContext(ProfileStatusContext);
   const { distanceKm, setDistanceKm } = useDistance();
   const [localDistance, setLocalDistance] = useState(distanceKm);
   const [email, setEmail] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Change password
@@ -52,15 +57,36 @@ export default function SettingsScreen() {
   const [changePasswordError, setChangePasswordError] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
 
+  // Account delete/deactivate
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [accountPassword, setAccountPassword] = useState('');
+  const [accountActionError, setAccountActionError] = useState('');
+  const [accountActionLoading, setAccountActionLoading] = useState(null); // null | 'deactivate' | 'delete'
+
+  // Help desk
+  const [helpModalVisible, setHelpModalVisible] = useState(false);
+  const [helpSubject, setHelpSubject] = useState('');
+  const [helpMessage, setHelpMessage] = useState('');
+  const [helpError, setHelpError] = useState('');
+  const [sendingHelp, setSendingHelp] = useState(false);
+
+  const fetchMe = () => axiosInstance.get('me/')
+    .then(res => {
+      setEmail(res.data.email || '');
+      setEmailVerified(res.data.email_verified || false);
+      setPhoneNumber(res.data.phone_number || '');
+      setPhoneVerified(res.data.phone_verified || false);
+    })
+    .catch(() => {});
+
   useEffect(() => {
-    axiosInstance.get('me/')
-      .then(res => {
-        setEmail(res.data.email || '');
-        setEmailVerified(res.data.email_verified || false);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingUser(false));
+    fetchMe().finally(() => setLoadingUser(false));
   }, []);
+
+  const handlePhoneVerified = () => {
+    fetchMe();
+    refreshProfileStatus?.();
+  };
 
   const onSlidingComplete = async (value) => {
     const rounded = Math.round(value);
@@ -100,6 +126,80 @@ export default function SettingsScreen() {
       setChangePasswordError(err.response?.data?.detail || 'Failed to change password.');
     } finally {
       setChangingPassword(false);
+    }
+  };
+
+  const openAccountModal = () => {
+    setAccountPassword('');
+    setAccountActionError('');
+    setAccountActionLoading(null);
+    setAccountModalVisible(true);
+  };
+
+  const runAccountAction = (mode, endpoint, confirmTitle, confirmMessage) => {
+    Alert.alert(confirmTitle, confirmMessage, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: mode === 'delete' ? 'Delete' : 'Deactivate',
+        style: 'destructive',
+        onPress: async () => {
+          setAccountActionLoading(mode);
+          setAccountActionError('');
+          try {
+            await axiosInstance.post(endpoint, { password: accountPassword });
+            setAccountModalVisible(false);
+            logout();
+          } catch (err) {
+            setAccountActionError(err.response?.data?.detail || 'Something went wrong.');
+          } finally {
+            setAccountActionLoading(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDeactivateAccount = () =>
+    runAccountAction(
+      'deactivate',
+      'account/deactivate/',
+      'Deactivate Account',
+      'Your account will be hidden and you’ll be logged out. You can contact support to reactivate it later.'
+    );
+
+  const handleDeleteAccount = () =>
+    runAccountAction(
+      'delete',
+      'account/delete/',
+      'Delete Account',
+      'This permanently deletes your account and all your data. This cannot be undone.'
+    );
+
+  const openHelpModal = () => {
+    setHelpSubject('');
+    setHelpMessage('');
+    setHelpError('');
+    setHelpModalVisible(true);
+  };
+
+  const handleSendHelp = async () => {
+    if (!helpSubject.trim() || !helpMessage.trim()) {
+      setHelpError('Please fill in both fields.');
+      return;
+    }
+    setSendingHelp(true);
+    setHelpError('');
+    try {
+      await axiosInstance.post('support/contact/', {
+        subject: helpSubject.trim(),
+        message: helpMessage.trim(),
+      });
+      setHelpModalVisible(false);
+      Alert.alert('Sent', 'Your message has been sent to our support team.');
+    } catch (err) {
+      setHelpError(err.response?.data?.detail || 'Failed to send your message.');
+    } finally {
+      setSendingHelp(false);
     }
   };
 
@@ -157,6 +257,35 @@ export default function SettingsScreen() {
           <SettingRow label="Change Password" onPress={openChangePassword} />
         </View>
 
+        {/* Phone / Host Verification */}
+        <View style={styles.card}>
+          <Text style={styles.sectionLabel}>Phone Verification</Text>
+          {loadingUser ? (
+            <ActivityIndicator color="#6E35B7" style={{ marginVertical: 16 }} />
+          ) : phoneVerified ? (
+            <View style={styles.emailRow}>
+              <View style={styles.emailIconWrap}>
+                <Ionicons name="call-outline" size={18} color="#888" />
+              </View>
+              <View style={styles.emailInfo}>
+                <Text style={styles.emailAddress}>{phoneNumber}</Text>
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="checkmark-circle" size={13} color="#2CB9B0" />
+                  <Text style={styles.verifiedText}>Verified</Text>
+                </View>
+              </View>
+              <Ionicons name="checkmark-circle" size={22} color="#2CB9B0" style={{ marginLeft: 8 }} />
+            </View>
+          ) : (
+            <View style={{ paddingBottom: 16 }}>
+              <Text style={styles.phoneVerifySubtitle}>
+                Verify your phone number to host activities.
+              </Text>
+              <PhoneVerifySection onVerified={handlePhoneVerified} />
+            </View>
+          )}
+        </View>
+
         {/* Distance Preferences */}
         <View style={styles.card}>
           <View style={styles.distanceHeader}>
@@ -191,17 +320,12 @@ export default function SettingsScreen() {
           <View style={styles.divider} />
           <SettingRow
             label="Account Delete/Deactivation"
-            onPress={() =>
-              Alert.alert(
-                'Delete Account',
-                'To delete your account please contact support@spurth.com',
-              )
-            }
+            onPress={openAccountModal}
           />
           <View style={styles.divider} />
           <SettingRow
             label="Helpdesk"
-            onPress={() => Linking.openURL('mailto:support@spurth.com')}
+            onPress={openHelpModal}
           />
         </View>
       </ScrollView>
@@ -313,6 +437,148 @@ export default function SettingsScreen() {
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
                     <Text style={styles.modalSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Account Delete/Deactivation Modal */}
+      <Modal
+        visible={accountModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={styles.modalCardWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Manage Account</Text>
+              <Text style={styles.modalSubtitle}>
+                Deactivating hides your account until you contact support to reactivate it.
+                Deleting permanently removes your account and data.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Password</Text>
+              <TextInput
+                style={styles.passwordInput}
+                placeholder="Leave blank if you signed in with Google"
+                placeholderTextColor="#555"
+                secureTextEntry
+                value={accountPassword}
+                onChangeText={setAccountPassword}
+                autoCapitalize="none"
+              />
+
+              {!!accountActionError && (
+                <Text style={styles.modalErrorText}>{accountActionError}</Text>
+              )}
+
+              <TouchableOpacity
+                style={[styles.dangerBtn, accountActionLoading && { opacity: 0.6 }]}
+                onPress={handleDeactivateAccount}
+                disabled={!!accountActionLoading}
+              >
+                {accountActionLoading === 'deactivate' ? (
+                  <ActivityIndicator color="#E8A020" size="small" />
+                ) : (
+                  <Text style={styles.dangerBtnText}>Deactivate Account</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dangerBtn, styles.dangerBtnStrong, accountActionLoading && { opacity: 0.6 }]}
+                onPress={handleDeleteAccount}
+                disabled={!!accountActionLoading}
+              >
+                {accountActionLoading === 'delete' ? (
+                  <ActivityIndicator color="#C90000" size="small" />
+                ) : (
+                  <Text style={[styles.dangerBtnText, styles.dangerBtnTextStrong]}>Delete Account Permanently</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { alignSelf: 'center', marginTop: 14 }]}
+                onPress={() => setAccountModalVisible(false)}
+                disabled={!!accountActionLoading}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Helpdesk Modal */}
+      <Modal
+        visible={helpModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHelpModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={styles.modalCardWrap}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          >
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Contact Support</Text>
+              <Text style={styles.modalSubtitle}>
+                Tell us what's wrong and we'll get back to you at help@spurth.com.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Subject</Text>
+              <View style={styles.helpFieldInput}>
+                <TextInput
+                  style={styles.helpFieldTextInput}
+                  placeholder="What's the issue about?"
+                  placeholderTextColor="#555"
+                  value={helpSubject}
+                  onChangeText={setHelpSubject}
+                />
+              </View>
+
+              <Text style={styles.fieldLabel}>Message</Text>
+              <View style={[styles.helpFieldInput, styles.helpTextAreaInput]}>
+                <TextInput
+                  style={[styles.helpFieldTextInput, styles.helpTextArea]}
+                  placeholder="Describe your problem..."
+                  placeholderTextColor="#555"
+                  value={helpMessage}
+                  onChangeText={setHelpMessage}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {!!helpError && (
+                <Text style={styles.modalErrorText}>{helpError}</Text>
+              )}
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={styles.modalCancelBtn}
+                  onPress={() => setHelpModalVisible(false)}
+                  disabled={sendingHelp}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalSaveBtn, sendingHelp && { opacity: 0.6 }]}
+                  onPress={handleSendHelp}
+                  disabled={sendingHelp}
+                >
+                  {sendingHelp ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.modalSaveText}>Send</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -513,7 +779,63 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontFamily: Fonts.semibold,
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    color: '#888',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    lineHeight: 18,
     marginBottom: 18,
+  },
+  phoneVerifySubtitle: {
+    color: '#888',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  dangerBtn: {
+    borderWidth: 1.5,
+    borderColor: '#E8A020',
+    borderRadius: 30,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  dangerBtnStrong: {
+    borderColor: '#C90000',
+    marginTop: 12,
+  },
+  dangerBtnText: {
+    color: '#E8A020',
+    fontSize: 15,
+    fontFamily: Fonts.semibold,
+  },
+  dangerBtnTextStrong: {
+    color: '#C90000',
+  },
+  helpFieldInput: {
+    backgroundColor: '#111',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 4,
+  },
+  helpFieldTextInput: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+    padding: 0,
+  },
+  helpTextAreaInput: {
+    alignItems: 'flex-start',
+  },
+  helpTextArea: {
+    minHeight: 100,
+    width: '100%',
   },
   fieldLabel: {
     color: '#999',

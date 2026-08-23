@@ -17,6 +17,11 @@ end
 target 'StreetLeague' do
   config = use_native_modules!
 
+  # react-native-maps' Google provider needs the native Google Maps SDK
+  # present on iOS (unlike Android, where the SDK ships as part of Play
+  # Services) — Apple Maps needs no key/pod, Google does.
+  pod 'GoogleMaps'
+
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.

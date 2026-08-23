@@ -1,5 +1,5 @@
 from django.urls import path, include
-from .views import PublicUserSearchView, firebase_token, forgot_password, register, CreateActivityView, MyActivitiesView, PublicActivitiesView, CustomTokenObtainPairView, join_activity, joined_activities, resend_verification, reset_password, change_password, update_activity, leave_activity, activity_status, delete_activity, can_enter_chat, me, verify_email, view_user_profile, cancel_activity, activity_detail, delete_post, remove_participant, user_activities, verify_email_redirect, forgot_password, reset_password, send_invite, UserProfileCreateView, ProfileStatusView, UpdateProfileView, CommentViewSet, PhoneVerificationConfirmView
+from .views import PublicUserSearchView, firebase_token, forgot_password, register, CreateActivityView, MyActivitiesView, PublicActivitiesView, CustomTokenObtainPairView, join_activity, joined_activities, resend_verification, reset_password, change_password, update_activity, leave_activity, activity_status, delete_activity, can_enter_chat, me, verify_email, view_user_profile, cancel_activity, activity_detail, delete_post, remove_participant, user_activities, verify_email_redirect, forgot_password, reset_password, send_invite, UserProfileCreateView, ProfileStatusView, UpdateProfileView, CommentViewSet, PhoneVerificationConfirmView, deactivate_account, delete_account, contact_support
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -66,6 +66,9 @@ urlpatterns = [
     path('change-password/', change_password, name='change-password'),
     path('invite/', send_invite, name='send-invite'),
     path('verification/phone/confirm/', PhoneVerificationConfirmView.as_view(), name='phone-verification-confirm'),
+    path('account/deactivate/', deactivate_account, name='account-deactivate'),
+    path('account/delete/', delete_account, name='account-delete'),
+    path('support/contact/', contact_support, name='support-contact'),
 ]
 
 if settings.DEBUG:
