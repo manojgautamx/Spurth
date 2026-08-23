@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthLogout } from '../utils/authRef';
 
 export const AuthContext = createContext();
 
@@ -45,7 +46,13 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', e);
     }
   };
-  
+
+  // Registered so axiosInstance's session-expiry handler can trigger a real
+  // logout (state included), not just clear storage out from under React.
+  useEffect(() => {
+    setAuthLogout(logout);
+    return () => setAuthLogout(null);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ userToken, login, logout, isLoading }}>
