@@ -55,7 +55,10 @@ const linking = {
           Explore: 'Explore',
           Experience: 'Experience',
           Notification: 'Notification',
-          Chat: 'Chat',
+          // Optional param so selecting a conversation in the wide-web split
+          // pane (ChatListScreen) gives it a real, shareable/refreshable URL
+          // instead of only living in local component state.
+          Chat: 'Chat/:activityId?',
         },
       },
       // Logged-out branch (AppNavigator.js's `!userToken` screens)

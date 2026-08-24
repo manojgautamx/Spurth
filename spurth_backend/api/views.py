@@ -64,6 +64,7 @@ def google_auth(request):
         if created or not user.email_verified:
             user.email_verified = True  # Google already verified it
             user.save()
+        UserProfile.objects.get_or_create(user=user)
 
         refresh = RefreshToken.for_user(user)
         return Response({
@@ -105,6 +106,11 @@ def register(request):
         return Response({'detail': 'Email already in use.'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = User.objects.create_user(username=username, email=email, password=password)
+    # Every user needs a UserProfile row from the moment they exist — without
+    # this, view_user_profile 404s with "Profile not found" for anyone who
+    # hasn't finished the onboarding wizard yet (UserProfile is only
+    # otherwise created there), even when viewing their own profile.
+    UserProfile.objects.get_or_create(user=user)
 
     refresh = RefreshToken.for_user(user)
     # Deliberately not sending a verification email here — it now only goes

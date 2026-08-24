@@ -37,7 +37,7 @@ const getCoverSource = (item) => {
 
 const FILTERS = ['All', 'Unread', 'Read'];
 
-export default function ChatListScreen() {
+export default function ChatListScreen({ route }) {
   const isWideWeb = useIsWideWeb();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,9 +45,24 @@ export default function ChatListScreen() {
   const [lastRead, setLastRead] = useState({});
   // Wide web only — selecting a chat opens it in the adjoining panel
   // instead of navigating to a separate screen (see renderItem below).
-  const [selectedActivity, setSelectedActivity] = useState(null);
+  // Initialized from route.params (a shared/refreshed /Chat/:activityId
+  // link) when present, so the selection isn't only ever local state.
+  const routeActivityId = route?.params?.activityId;
+  const [selectedActivity, setSelectedActivity] = useState(() =>
+    routeActivityId
+      ? { id: Number(routeActivityId), name: route?.params?.activityName || '' }
+      : null
+  );
   const navigation = useNavigation();
   const unsubscribersRef = useRef([]);
+
+  const selectActivity = (activity) => {
+    setSelectedActivity(activity);
+    navigation.setParams({
+      activityId: activity ? String(activity.id) : undefined,
+      activityName: activity ? activity.name : undefined,
+    });
+  };
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -162,7 +177,7 @@ export default function ChatListScreen() {
         onPress={() => {
           markAsRead(item.id, last?.timestamp);
           if (isWideWeb) {
-            setSelectedActivity(item);
+            selectActivity(item);
           } else {
             navigation.navigate('ActivityChatScreen', {
               activityId: item.id,
@@ -267,7 +282,7 @@ export default function ChatListScreen() {
                   key={selectedActivity.id}
                   activityId={selectedActivity.id}
                   activityName={selectedActivity.name}
-                  onBack={() => setSelectedActivity(null)}
+                  onBack={() => selectActivity(null)}
                   embedded
                 />
               ) : (
