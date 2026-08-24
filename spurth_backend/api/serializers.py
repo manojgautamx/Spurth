@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Activity, Notification, Post, UserProfile, Comment, Poll, PollChoice
+from .models import Activity, ActivityJoinRequest, Notification, Post, UserProfile, Comment, Poll, PollChoice
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.db.models import Q
@@ -77,7 +77,8 @@ class ActivitySerializer(serializers.ModelSerializer):
             'date_time', 'format', 'max_players', 'price',
             'created_by', 'description', 'is_owner', 'joined',
             'is_full', 'participant_count', 'participants',
-            'cover_image', 'cover_image_url', 'is_concluded', 'is_cancelled'
+            'cover_image', 'cover_image_url', 'is_concluded', 'is_cancelled',
+            'is_invite_only',
         )
         read_only_fields = ('created_by',)
 
@@ -151,6 +152,14 @@ class ActivitySerializer(serializers.ModelSerializer):
             except Exception:
                 return obj.cover_image.url
         return None
+
+
+class ActivityJoinRequestSerializer(serializers.ModelSerializer):
+    user = PublicUserSerializer(read_only=True)
+
+    class Meta:
+        model = ActivityJoinRequest
+        fields = ['id', 'user', 'created_at']
 
 
 # 👤 PROFILE

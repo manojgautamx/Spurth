@@ -79,6 +79,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
   const [price, setPrice] = useState(
     editingActivity?.price === 0 ? 'Free' : editingActivity?.price?.toString() || ''
   );
+  const [isInviteOnly, setIsInviteOnly] = useState(editingActivity?.is_invite_only || false);
 
   // 🔥 Date & time
   const initialDate = editingActivity?.date_time
@@ -214,6 +215,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
       'price',
       (!price || price.trim().toLowerCase() === 'free') ? 0 : price
     );
+    formData.append('is_invite_only', isInviteOnly ? 'true' : 'false');
 
     appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
 
@@ -567,6 +569,32 @@ const CreateActivityScreen = ({ navigation, route }) => {
                 placeholderTextColor="#555"
               />
             </View>
+
+            {/* Invite Only */}
+            <Text style={styles.fieldLabel}>Activity Privacy</Text>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.typeBtn, !isInviteOnly && styles.typeBtnSelected]}
+                onPress={() => setIsInviteOnly(false)}
+              >
+                <Text style={[styles.typeBtnText, !isInviteOnly && styles.typeBtnTextSelected]}>
+                  Public
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeBtn, isInviteOnly && styles.typeBtnSelected]}
+                onPress={() => setIsInviteOnly(true)}
+              >
+                <Text style={[styles.typeBtnText, isInviteOnly && styles.typeBtnTextSelected]}>
+                  Invite Only
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.optionalLabel, { marginTop: 8 }]}>
+              {isInviteOnly
+                ? 'Others must request to join — you approve or invite them directly.'
+                : 'Anyone can join right away.'}
+            </Text>
 
             {/* Price */}
             <Text style={styles.fieldLabel}>

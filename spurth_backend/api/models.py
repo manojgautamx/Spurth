@@ -38,6 +38,7 @@ class Activity(models.Model):
         blank=True
     )
     is_cancelled = models.BooleanField(default=False)
+    is_invite_only = models.BooleanField(default=False)
 
     # 🔥 Optional fields for richer UX
     max_players = models.PositiveIntegerField(default=0)  # Max number of participants
@@ -77,6 +78,26 @@ class Activity(models.Model):
     def participant_count(self):
         return self.participants.count() + 1
 
+
+class ActivityJoinRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    ]
+
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE, related_name='join_requests')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activity_join_requests')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('activity', 'user')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.activity.name} ({self.status})"
 
 
 class UserProfile(models.Model):
@@ -179,7 +200,10 @@ class Notification(models.Model):
         ('cancel', 'Event Cancelled'),
         ('new_event', 'New Event'),
         ('message', 'New Message'),
-        ('invite', 'Invited'),   
+        ('invite', 'Invited'),
+        ('join_request', 'Join Request'),
+        ('request_accepted', 'Request Accepted'),
+        ('request_declined', 'Request Declined'),
     ]
 
     recipient = models.ForeignKey(

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TextInput,
   TouchableOpacity,
   Image,
@@ -16,6 +17,8 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { AuthContext } from '../context/AuthContext';
+import { LocationContext } from '../context/LocationContext';
+import { rankByInterest } from '../utils/rankByInterest';
 import PostCard from '../components/PostCard';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL } from '../config';
@@ -27,8 +30,10 @@ import ExperienceSkeleton from '../components/skeletons/ExperienceSkeleton';
 const ExperienceScreen = () => {
   const isWideWeb = useIsWideWeb();
   const { user } = useContext(AuthContext);
+  const { location } = useContext(LocationContext);
 
   const [activities, setActivities] = useState([]);
+  const [joinedActivityIds, setJoinedActivityIds] = useState(new Set());
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [activityPickerVisible, setActivityPickerVisible] = useState(false);
   const [posts, setPosts] = useState([]);
@@ -81,6 +86,7 @@ const ExperienceScreen = () => {
       const merged = [...created, ...joined.filter(j => !created.some(c => c.id === j.id))];
       const minimal = merged.map(a => ({ id: a.id, name: a.name }));
       setActivities(minimal);
+      setJoinedActivityIds(new Set(merged.map(a => a.id)));
       if (minimal.length) setSelectedActivity(minimal[0].id);
     } catch (err) {
       console.log('Fetch activities error:', err);
@@ -306,22 +312,51 @@ const ExperienceScreen = () => {
     </View>
   );
 
+  // "Joined" — posts from activities you created or joined, newest first
+  // (posts/ already orders that way server-side). "Explore" — everything
+  // else, ranked the same way Home's Nearby tab and Explore's All
+  // Categories rank activities: exact interest match, then same-category,
+  // then the rest, with distance as the tiebreaker within each tier.
+  const joinedPosts = posts.filter(p => joinedActivityIds.has(p.activity_id));
+  const explorePostsRaw = posts.filter(p => !joinedActivityIds.has(p.activity_id));
+  const explorePosts = rankByInterest(explorePostsRaw, profile?.interests, location);
+
   const list = (
-    <FlatList
+    <ScrollView
       style={isWideWeb ? styles.webListFlex : undefined}
-      data={posts}
-      keyExtractor={i => i.id.toString()}
-      renderItem={({ item }) => (
-        <PostCard
-          post={item}
-          onLike={handleLike}
-          onVote={handleVote}
-          navigation={navigation}
-        />
-      )}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 80 }}
-    />
+    >
+      {joinedPosts.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>Joined</Text>
+          {joinedPosts.map(post => (
+            <PostCard
+              key={post.id}
+              post={post}
+              onLike={handleLike}
+              onVote={handleVote}
+              navigation={navigation}
+            />
+          ))}
+        </>
+      )}
+
+      <Text style={styles.sectionLabel}>Explore</Text>
+      {explorePosts.length === 0 ? (
+        <Text style={styles.emptyText}>No experiences yet.</Text>
+      ) : (
+        explorePosts.map(post => (
+          <PostCard
+            key={post.id}
+            post={post}
+            onLike={handleLike}
+            onVote={handleVote}
+            navigation={navigation}
+          />
+        ))
+      )}
+    </ScrollView>
   );
 
   const activityPickerModal = (
@@ -482,6 +517,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 16,
     marginTop: 8,
+  },
+  sectionLabel: {
+    color: '#fff',
+    fontSize: 18,
+    fontFamily: Fonts.semibold,
+    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  emptyText: {
+    color: '#555',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+    textAlign: 'center',
+    paddingVertical: 24,
   },
 
   // Composer

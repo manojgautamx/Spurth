@@ -35,8 +35,8 @@ from django.contrib.auth.backends import ModelBackend
 User = get_user_model()
 
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer
-from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote
+from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer, ActivityJoinRequestSerializer
+from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote, ActivityJoinRequest
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -281,6 +281,51 @@ def join_activity(request, activity_id):
         if activity.date_time < timezone.now():
             raise ValidationError("This event has already concluded.")
 
+        if activity.is_invite_only:
+            # Anyone directly invited through the app (send_invite) skips the
+            # request queue entirely — matched on any invite notification
+            # ever sent for this (user, activity) pair, read or not, so
+            # reading the notification without immediately joining doesn't
+            # cost them their bypass eligibility.
+            has_direct_invite = Notification.objects.filter(
+                recipient=request.user, notification_type='invite', activity=activity,
+            ).exists()
+
+            if not has_direct_invite:
+                jr, created = ActivityJoinRequest.objects.get_or_create(
+                    activity=activity, user=request.user, defaults={'status': 'pending'},
+                )
+                if not created:
+                    if jr.status == 'pending':
+                        return Response(
+                            {'detail': 'You already requested to join this activity.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if jr.status == 'declined':
+                        cooldown_ends = jr.responded_at + timedelta(hours=24)
+                        if timezone.now() < cooldown_ends:
+                            return Response(
+                                {'detail': 'You can request again 24 hours after being declined.'},
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        jr.status = 'pending'
+                        jr.responded_at = None
+                        jr.save(update_fields=['status', 'responded_at'])
+                    # 'accepted' rows can't reach here — the already-joined
+                    # check above catches that case first.
+
+                create_notifications(
+                    recipients=[activity.created_by],
+                    notification_type='join_request',
+                    title='New join request',
+                    body=f'@{request.user.username} requested to join "{activity.name}"',
+                    activity=activity,
+                )
+                return Response(
+                    {'detail': 'Join request sent.', 'request_status': 'pending'},
+                    status=status.HTTP_202_ACCEPTED,
+                )
+
         activity.participants.add(request.user)
 
         serializer = ActivitySerializer(activity, context={'request': request})
@@ -318,10 +363,99 @@ def activity_status(request, activity_id):
     try:
         activity = Activity.objects.get(id=activity_id)
         joined = request.user in activity.participants.all()
-        return Response({'joined': joined}, status=status.HTTP_200_OK)
+
+        request_status = None
+        if not joined and activity.is_invite_only:
+            jr = activity.join_requests.filter(user=request.user, status='pending').first()
+            if jr:
+                request_status = 'pending'
+
+        return Response({'joined': joined, 'request_status': request_status}, status=status.HTTP_200_OK)
 
     except Activity.DoesNotExist:
         return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# Owner reviews a pending join request
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def respond_join_request(request, request_id):
+    action = request.data.get('action')
+    if action not in ('accept', 'decline'):
+        return Response({'detail': "action must be 'accept' or 'decline'."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        jr = ActivityJoinRequest.objects.select_related('activity', 'user').get(id=request_id)
+    except ActivityJoinRequest.DoesNotExist:
+        return Response({'detail': 'Join request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if jr.activity.created_by != request.user:
+        return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if jr.status != 'pending':
+        return Response({'detail': 'This request has already been responded to.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if action == 'accept':
+        if jr.activity.is_full():
+            return Response({'detail': 'Activity is now full.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        jr.activity.participants.add(jr.user)
+        jr.status = 'accepted'
+        jr.responded_at = timezone.now()
+        jr.save(update_fields=['status', 'responded_at'])
+
+        create_notifications(
+            recipients=[jr.user],
+            notification_type='request_accepted',
+            title='Request accepted',
+            body=f'Your request to join "{jr.activity.name}" was accepted.',
+            activity=jr.activity,
+        )
+        return Response({'detail': 'Request accepted.'}, status=status.HTTP_200_OK)
+
+    jr.status = 'declined'
+    jr.responded_at = timezone.now()
+    jr.save(update_fields=['status', 'responded_at'])
+
+    create_notifications(
+        recipients=[jr.user],
+        notification_type='request_declined',
+        title='Request declined',
+        body=f'Your request to join "{jr.activity.name}" was declined.',
+        activity=jr.activity,
+    )
+    return Response({'detail': 'Request declined.'}, status=status.HTTP_200_OK)
+
+
+# Owner lists pending join requests for one of their activities
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_join_requests(request, activity_id):
+    try:
+        activity = Activity.objects.get(id=activity_id)
+    except Activity.DoesNotExist:
+        return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if activity.created_by != request.user:
+        return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+    pending = activity.join_requests.filter(status='pending').select_related('user__profile')
+    serializer = ActivityJoinRequestSerializer(pending, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
+# Requester cancels their own pending join request
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_join_request(request, activity_id):
+    jr = ActivityJoinRequest.objects.filter(
+        activity_id=activity_id, user=request.user, status='pending'
+    ).first()
+    if not jr:
+        return Response({'detail': 'No pending request found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    jr.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 # List Joined Activities
 @api_view(['GET'])

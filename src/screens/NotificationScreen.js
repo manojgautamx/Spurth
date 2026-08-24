@@ -25,6 +25,9 @@ const TYPE_CONFIG = {
   message:    { icon: 'chatbubble-outline',    color: '#8575ff', label: 'Message'     },
   // ── ADD ──────────────────────────────────────────────────────────────────────
   invite:     { icon: 'person-add-outline',    color: '#36ACA6', label: 'Invited'     },
+  join_request:     { icon: 'person-outline',            color: '#8575ff', label: 'Join Request' },
+  request_accepted: { icon: 'checkmark-circle-outline',  color: '#36ACA6', label: 'Accepted'      },
+  request_declined: { icon: 'close-circle-outline',      color: '#888',    label: 'Declined'      },
   // ─────────────────────────────────────────────────────────────────────────────
 };
 

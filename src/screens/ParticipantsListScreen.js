@@ -18,6 +18,8 @@ const ParticipantsListScreen = ({ route, navigation }) => {
   // path pattern). activity-detail/<id>/ already includes `participants`.
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [respondingId, setRespondingId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -28,6 +30,51 @@ const ParticipantsListScreen = ({ route, navigation }) => {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [activityId]);
+
+  useEffect(() => {
+    if (!isOwner) return;
+    let active = true;
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        const res = await fetch(`${BASE_URL}/api/join-requests/${activityId}/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (active) setPendingRequests(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn('Failed to fetch join requests', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [activityId, isOwner]);
+
+  const handleRespond = async (requestId, action) => {
+    setRespondingId(requestId);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      const res = await fetch(`${BASE_URL}/api/respond-join-request/${requestId}/`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        const jr = pendingRequests.find(r => r.id === requestId);
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+        if (action === 'accept' && jr) {
+          setParticipants(prev => [...prev, jr.user]);
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        Alert.alert('Error', data.detail || 'Failed to respond to request.');
+      }
+    } catch (err) {
+      console.warn('Respond to join request failed', err);
+      Alert.alert('Error', 'Something went wrong.');
+    } finally {
+      setRespondingId(null);
+    }
+  };
 
   const getAvatarSource = (avatarPath) => {
     if (!avatarPath) return require('../assets/avatar-placeholder.png');
@@ -111,6 +158,43 @@ const ParticipantsListScreen = ({ route, navigation }) => {
 
   const list = (
     <>
+      {isOwner && pendingRequests.length > 0 && (
+        <>
+          <Text style={styles.subHeader}>
+            Pending Requests ({pendingRequests.length})
+          </Text>
+          {pendingRequests.map(jr => (
+            <View key={jr.id} style={[styles.userCard, { marginHorizontal: 20 }]}>
+              <Image source={getAvatarSource(jr.user.avatar)} style={styles.avatar} />
+              <View style={styles.userInfo}>
+                <Text style={styles.username}>@{jr.user.username}</Text>
+                <Text style={styles.fullName}>{jr.user.full_name || jr.user.username}</Text>
+              </View>
+              {respondingId === jr.id ? (
+                <ActivityIndicator size="small" color="#36ACA6" />
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={() => handleRespond(jr.id, 'decline')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="close-circle-outline" size={22} color="#FF453A" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleRespond(jr.id, 'accept')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: 14 }}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={22} color="#36ACA6" />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          ))}
+          <View style={styles.pendingDivider} />
+        </>
+      )}
+
       <Text style={styles.subHeader}>
         {participants.length} {participants.length === 1 ? 'person' : 'people'} joined in {activityName}
       </Text>
@@ -246,6 +330,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 50,
     fontStyle: 'italic',
+  },
+  pendingDivider: {
+    height: 1,
+    backgroundColor: '#2A2A2A',
+    marginHorizontal: 20,
+    marginBottom: 16,
   },
 });
 

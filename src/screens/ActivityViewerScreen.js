@@ -14,6 +14,8 @@ import {
   TouchableWithoutFeedback,
   Dimensions,
   Platform,
+  TextInput,
+  FlatList,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../context/AuthContext';
@@ -75,7 +77,13 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [notFound, setNotFound] = useState(false);
   const [joining, setJoining] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
+  const [requestStatus, setRequestStatus] = useState(null);
   const [canChat, setCanChat] = useState(false);
+  const [invitePickerVisible, setInvitePickerVisible] = useState(false);
+  const [inviteSearchQuery, setInviteSearchQuery] = useState('');
+  const [inviteSearchResults, setInviteSearchResults] = useState([]);
+  const [inviteSearching, setInviteSearching] = useState(false);
+  const [invitingUserId, setInvitingUserId] = useState(null);
   const [menuVisible, setMenuVisible] = useState(false);
   // Menu dropdown position is measured from the kebab button itself rather
   // than assumed from a fixed StatusBar-height offset — the button's actual
@@ -184,6 +192,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
         const chatRes = await axios.get(`${BASE_URL}/api/can-enter-chat/${activity.id}/`);
         if (!mounted) return;
         setIsJoined(statusRes.data.joined);
+        setRequestStatus(statusRes.data.request_status || null);
         setCanChat(chatRes.data.can_chat);
       } catch (err) {
         console.warn('Failed to fetch activity state');
@@ -199,6 +208,29 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     if (!activity?.id) return;
     fetchActivityPosts();
   }, [activity?.id]);
+
+  // Invite People picker — same debounce/fallback pattern as ExploreScreen's
+  // people search.
+  useEffect(() => {
+    if (inviteSearchQuery.trim().length <= 2) {
+      setInviteSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setInviteSearching(true);
+        const res = await axios.get(`${BASE_URL}/api/users/?search=${inviteSearchQuery.trim()}`);
+        const data = res.data.results || res.data;
+        setInviteSearchResults(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn('User search failed', err);
+        setInviteSearchResults([]);
+      } finally {
+        setInviteSearching(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [inviteSearchQuery]);
 
   const displayedParticipants = useMemo(() => {
     const participants = (activity?.participants) || [];
@@ -279,14 +311,46 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to join this activity.');
     try {
       setJoining(true);
-      await axios.post(`${BASE_URL}/api/join-activity/${activity.id}/`);
-      Alert.alert('Success', 'You joined the activity!');
-      setIsJoined(true);
-      setCanChat(true);
+      const res = await axios.post(`${BASE_URL}/api/join-activity/${activity.id}/`);
+      if (res.status === 202) {
+        setRequestStatus('pending');
+        Alert.alert('Request Sent', 'The host will review your request to join.');
+      } else {
+        setIsJoined(true);
+        setCanChat(true);
+        Alert.alert('Success', 'You joined the activity!');
+      }
     } catch (error) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to join activity');
     } finally {
       setJoining(false);
+    }
+  };
+
+  const handleCopyInviteLink = async () => {
+    setMenuVisible(false);
+    try {
+      await Share.share({
+        title: activity.name,
+        message: `You're invited to "${activity.name}" on Spurth:\n\nhttps://spurth.com/event/${activity.id}`,
+      });
+    } catch (err) {
+      console.warn('Share failed', err);
+    }
+  };
+
+  const handleSendInvite = async (invitedUser) => {
+    try {
+      setInvitingUserId(invitedUser.id);
+      await axios.post(`${BASE_URL}/api/invite/`, {
+        invited_user_id: invitedUser.id,
+        activity_id: activity.id,
+      });
+      Alert.alert('Invite sent!', `@${invitedUser.username} has been invited to "${activity.name}".`);
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Failed to send invite');
+    } finally {
+      setInvitingUserId(null);
     }
   };
 
@@ -585,7 +649,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                 style={styles.pill}
                 activeOpacity={0.7}
                 onPress={() => {
-                  if (activity.participants?.length > 0) {
+                  if (activity.participants?.length > 0 || (isOwner && activity.is_invite_only)) {
                     // activityId only, not the full participants array — see
                     // ActivityCard.js's handlePress for why: React
                     // Navigation's web `linking` serializes any param
@@ -696,9 +760,15 @@ const ActivityViewerScreen = ({ route, navigation }) => {
           <TouchableOpacity style={[styles.actionBtn, styles.chatBtn]} onPress={goToChat}>
             <Text style={styles.actionBtnText}>Chat</Text>
           </TouchableOpacity>
+        ) : requestStatus === 'pending' ? (
+          <TouchableOpacity style={[styles.actionBtn, styles.disabledBtn]} disabled>
+            <Text style={styles.actionBtnText}>Requested</Text>
+          </TouchableOpacity>
         ) : (
           <TouchableOpacity style={[styles.actionBtn, styles.joinBtn]} onPress={handleJoin} disabled={joining}>
-            <Text style={styles.actionBtnText}>{joining ? 'Joining...' : 'Join'}</Text>
+            <Text style={styles.actionBtnText}>
+              {joining ? 'Joining...' : (activity.is_invite_only ? 'Request to Join' : 'Join')}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -778,6 +848,18 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                       <Text style={styles.menuItemText}>Reschedule</Text>
                     </TouchableOpacity>
                     <View style={styles.menuDivider} />
+                    {activity.is_invite_only && (
+                      <>
+                        <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setInvitePickerVisible(true); }}>
+                          <Text style={styles.menuItemText}>Invite People</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                        <TouchableOpacity style={styles.menuItem} onPress={handleCopyInviteLink}>
+                          <Text style={styles.menuItemText}>Copy Invite Link</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                      </>
+                    )}
                     {!isCancelled && (
                       <>
                         <TouchableOpacity style={styles.menuItem} onPress={confirmCancel}>
@@ -836,6 +918,76 @@ const ActivityViewerScreen = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* INVITE PEOPLE MODAL */}
+      <Modal
+        visible={invitePickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setInvitePickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.commentModalOverlay}
+          activeOpacity={1}
+          onPress={() => setInvitePickerVisible(false)}
+        />
+        <View style={styles.commentModalSheet}>
+          <View style={styles.commentHandle} />
+          <Text style={styles.commentSheetTitle}>Invite People</Text>
+
+          <View style={styles.inviteSearchWrap}>
+            <Ionicons name="search-outline" size={16} color="#555" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.inviteSearchInput}
+              placeholder="Search by name or username"
+              placeholderTextColor="#555"
+              value={inviteSearchQuery}
+              onChangeText={setInviteSearchQuery}
+              autoFocus
+            />
+            {inviteSearching && <ActivityIndicator size="small" color="#2CB9B0" />}
+          </View>
+
+          {inviteSearchQuery.trim().length > 2 && !inviteSearching && inviteSearchResults.length === 0 ? (
+            <View style={{ padding: 32, alignItems: 'center' }}>
+              <Text style={{ color: '#555', textAlign: 'center' }}>No users found.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={inviteSearchResults}
+              keyExtractor={(item) => item.id.toString()}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40 }}
+              ItemSeparatorComponent={() => (
+                <View style={{ height: 1, backgroundColor: '#1A1A1A' }} />
+              )}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.inviteUserRow}
+                  activeOpacity={0.75}
+                  disabled={invitingUserId === item.id}
+                  onPress={() => handleSendInvite(item)}
+                >
+                  <Image
+                    source={item.avatar ? { uri: item.avatar } : require('../assets/avatar-placeholder.png')}
+                    style={styles.inviteUserAvatar}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inviteUserName} numberOfLines={1}>
+                      {item.full_name || item.username}
+                    </Text>
+                    <Text style={styles.inviteUserHandle} numberOfLines={1}>@{item.username}</Text>
+                  </View>
+                  {invitingUserId === item.id ? (
+                    <ActivityIndicator size="small" color="#2CB9B0" />
+                  ) : (
+                    <Ionicons name="paper-plane-outline" size={18} color="#2CB9B0" />
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+          )}
         </View>
       </Modal>
 
@@ -1325,6 +1477,82 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontFamily: Fonts.semibold,
+  },
+
+  // ── Invite People Modal ──────────────────────────
+  commentModalOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  commentModalSheet: {
+    position: 'absolute',
+    bottom: 0, left: 0, right: 0,
+    height: '65%',
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  commentHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#555',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  commentSheetTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontFamily: Fonts.semibold,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+  },
+  inviteSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#111',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inviteSearchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+    padding: 0,
+  },
+  inviteUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  inviteUserAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#2A2A2A',
+  },
+  inviteUserName: {
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: Fonts.medium,
+  },
+  inviteUserHandle: {
+    color: '#888',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+    marginTop: 1,
   },
 });
 
