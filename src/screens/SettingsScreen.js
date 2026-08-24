@@ -46,6 +46,7 @@ export default function SettingsScreen() {
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(false);
+  const [phoneDropdownOpen, setPhoneDropdownOpen] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
   // Change password
@@ -86,6 +87,7 @@ export default function SettingsScreen() {
   const handlePhoneVerified = () => {
     fetchMe();
     refreshProfileStatus?.();
+    setPhoneDropdownOpen(false);
   };
 
   const onSlidingComplete = async (value) => {
@@ -259,30 +261,51 @@ export default function SettingsScreen() {
 
         {/* Phone / Host Verification */}
         <View style={styles.card}>
-          <Text style={styles.sectionLabel}>Phone Verification</Text>
           {loadingUser ? (
-            <ActivityIndicator color="#6E35B7" style={{ marginVertical: 16 }} />
+            <>
+              <Text style={styles.sectionLabel}>Phone Verification</Text>
+              <ActivityIndicator color="#6E35B7" style={{ marginVertical: 16 }} />
+            </>
           ) : phoneVerified ? (
-            <View style={styles.emailRow}>
-              <View style={styles.emailIconWrap}>
-                <Ionicons name="call-outline" size={18} color="#888" />
-              </View>
-              <View style={styles.emailInfo}>
-                <Text style={styles.emailAddress}>{phoneNumber}</Text>
-                <View style={styles.verifiedBadge}>
-                  <Ionicons name="checkmark-circle" size={13} color="#2CB9B0" />
-                  <Text style={styles.verifiedText}>Verified</Text>
+            <>
+              <Text style={styles.sectionLabel}>Phone Verification</Text>
+              <View style={[styles.emailRow, { paddingBottom: 14 }]}>
+                <View style={styles.emailIconWrap}>
+                  <Ionicons name="call-outline" size={18} color="#888" />
                 </View>
+                <View style={styles.emailInfo}>
+                  <Text style={styles.emailAddress}>{phoneNumber}</Text>
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="checkmark-circle" size={13} color="#2CB9B0" />
+                    <Text style={styles.verifiedText}>Verified</Text>
+                  </View>
+                </View>
+                <Ionicons name="checkmark-circle" size={22} color="#2CB9B0" style={{ marginLeft: 8 }} />
               </View>
-              <Ionicons name="checkmark-circle" size={22} color="#2CB9B0" style={{ marginLeft: 8 }} />
-            </View>
+            </>
           ) : (
-            <View style={{ paddingBottom: 16 }}>
-              <Text style={styles.phoneVerifySubtitle}>
-                Verify your phone number to host activities.
-              </Text>
-              <PhoneVerifySection onVerified={handlePhoneVerified} />
-            </View>
+            <>
+              <TouchableOpacity
+                style={styles.dropdownHeader}
+                onPress={() => setPhoneDropdownOpen(v => !v)}
+                activeOpacity={0.7}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>Phone Verification</Text>
+                  <Text style={styles.dropdownSubtext}>Required to host activities</Text>
+                </View>
+                <Ionicons
+                  name={phoneDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#555"
+                />
+              </TouchableOpacity>
+              {phoneDropdownOpen && (
+                <View style={{ paddingBottom: 16 }}>
+                  <PhoneVerifySection onVerified={handlePhoneVerified} />
+                </View>
+              )}
+            </>
           )}
         </View>
 
@@ -737,6 +760,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A2A',
   },
 
+  // Phone verification dropdown header
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  dropdownSubtext: {
+    color: '#666',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+    marginTop: 2,
+  },
+
   // Footer
   footer: {
     paddingHorizontal: 20,
@@ -787,13 +823,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     lineHeight: 18,
     marginBottom: 18,
-  },
-  phoneVerifySubtitle: {
-    color: '#888',
-    fontSize: 13,
-    fontFamily: Fonts.regular,
-    lineHeight: 18,
-    marginBottom: 14,
   },
   dangerBtn: {
     borderWidth: 1.5,
