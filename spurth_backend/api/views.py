@@ -43,6 +43,8 @@ USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.-]+$')
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer, ActivityJoinRequestSerializer
 from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote, ActivityJoinRequest
+from .moderation import trigger_image_moderation
+import cloudinary.utils
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -183,6 +185,11 @@ class CreateActivityView(APIView):
         if serializer.is_valid():
             serializer.save(created_by=request.user)
             activity = serializer.instance
+
+            if 'cover_image' in request.FILES:
+                activity.moderation_status = 'pending'
+                activity.save(update_fields=['moderation_status'])
+                trigger_image_moderation(activity.cover_image.public_id)
 
             # Notify users whose interests match the activity type
             activity_type = (activity.activity_type or '').lower()
@@ -520,6 +527,11 @@ def update_activity(request, activity_id):
         if serializer.is_valid():
             serializer.save()
 
+            if 'cover_image' in request.FILES:
+                serializer.instance.moderation_status = 'pending'
+                serializer.instance.save(update_fields=['moderation_status'])
+                trigger_image_moderation(serializer.instance.cover_image.public_id)
+
             # Fire reschedule notification if date changed
             new_datetime = serializer.instance.date_time
             if 'date_time' in request.data and old_datetime != new_datetime:
@@ -539,6 +551,71 @@ def update_activity(request, activity_id):
 
     except Activity.DoesNotExist:
         return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
+# Cloudinary calls this once its moderation add-on (WebPurify) finishes
+# reviewing an asset queued by trigger_image_moderation() — there's no JWT
+# on this request, so authenticity is verified via Cloudinary's own
+# request-signing instead (X-Cld-Timestamp/X-Cld-Signature headers).
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def cloudinary_moderation_webhook(request):
+    body_str = request.body.decode('utf-8')
+    timestamp = request.headers.get('X-Cld-Timestamp')
+    signature = request.headers.get('X-Cld-Signature')
+
+    if not timestamp or not signature:
+        return Response({'detail': 'Missing signature headers.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        valid = cloudinary.utils.verify_notification_signature(body_str, int(timestamp), signature)
+    except Exception:
+        valid = False
+
+    if not valid:
+        return Response({'detail': 'Invalid signature.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    payload = request.data
+    if payload.get('notification_type') != 'moderation':
+        return Response({'detail': 'Ignored.'}, status=status.HTTP_200_OK)
+
+    public_id = payload.get('public_id', '')
+    new_status = payload.get('moderation_status')  # 'approved' | 'rejected'
+    if new_status not in ('approved', 'rejected'):
+        return Response({'detail': 'Ignored.'}, status=status.HTTP_200_OK)
+
+    # CloudinaryField(folder='activities'/'posts') means public_id is
+    # prefixed accordingly — cheap way to know which table to check first.
+    # The DB column stores the full resource string
+    # ('image/upload/v<version>/<public_id>.<format>'), not the bare
+    # public_id Cloudinary's payload gives us, so this has to be a
+    # containment match rather than an exact one — collisions are
+    # practically impossible given Cloudinary's randomly generated ids.
+    instance = None
+    owner = None
+    if public_id.startswith('activities/'):
+        instance = Activity.objects.filter(cover_image__contains=public_id).first()
+        owner = instance.created_by if instance else None
+    elif public_id.startswith('posts/'):
+        instance = Post.objects.filter(image__contains=public_id).first()
+        owner = instance.user if instance else None
+
+    if not instance:
+        return Response({'detail': 'No matching content.'}, status=status.HTTP_200_OK)
+
+    instance.moderation_status = new_status
+    instance.save(update_fields=['moderation_status'])
+
+    if new_status == 'rejected':
+        create_notifications(
+            recipients=[owner],
+            notification_type='content_flagged',
+            title='Your photo was flagged',
+            body='One of your photos was flagged by our moderation system and is hidden from other users. You can replace it any time.',
+            activity=instance if isinstance(instance, Activity) else instance.activity,
+        )
+
+    return Response({'detail': 'ok'}, status=status.HTTP_200_OK)
 
 
 @api_view(['DELETE'])
@@ -878,6 +955,11 @@ class PostViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You are not a member of this activity.")
 
         post = serializer.save(user=user)
+
+        if 'image' in self.request.FILES:
+            post.moderation_status = 'pending'
+            post.save(update_fields=['moderation_status'])
+            trigger_image_moderation(post.image.public_id)
 
         # Optional poll — DRF's default nested create() won't handle a
         # choices array automatically, so this is plain ORM code rather
