@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { db } from '../firebase/firebaseConfig';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -76,6 +77,7 @@ const isSameDay = (ts1, ts2) => {
 export default function ChatConversationPanel({ activityId, activityName, onBack, embedded = false }) {
   const navigation = useNavigation();
   const [messages, setMessages]       = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
   const [text, setText]               = useState('');
   const [userId, setUserId]           = useState('');
   const [username, setUsername]       = useState('');
@@ -108,6 +110,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   // threads already exist in Firestore under that path, and changing it
   // would orphan existing message history instead of just renaming a term.
   useEffect(() => {
+    setMessagesLoading(true);
     const messagesQuery = query(
       collection(db, 'leagues', `league_${activityId}`, 'messages'),
       orderBy('timestamp', 'asc')
@@ -115,6 +118,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
     const unsubscribe = onSnapshot(messagesQuery, snapshot => {
       const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       setMessages(msgs);
+      setMessagesLoading(false);
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
     return () => unsubscribe();
@@ -151,7 +155,12 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
     ]);
   };
 
-  const buildItems = useCallback(() => {
+  // useMemo, not just useCallback — this was previously invoked directly
+  // in JSX (`data={buildItems()}`), so every render (e.g. every keystroke
+  // in the message input, which lives in this same component) recomputed
+  // date-separator/grouping info for the entire message history from
+  // scratch, even though only `text` had changed.
+  const items = useMemo(() => {
     const items = [];
     messages.forEach((msg, index) => {
       const prev = messages[index - 1];
@@ -271,14 +280,24 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={0}
       >
-        <FlatList
-          ref={flatListRef}
-          data={buildItems()}
-          keyExtractor={item => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.messageList}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-        />
+        {messagesLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color="#2CB9B0" />
+          </View>
+        ) : items.length === 0 ? (
+          <View style={styles.loadingWrap}>
+            <Text style={styles.emptyText}>No messages yet — say hello!</Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={items}
+            keyExtractor={item => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.messageList}
+            onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          />
+        )}
 
         <View style={styles.inputBar}>
           <TextInput
@@ -416,6 +435,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 16,
     paddingBottom: 8,
+  },
+  loadingWrap: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#555',
+    fontSize: 14,
   },
   dateSeparator: {
     alignItems: 'center',

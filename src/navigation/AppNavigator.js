@@ -240,11 +240,30 @@ export default function AppNavigator() {
   // resolving (null) — that state already renders the spinner instead of
   // the Stack.Navigator, so there's nothing mounted yet to reset.
   const getPhase = (token, complete) => (!token ? 'auth' : (complete ? 'main' : 'onboarding'));
-  const prevPhaseRef = useRef(getPhase(userToken, profileComplete));
+  // Starts unset rather than seeded from the current (pre-AsyncStorage)
+  // values — seeding it eagerly made the very first post-spinner render
+  // look like a transition (e.g. 'auth' → 'main' for an already-logged-in
+  // user), which reset navigation to MainTabs and threw away whatever deep
+  // link — /chat/:id included — the URL actually pointed to. The first time
+  // this effect runs with real values, it just records that as the
+  // baseline instead of resetting anything, so react-navigation's `linking`
+  // config gets to resolve the initial URL undisturbed; only phase changes
+  // *after* that baseline (a real login/logout/onboarding-completion) reset.
+  const prevPhaseRef = useRef(null);
   useEffect(() => {
-    if (userToken && profileComplete === null) return;
+    // Same gate as the spinner render below — userToken flips from its
+    // initial `null` to the real (AsyncStorage-resolved) value in the same
+    // batch as isLoading going false, but this effect's dependency array
+    // doesn't include isLoading, so without this check it fires once on
+    // that transient pre-resolution render (userToken=null, isLoading=true)
+    // and burns the null sentinel on a guess instead of the real baseline.
+    if (isLoading || (userToken && profileComplete === null)) return;
 
     const nextPhase = getPhase(userToken, profileComplete);
+    if (prevPhaseRef.current === null) {
+      prevPhaseRef.current = nextPhase;
+      return;
+    }
     if (nextPhase !== prevPhaseRef.current && navigationRef.isReady()) {
       const target =
         nextPhase === 'main' ? 'MainTabs' :
@@ -253,7 +272,7 @@ export default function AppNavigator() {
       navigationRef.reset({ index: 0, routes: [{ name: target }] });
     }
     prevPhaseRef.current = nextPhase;
-  }, [userToken, profileComplete]);
+  }, [userToken, profileComplete, isLoading]);
 
   if (isLoading || (userToken && profileComplete === null)) {
     return (
