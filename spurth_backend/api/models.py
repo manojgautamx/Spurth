@@ -248,3 +248,37 @@ class EmailVerificationToken(models.Model):
     def is_expired(self):
         from django.utils import timezone
         return (timezone.now() - self.created_at).total_seconds() > 86400  # 24 hours
+
+
+# ── Cloudinary cleanup on delete ──────────────────────────────────────────
+# Deleting a model row never deletes the underlying Cloudinary asset by
+# itself (CloudinaryField has no such hook) — without this, every deleted
+# activity/post/profile photo just sits in Cloudinary storage forever.
+# post_delete (not pre_delete) so a rolled-back delete never removes an
+# asset that's actually still referenced. Registering these receivers also
+# has the side effect of turning off Django's "fast delete" optimization
+# for these three models, which is required for cascade deletes (e.g.
+# deleting a User cascades to their activities/posts/profile) to actually
+# fire this signal per row instead of skipping straight to a bulk SQL
+# DELETE with no signals at all.
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+from .moderation import delete_cloudinary_image
+
+
+@receiver(post_delete, sender=Activity)
+def _delete_activity_cover_image(sender, instance, **kwargs):
+    if instance.cover_image:
+        delete_cloudinary_image(instance.cover_image.public_id)
+
+
+@receiver(post_delete, sender=Post)
+def _delete_post_image(sender, instance, **kwargs):
+    if instance.image:
+        delete_cloudinary_image(instance.image.public_id)
+
+
+@receiver(post_delete, sender=UserProfile)
+def _delete_profile_avatar(sender, instance, **kwargs):
+    if instance.avatar:
+        delete_cloudinary_image(instance.avatar.public_id)
