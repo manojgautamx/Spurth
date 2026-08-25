@@ -336,6 +336,7 @@ const ExperienceScreen = () => {
               post={post}
               onLike={handleLike}
               onVote={handleVote}
+              onPostDeleted={fetchPosts}
               navigation={navigation}
             />
           ))}
@@ -352,6 +353,7 @@ const ExperienceScreen = () => {
             post={post}
             onLike={handleLike}
             onVote={handleVote}
+            onPostDeleted={fetchPosts}
             navigation={navigation}
           />
         ))

@@ -76,7 +76,6 @@ export default function PostCard({
   onVote,
   onPostDeleted,
   compact = false,
-  isActivityOwner = false,
   hideUsername = false,
 }) {
   const navigation = useNavigation();
@@ -128,11 +127,14 @@ export default function PostCard({
               method: 'DELETE',
               headers: { Authorization: `Bearer ${token}` },
             });
-            if (res.status === 204 && onPostDeleted) {
-              onPostDeleted();
+            if (res.status === 204) {
+              if (onPostDeleted) onPostDeleted();
+            } else {
+              Alert.alert('Error', 'Failed to delete post.');
             }
           } catch (err) {
             console.warn('Delete post failed', err);
+            Alert.alert('Error', 'Failed to delete post.');
           }
         },
       },
@@ -141,7 +143,11 @@ export default function PostCard({
 
   const showPostOptions = async () => {
     const options = [];
-    if (isActivityOwner) {
+    // Post owner can always delete their own post; the activity host can
+    // also delete any post under their own activity, from any screen —
+    // both are computed server-side (is_own_post/is_activity_owner) so
+    // this doesn't depend on whichever screen happens to render the card.
+    if (post.is_own_post || post.is_activity_owner) {
       options.push({ text: 'Delete Post', style: 'destructive', onPress: handleDeletePost });
     }
     if (!post.is_own_post) {

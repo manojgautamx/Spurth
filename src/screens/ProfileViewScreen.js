@@ -440,7 +440,6 @@ export default function ProfileViewScreen({ route }) {
                   navigation={navigation}
                   compact={true}
                   hideUsername={true}
-                  isActivityOwner={false}
                 />
               ))}
               {posts.length > visiblePostCount && (

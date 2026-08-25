@@ -112,6 +112,7 @@ export default function PostsRail() {
                 compact
                 hideUsername
                 onLike={handleLike}
+                onPostDeleted={() => setPosts(prev => prev.filter(p => p.id !== post.id))}
               />
             ))}
             <TouchableOpacity style={styles.seeMoreBtn} onPress={goToExperiences} activeOpacity={0.8}>

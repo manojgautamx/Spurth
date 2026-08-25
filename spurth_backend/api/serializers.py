@@ -332,6 +332,7 @@ class PostSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False, allow_null=True)  # ← writable
     is_host = serializers.SerializerMethodField()
     is_own_post = serializers.SerializerMethodField()
+    is_activity_owner = serializers.SerializerMethodField()
     poll = serializers.SerializerMethodField()
 
     class Meta:
@@ -342,7 +343,7 @@ class PostSerializer(serializers.ModelSerializer):
             'latitude', 'longitude',
             'cover_image', 'caption', 'image', 'poll', 'moderation_status',
             'created_at', 'likes_count', 'comments_count',
-            'is_liked', 'is_host', 'is_own_post',
+            'is_liked', 'is_host', 'is_own_post', 'is_activity_owner',
             'activity_is_concluded', 'activity_is_cancelled',
         ]
         read_only_fields = ['user', 'created_at', 'moderation_status']
@@ -388,6 +389,13 @@ class PostSerializer(serializers.ModelSerializer):
     def get_is_own_post(self, obj):
         request = self.context.get('request')
         return bool(request and request.user.is_authenticated and request.user.id == obj.user_id)
+
+    def get_is_activity_owner(self, obj):
+        request = self.context.get('request')
+        return bool(
+            request and request.user.is_authenticated and obj.activity
+            and request.user.id == obj.activity.created_by_id
+        )
 
     def get_activity_is_concluded(self, obj):
         return obj.activity and obj.activity.date_time and obj.activity.date_time < timezone.now()

@@ -171,7 +171,7 @@ export default function CommentScreen({ route, navigation }) {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
-            <PostCard post={post} onLike={handleLike} onVote={handleVote} />
+            <PostCard post={post} onLike={handleLike} onVote={handleVote} onPostDeleted={() => navigation.goBack()} />
             <Text style={styles.commentsLabel}>
               Comments{post.comments_count ? ` (${post.comments_count})` : ''}
             </Text>
