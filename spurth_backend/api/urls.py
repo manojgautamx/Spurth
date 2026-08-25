@@ -1,6 +1,6 @@
 from django.urls import path, include
 from .views import PublicUserSearchView, firebase_token, forgot_password, register, CreateActivityView, MyActivitiesView, PublicActivitiesView, CustomTokenObtainPairView, join_activity, joined_activities, resend_verification, reset_password, change_password, update_activity, leave_activity, activity_status, delete_activity, can_enter_chat, me, verify_email, view_user_profile, cancel_activity, activity_detail, delete_post, remove_participant, user_activities, verify_email_redirect, forgot_password, reset_password, send_invite, UserProfileCreateView, ProfileStatusView, UpdateProfileView, CommentViewSet, PhoneVerificationConfirmView, deactivate_account, delete_account, contact_support, respond_join_request, list_join_requests, cancel_join_request
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
@@ -23,7 +23,6 @@ comment_detail = CommentViewSet.as_view({
 
 urlpatterns = [
     path('register/', register, name='register'),  # Ensure this is correct
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('create-activity/', CreateActivityView.as_view(), name='create-activity'),
     path('my-activities/', MyActivitiesView.as_view(), name='my-activities'),
