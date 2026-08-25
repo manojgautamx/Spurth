@@ -223,27 +223,37 @@ export default function AppNavigator() {
     if (userToken) checkProfileStatus();
   }, [userToken]);
 
-  // Logging out (explicitly, or a token refresh failing mid-session) swaps
-  // this Stack.Navigator's entire logged-in screen set out from under
-  // whatever route was active. Without an explicit redirect, React
-  // Navigation doesn't move the user anywhere — it just tries to keep
-  // rendering the no-longer-registered active route, which lands on
-  // whatever's first among the screens still declared unconditionally
-  // (ActivityViewerScreen) instead of sending them to sign in. Only fires on
-  // a genuine truthy→falsy transition, not the initial mount (userToken
-  // starts null before the AsyncStorage check resolves).
-  const prevUserTokenRef = useRef(userToken);
+  // The Stack.Navigator's set of registered screens depends on
+  // userToken/profileComplete (see the JSX below) and changes at three
+  // points: logging out (main → auth), logging in or signing up (auth →
+  // onboarding-or-main), and finishing the onboarding wizard (onboarding →
+  // main). Whenever that happens, React Navigation doesn't move the user
+  // anywhere on its own — it just tries to keep rendering the no-longer-
+  // registered active route, which falls back to whatever's first among the
+  // screens still declared unconditionally (ActivityViewerScreen, with no
+  // params) instead of the right screen for the new phase. That's the exact
+  // "redirects to /event/undefined, not found" bug: ProfileScreen.js's
+  // refreshProfileStatus() flips profileComplete straight from false to
+  // true with no unmount in between (unlike the login/logout transitions,
+  // which pass through the loading-spinner branch below), so it had no
+  // guard at all until this effect. Skipped while profileComplete is still
+  // resolving (null) — that state already renders the spinner instead of
+  // the Stack.Navigator, so there's nothing mounted yet to reset.
+  const getPhase = (token, complete) => (!token ? 'auth' : (complete ? 'main' : 'onboarding'));
+  const prevPhaseRef = useRef(getPhase(userToken, profileComplete));
   useEffect(() => {
-    const wasLoggedIn = !!prevUserTokenRef.current;
-    const isLoggedIn = !!userToken;
-    if (wasLoggedIn && !isLoggedIn && navigationRef.isReady()) {
-      navigationRef.reset({
-        index: 0,
-        routes: [{ name: Platform.OS === 'web' ? 'Landing' : 'Welcome' }],
-      });
+    if (userToken && profileComplete === null) return;
+
+    const nextPhase = getPhase(userToken, profileComplete);
+    if (nextPhase !== prevPhaseRef.current && navigationRef.isReady()) {
+      const target =
+        nextPhase === 'main' ? 'MainTabs' :
+        nextPhase === 'onboarding' ? 'Profile' :
+        (Platform.OS === 'web' ? 'Landing' : 'Welcome');
+      navigationRef.reset({ index: 0, routes: [{ name: target }] });
     }
-    prevUserTokenRef.current = userToken;
-  }, [userToken]);
+    prevPhaseRef.current = nextPhase;
+  }, [userToken, profileComplete]);
 
   if (isLoading || (userToken && profileComplete === null)) {
     return (
