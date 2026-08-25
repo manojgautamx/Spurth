@@ -556,6 +556,16 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                 <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
                   <Text style={styles.badgeText}>{statusLabel}</Text>
                 </View>
+                {isOwner && activity.moderation_status !== 'approved' && (
+                  <View style={[
+                    styles.statusBadge,
+                    { backgroundColor: activity.moderation_status === 'rejected' ? '#B00020' : '#F2994A' },
+                  ]}>
+                    <Text style={styles.badgeText}>
+                      {activity.moderation_status === 'rejected' ? 'Photo rejected — please replace' : 'Photo under review'}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </ImageBackground>

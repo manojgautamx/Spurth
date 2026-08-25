@@ -259,7 +259,8 @@ const CreateActivityScreen = ({ navigation, route }) => {
       }
     } catch (err) {
       console.error(err);
-      setError('Failed to save event.');
+      const data = err.response?.data;
+      setError(data?.name?.[0] || data?.description?.[0] || data?.detail || 'Failed to save event.');
     } finally {
       setLoading(false);
     }

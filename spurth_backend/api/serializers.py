@@ -4,6 +4,7 @@ from .models import Activity, ActivityJoinRequest, Notification, Post, UserProfi
 from django.utils import timezone
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.db.models import Q
+from .moderation import check_text
 
 User = get_user_model()
 
@@ -78,9 +79,15 @@ class ActivitySerializer(serializers.ModelSerializer):
             'created_by', 'description', 'is_owner', 'joined',
             'is_full', 'participant_count', 'participants',
             'cover_image', 'cover_image_url', 'is_concluded', 'is_cancelled',
-            'is_invite_only',
+            'is_invite_only', 'moderation_status',
         )
-        read_only_fields = ('created_by',)
+        read_only_fields = ('created_by', 'moderation_status')
+
+    def validate_name(self, value):
+        return check_text(value, 'activity name')
+
+    def validate_description(self, value):
+        return check_text(value, 'description')
 
     def get_cover_image_url(self, obj):
         if obj.cover_image:
@@ -97,6 +104,12 @@ class ActivitySerializer(serializers.ModelSerializer):
         rep = super().to_representation(instance)
         # Replace raw cover_image with Cloudinary URL
         rep['cover_image'] = rep.pop('cover_image_url', None)
+        # A rejected cover image stays in place (not deleted) so the owner
+        # can still see it and replace it, but nobody else should see it.
+        request = self.context.get('request')
+        is_owner = request and request.user.is_authenticated and request.user.id == instance.created_by_id
+        if instance.moderation_status == 'rejected' and not is_owner:
+            rep['cover_image'] = None
         return rep
 
     # NOTE: these all read from obj.participants.all() rather than using
@@ -318,6 +331,7 @@ class PostSerializer(serializers.ModelSerializer):
     user_avatar = serializers.SerializerMethodField()
     image = serializers.ImageField(required=False, allow_null=True)  # ← writable
     is_host = serializers.SerializerMethodField()
+    is_own_post = serializers.SerializerMethodField()
     poll = serializers.SerializerMethodField()
 
     class Meta:
@@ -326,12 +340,15 @@ class PostSerializer(serializers.ModelSerializer):
             'id', 'user', 'user_name', 'user_avatar',
             'activity', 'activity_name', 'activity_type', 'activity_creator_id',
             'latitude', 'longitude',
-            'cover_image', 'caption', 'image', 'poll',
+            'cover_image', 'caption', 'image', 'poll', 'moderation_status',
             'created_at', 'likes_count', 'comments_count',
-            'is_liked', 'is_host',
+            'is_liked', 'is_host', 'is_own_post',
             'activity_is_concluded', 'activity_is_cancelled',
         ]
-        read_only_fields = ['user', 'created_at']
+        read_only_fields = ['user', 'created_at', 'moderation_status']
+
+    def validate_caption(self, value):
+        return check_text(value, 'caption')
 
     def get_poll(self, obj):
         try:
@@ -353,6 +370,12 @@ class PostSerializer(serializers.ModelSerializer):
                 )
             except Exception:
                 rep['image'] = instance.image.url
+        # A rejected image stays in place (not deleted) so the owner can
+        # still see it and replace it, but nobody else should see it.
+        request = self.context.get('request')
+        is_owner = request and request.user.is_authenticated and request.user.id == instance.user_id
+        if instance.moderation_status == 'rejected' and not is_owner:
+            rep['image'] = None
         return rep
 
     def get_is_liked(self, obj):
@@ -361,6 +384,10 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_is_host(self, obj):
         return obj.activity and obj.user_id == obj.activity.created_by_id
+
+    def get_is_own_post(self, obj):
+        request = self.context.get('request')
+        return bool(request and request.user.is_authenticated and request.user.id == obj.user_id)
 
     def get_activity_is_concluded(self, obj):
         return obj.activity and obj.activity.date_time and obj.activity.date_time < timezone.now()

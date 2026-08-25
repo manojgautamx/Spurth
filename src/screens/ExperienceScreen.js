@@ -184,9 +184,9 @@ const ExperienceScreen = () => {
       removePoll();
       fetchPosts();
     } catch (err) {
-      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-      console.error('Create post error:', detail);
-      Alert.alert('Failed to post', detail);
+      const data = err.response?.data;
+      console.error('Create post error:', data || err.message);
+      Alert.alert('Failed to post', data?.caption?.[0] || data?.detail || 'Something went wrong.');
     }
   };
 

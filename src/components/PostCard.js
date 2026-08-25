@@ -301,6 +301,19 @@ export default function PostCard({
               {isCancelled ? 'Cancelled' : isConcluded ? 'Concluded' : 'Upcoming'}
             </Text>
           </View>
+          {post.is_own_post && post.moderation_status !== 'approved' && (
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: post.moderation_status === 'rejected' ? '#2B0A0A' : '#2B2308' },
+            ]}>
+              <Text style={[
+                styles.statusBadgeText,
+                { color: post.moderation_status === 'rejected' ? '#FF4C4C' : '#F2994A' },
+              ]}>
+                {post.moderation_status === 'rejected' ? 'Photo rejected' : 'Photo under review'}
+              </Text>
+            </View>
+          )}
           <TouchableOpacity style={styles.dotsBtn}>
             <Ionicons name="ellipsis-horizontal" size={20} color="#888" />
           </TouchableOpacity>

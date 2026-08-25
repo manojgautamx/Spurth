@@ -8,6 +8,16 @@ import random
 def generate_verification_code():
     return f"{random.randint(0, 999999):06d}"
 
+# Shared by Activity.moderation_status and Post.moderation_status — default
+# 'approved' means "nothing to moderate" (text-only content, no image
+# uploaded); views.py flips it to 'pending' only when an image upload
+# actually triggers a Cloudinary moderation check.
+MODERATION_CHOICES = [
+    ('pending', 'Pending'),
+    ('approved', 'Approved'),
+    ('rejected', 'Rejected'),
+]
+
 # ✅ Custom User Model (to allow extension and avoid conflicts)
 class User(AbstractUser):
     groups = models.ManyToManyField(Group, related_name="api_users", blank=True)
@@ -39,6 +49,7 @@ class Activity(models.Model):
     )
     is_cancelled = models.BooleanField(default=False)
     is_invite_only = models.BooleanField(default=False)
+    moderation_status = models.CharField(max_length=10, choices=MODERATION_CHOICES, default='approved')
 
     # 🔥 Optional fields for richer UX
     max_players = models.PositiveIntegerField(default=0)  # Max number of participants
@@ -149,6 +160,7 @@ class Post(models.Model):
         null=True,
         blank=True
     )
+    moderation_status = models.CharField(max_length=10, choices=MODERATION_CHOICES, default='approved')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -204,6 +216,7 @@ class Notification(models.Model):
         ('join_request', 'Join Request'),
         ('request_accepted', 'Request Accepted'),
         ('request_declined', 'Request Declined'),
+        ('content_flagged', 'Content Flagged'),
     ]
 
     recipient = models.ForeignKey(
