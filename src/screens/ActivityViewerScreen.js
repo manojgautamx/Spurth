@@ -27,6 +27,7 @@ import ActivityMap from '../components/ActivityMap';
 import { getActivityTypeIcon } from '../utils/activityTypeIcons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import PostCard from '../components/PostCard';
+import ReportModal from '../components/ReportModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
 import { LocationContext, getDistanceKm } from '../context/LocationContext';
@@ -80,6 +81,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [requestStatus, setRequestStatus] = useState(null);
   const [canChat, setCanChat] = useState(false);
   const [invitePickerVisible, setInvitePickerVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [inviteSearchQuery, setInviteSearchQuery] = useState('');
   const [inviteSearchResults, setInviteSearchResults] = useState([]);
   const [inviteSearching, setInviteSearching] = useState(false);
@@ -891,11 +893,34 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                     </TouchableOpacity>
                   </>
                 )}
+                {!isOwner && (
+                  <>
+                    <View style={styles.menuDivider} />
+                    <TouchableOpacity
+                      style={styles.menuItem}
+                      onPress={() => {
+                        setMenuVisible(false);
+                        if (!userToken) return promptSignIn(navigation, 'Sign in to report this activity.');
+                        setReportModalVisible(true);
+                      }}
+                    >
+                      <Text style={[styles.menuItemText, styles.menuItemDestructive]}>Report Activity</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </TouchableWithoutFeedback>
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        targetType="activity"
+        targetId={activity.id}
+        targetLabel="activity"
+      />
 
       {/* RESCHEDULE MODAL */}
       <Modal visible={rescheduleVisible} transparent animationType="fade">

@@ -42,7 +42,7 @@ USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.-]+$')
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer, ActivityJoinRequestSerializer
-from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote, ActivityJoinRequest
+from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote, ActivityJoinRequest, Report
 from .moderation import trigger_image_moderation, delete_cloudinary_image
 import cloudinary.utils
 
@@ -1114,6 +1114,44 @@ def create_notifications(recipients, notification_type, title, body, activity=No
         if user is not None
     ]
     Notification.objects.bulk_create(notifications)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def report_content(request):
+    target_type = request.data.get('target_type')
+    target_id = request.data.get('target_id')
+    reason = request.data.get('reason')
+    details = request.data.get('details', '').strip()
+
+    if target_type not in ('post', 'activity', 'user'):
+        return Response({'detail': 'Invalid target_type.'}, status=status.HTTP_400_BAD_REQUEST)
+    if reason not in dict(Report.REASON_CHOICES):
+        return Response({'detail': 'Invalid reason.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    lookup = {'reporter': request.user, 'target_type': target_type}
+
+    if target_type == 'post':
+        obj = get_object_or_404(Post, id=target_id)
+        if obj.user_id == request.user.id:
+            return Response({'detail': "You can't report your own post."}, status=status.HTTP_400_BAD_REQUEST)
+        lookup['post'] = obj
+    elif target_type == 'activity':
+        obj = get_object_or_404(Activity, id=target_id)
+        if obj.created_by_id == request.user.id:
+            return Response({'detail': "You can't report your own activity."}, status=status.HTTP_400_BAD_REQUEST)
+        lookup['activity'] = obj
+    else:
+        obj = get_object_or_404(User, id=target_id)
+        if obj.id == request.user.id:
+            return Response({'detail': "You can't report yourself."}, status=status.HTTP_400_BAD_REQUEST)
+        lookup['reported_user'] = obj
+
+    if Report.objects.filter(**lookup).exists():
+        return Response({'detail': "You've already reported this."}, status=status.HTTP_400_BAD_REQUEST)
+
+    Report.objects.create(reason=reason, details=details, **lookup)
+    return Response({'detail': 'Report submitted. Our team will review it.'}, status=status.HTTP_201_CREATED)
 
 # ── Notification Views ──────────────────────────────────────────────────────
 

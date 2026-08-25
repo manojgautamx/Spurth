@@ -23,6 +23,7 @@ import { Fonts } from '../theme/fonts';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PostCard from '../components/PostCard';
+import ReportModal from '../components/ReportModal';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
@@ -66,6 +67,7 @@ export default function ProfileViewScreen({ route }) {
   // myOwnActivities = the *current user's* activities (created + joined), used to
   // pick which event to invite the viewed user to. Only populated when !isMyProfile.
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
   const [myOwnActivities, setMyOwnActivities] = useState([]);
   const [inviting, setInviting] = useState(false);
   // ───────────────────────────────────────────────────────────────────────────
@@ -306,15 +308,26 @@ export default function ProfileViewScreen({ route }) {
                 </TouchableOpacity>
               </>
             ) : (
-              <TouchableOpacity
-                onPress={() =>
-                  userToken
-                    ? setInviteModalVisible(true)
-                    : promptSignIn(navigation, 'Sign in to invite people to your events.')
-                }
-              >
-                <Ionicons name="person-add-outline" size={24} color="#fff" />
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  onPress={() =>
+                    userToken
+                      ? setInviteModalVisible(true)
+                      : promptSignIn(navigation, 'Sign in to invite people to your events.')
+                  }
+                >
+                  <Ionicons name="person-add-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    userToken
+                      ? setReportModalVisible(true)
+                      : promptSignIn(navigation, 'Sign in to report this profile.')
+                  }
+                >
+                  <Ionicons name="flag-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+              </>
             )}
           </View>
         </View>
@@ -519,6 +532,14 @@ export default function ProfileViewScreen({ route }) {
         </View>
       </Modal>
       {/* ──────────────────────────────────────────────────────────────────────── */}
+
+      <ReportModal
+        visible={reportModalVisible}
+        onClose={() => setReportModalVisible(false)}
+        targetType="user"
+        targetId={targetUserId}
+        targetLabel="profile"
+      />
     </View>
   );
 }

@@ -206,6 +206,39 @@ class PollVote(models.Model):
         unique_together = ('user', 'poll')  # one vote per poll, not per choice
 
 
+class Report(models.Model):
+    REASON_CHOICES = [
+        ('spam', 'Spam'),
+        ('harassment', 'Harassment or bullying'),
+        ('nudity', 'Nudity or sexual content'),
+        ('hate_speech', 'Hate speech'),
+        ('fake', 'Fake or impersonation'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('reviewed', 'Reviewed'),
+        ('dismissed', 'Dismissed'),
+    ]
+    TARGET_TYPE_CHOICES = [('post', 'Post'), ('activity', 'Activity'), ('user', 'User')]
+
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reports_made')
+    target_type = models.CharField(max_length=10, choices=TARGET_TYPE_CHOICES)
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, null=True, blank=True, related_name='reports')
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE, null=True, blank=True, related_name='reports')
+    reported_user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='reports_received')
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    details = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.reporter.username} reported {self.target_type} ({self.reason})"
+
+
 class Notification(models.Model):
     TYPE_CHOICES = [
         ('reschedule', 'Event Rescheduled'),
