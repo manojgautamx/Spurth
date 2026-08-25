@@ -187,9 +187,8 @@ class CreateActivityView(APIView):
             activity = serializer.instance
 
             if 'cover_image' in request.FILES:
-                activity.moderation_status = 'pending'
+                activity.moderation_status = trigger_image_moderation(activity.cover_image.public_id)
                 activity.save(update_fields=['moderation_status'])
-                trigger_image_moderation(activity.cover_image.public_id)
 
             # Notify users whose interests match the activity type
             activity_type = (activity.activity_type or '').lower()
@@ -528,9 +527,8 @@ def update_activity(request, activity_id):
             serializer.save()
 
             if 'cover_image' in request.FILES:
-                serializer.instance.moderation_status = 'pending'
+                serializer.instance.moderation_status = trigger_image_moderation(serializer.instance.cover_image.public_id)
                 serializer.instance.save(update_fields=['moderation_status'])
-                trigger_image_moderation(serializer.instance.cover_image.public_id)
 
             # Fire reschedule notification if date changed
             new_datetime = serializer.instance.date_time
@@ -553,10 +551,11 @@ def update_activity(request, activity_id):
         return Response({'detail': 'Activity not found.'}, status=status.HTTP_404_NOT_FOUND)
 
 
-# Cloudinary calls this once its moderation add-on (WebPurify) finishes
-# reviewing an asset queued by trigger_image_moderation() — there's no JWT
-# on this request, so authenticity is verified via Cloudinary's own
-# request-signing instead (X-Cld-Timestamp/X-Cld-Signature headers).
+# Cloudinary calls this if its moderation add-on (Amazon Rekognition)
+# doesn't resolve synchronously inside trigger_image_moderation()'s own
+# explicit() call — there's no JWT on this request, so authenticity is
+# verified via Cloudinary's own request-signing instead
+# (X-Cld-Timestamp/X-Cld-Signature headers).
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def cloudinary_moderation_webhook(request):
@@ -957,9 +956,8 @@ class PostViewSet(viewsets.ModelViewSet):
         post = serializer.save(user=user)
 
         if 'image' in self.request.FILES:
-            post.moderation_status = 'pending'
+            post.moderation_status = trigger_image_moderation(post.image.public_id)
             post.save(update_fields=['moderation_status'])
-            trigger_image_moderation(post.image.public_id)
 
         # Optional poll — DRF's default nested create() won't handle a
         # choices array automatically, so this is plain ORM code rather
