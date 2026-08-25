@@ -15,6 +15,7 @@ import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
 import { register } from '../services/api';
 import { signIntoFirebase } from '../utils/auth';
+import { classifyAuthError } from '../utils/authErrors';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -179,23 +180,22 @@ export default function SignupScreen({ navigation }) {
       await signIntoFirebase();
 
     } catch (error) {
-      const status  = error.response?.status;
-      if (status !== undefined) recordFailure(attempts);
+      const { countsAsFailure, message } = classifyAuthError(error, ['email', 'username']);
 
-      const remaining = MAX_ATTEMPTS - (attempts + 1);
-      const remainingMsg =
-        remaining > 0 && remaining < MAX_ATTEMPTS
-          ? `\n\n${remaining} attempt${remaining > 1 ? 's' : ''} left before temporary lockout.`
-          : '';
+      // Only a genuine rejection from the server (taken username/email,
+      // etc.) counts toward the lockout — a network blip or a server
+      // error isn't the user's fault. Only surface the countdown once
+      // they're actually close to it, not after a single fixable typo.
+      let remainingMsg = '';
+      if (countsAsFailure) {
+        recordFailure(attempts);
+        const remaining = MAX_ATTEMPTS - (attempts + 1);
+        if (remaining > 0 && remaining <= 2) {
+          remainingMsg = `\n\n${remaining} attempt${remaining > 1 ? 's' : ''} left before temporary lockout.`;
+        }
+      }
 
-      const msg =
-        error.response?.data?.detail        ||
-        error.response?.data?.email?.[0]    ||
-        error.response?.data?.username?.[0] ||
-        error.message                        ||
-        'Something went wrong';
-
-      Alert.alert('Signup Failed', msg + remainingMsg);
+      Alert.alert('Signup Failed', message + remainingMsg);
     } finally {
       setLoading(false);
     }

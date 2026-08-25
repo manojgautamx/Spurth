@@ -14,6 +14,7 @@ import {
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
 import { signIntoFirebase } from '../utils/auth';
+import { classifyAuthError } from '../utils/authErrors';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -135,29 +136,23 @@ const LoginScreen = ({ navigation }) => {
       await signIntoFirebase();
 
     } catch (error) {
-      const status  = error.response?.status;
-      const errData = error.response?.data;
+      const { countsAsFailure, message } = classifyAuthError(error, ['non_field_errors', 'username']);
 
-      // Record failure for every non-network error
-      if (status !== undefined) {
+      // Only a genuine wrong-credentials rejection counts toward the
+      // lockout — a network blip or a server error isn't the user's fault
+      // and shouldn't threaten them with one. Only surface the countdown
+      // once they're actually close to it (matches the banner's threshold)
+      // instead of alarming them after a single typo.
+      let remainingMsg = '';
+      if (countsAsFailure) {
         recordFailure(attempts);
+        const remaining = MAX_ATTEMPTS - (attempts + 1);
+        if (remaining > 0 && remaining <= 2) {
+          remainingMsg = `\n\n${remaining} attempt${remaining > 1 ? 's' : ''} left before temporary lockout.`;
+        }
       }
 
-      // Remaining attempts warning
-      const remaining = MAX_ATTEMPTS - (attempts + 1);
-      const remainingMsg =
-        remaining > 0 && remaining < MAX_ATTEMPTS
-          ? `\n\n${remaining} attempt${remaining > 1 ? 's' : ''} left before temporary lockout.`
-          : '';
-
-      const msg =
-        errData?.detail ||
-        errData?.non_field_errors?.[0] ||
-        errData?.username?.[0] ||
-        error.message ||
-        'Something went wrong. Please try again.';
-
-      Alert.alert('Login Failed', msg + remainingMsg);
+      Alert.alert('Login Failed', message + remainingMsg);
     } finally {
       setLoading(false);
     }
