@@ -720,7 +720,6 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                   onPostDeleted={fetchActivityPosts}
                   navigation={navigation}
                   compact={true}
-                  isActivityOwner={isOwner}
                   activityId={activity.id}
                 />
               ))
