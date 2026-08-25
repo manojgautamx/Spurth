@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Activity, Post, UserProfile
+from .models import Activity, Post, UserProfile, Report
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -56,3 +56,21 @@ class PostAdmin(admin.ModelAdmin):
             return "📷 Yes"
         return "—"
     image_preview.short_description = 'Image'
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = ('id', 'target_type', 'target_summary', 'reporter', 'reason', 'status', 'created_at')
+    list_editable = ('status',)
+    list_filter = ('status', 'reason', 'target_type')
+    search_fields = ('reporter__username', 'details')
+
+    def target_summary(self, obj):
+        if obj.post:
+            return f'Post #{obj.post.id} by @{obj.post.user.username}'
+        if obj.activity:
+            return obj.activity.name
+        if obj.reported_user:
+            return f'@{obj.reported_user.username}'
+        return '—'
+    target_summary.short_description = 'Target'

@@ -8,6 +8,7 @@ from .views import PostViewSet
 from .views import google_auth
 from .views import set_username, check_username, get_notifications, mark_notification_read, mark_all_read
 from .views import cloudinary_moderation_webhook
+from .views import report_content
 from .serializers import NotificationSerializer
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ urlpatterns = [
     path('register/', register, name='register'),  # Ensure this is correct
     path('check-username/', check_username, name='check-username'),
     path('cloudinary-webhook/', cloudinary_moderation_webhook, name='cloudinary-webhook'),
+    path('report/', report_content, name='report-content'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('create-activity/', CreateActivityView.as_view(), name='create-activity'),
     path('my-activities/', MyActivitiesView.as_view(), name='my-activities'),

@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Fonts } from '../theme/fonts';
+import { promptSignIn } from '../utils/requireAuth';
+import ReportModal from './ReportModal';
 
 import { BASE_URL } from '../config';
 
@@ -78,6 +80,7 @@ export default function PostCard({
   hideUsername = false,
 }) {
   const navigation = useNavigation();
+  const [reportModalVisible, setReportModalVisible] = useState(false);
 
   // Centralized here (rather than a parent-supplied onCommentPress) so
   // every screen that renders a PostCard opens the same dedicated post
@@ -136,18 +139,43 @@ export default function PostCard({
     ]);
   };
 
-  const showPostOptions = () => {
+  const showPostOptions = async () => {
+    const options = [];
     if (isActivityOwner) {
-      Alert.alert('Post Options', null, [
-        { text: 'Delete Post', style: 'destructive', onPress: handleDeletePost },
-        { text: 'Cancel', style: 'cancel' },
-      ]);
+      options.push({ text: 'Delete Post', style: 'destructive', onPress: handleDeletePost });
     }
+    if (!post.is_own_post) {
+      options.push({
+        text: 'Report Post',
+        onPress: async () => {
+          const token = await AsyncStorage.getItem('accessToken');
+          if (!token) {
+            promptSignIn(navigation, 'Sign in to report this post.');
+            return;
+          }
+          setReportModalVisible(true);
+        },
+      });
+    }
+    if (options.length === 0) return;
+    options.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Post Options', null, options);
   };
 
   // ── COMPACT MODE ────────────────────────────────────────────────────────────
+  const reportModal = (
+    <ReportModal
+      visible={reportModalVisible}
+      onClose={() => setReportModalVisible(false)}
+      targetType="post"
+      targetId={post.id}
+      targetLabel="post"
+    />
+  );
+
   if (compact) {
     return (
+      <>
       <TouchableOpacity style={styles.compactCard} activeOpacity={1} onPress={goToDetail}>
         {/* Header */}
         <View style={styles.compactHeader}>
@@ -206,15 +234,8 @@ export default function PostCard({
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.dotsBtn}
-            onPress={isActivityOwner ? showPostOptions : undefined}
-          >
-            <Ionicons
-              name="ellipsis-horizontal"
-              size={20}
-              color={isActivityOwner ? '#ccc' : '#444'}
-            />
+          <TouchableOpacity style={styles.dotsBtn} onPress={showPostOptions}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#ccc" />
           </TouchableOpacity>
         </View>
 
@@ -251,11 +272,14 @@ export default function PostCard({
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
+      {reportModal}
+      </>
     );
   }
 
   // ── DEFAULT MODE ────────────────────────────────────────────────────────────
   return (
+    <>
     <TouchableOpacity style={styles.card} activeOpacity={1} onPress={goToDetail}>
       {/* Header */}
       <View style={styles.headerRow}>
@@ -314,7 +338,7 @@ export default function PostCard({
               </Text>
             </View>
           )}
-          <TouchableOpacity style={styles.dotsBtn}>
+          <TouchableOpacity style={styles.dotsBtn} onPress={showPostOptions}>
             <Ionicons name="ellipsis-horizontal" size={20} color="#888" />
           </TouchableOpacity>
         </View>
@@ -353,6 +377,8 @@ export default function PostCard({
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
+    {reportModal}
+    </>
   );
 }
 
