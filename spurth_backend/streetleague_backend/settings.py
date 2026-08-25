@@ -179,12 +179,14 @@ CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'dppoa51hp'),
     'API_KEY': os.environ.get('CLOUDINARY_API_KEY', '918269632671266'),
     'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', 'FUI7RDMpfRa8UA4nYxxOuXjCRfE'),
+    'SECURE': True,
 }
 
 cloudinary.config(
     cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', 'dppoa51hp'),
     api_key=os.environ.get('CLOUDINARY_API_KEY', '918269632671266'),
     api_secret=os.environ.get('CLOUDINARY_API_SECRET', 'FUI7RDMpfRa8UA4nYxxOuXjCRfE'),
+    secure=True,
 )
 
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
