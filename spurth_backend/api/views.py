@@ -43,7 +43,7 @@ USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.-]+$')
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer, ActivityJoinRequestSerializer
 from .models import Activity, Like, Post, UserProfile, Comment, Notification, Poll, PollChoice, PollVote, ActivityJoinRequest
-from .moderation import trigger_image_moderation
+from .moderation import trigger_image_moderation, delete_cloudinary_image
 import cloudinary.utils
 
 @api_view(['POST'])
@@ -521,10 +521,17 @@ def update_activity(request, activity_id):
             return Response({'detail': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
         old_datetime = activity.date_time
+        # A new upload always gets a fresh public_id — the old one becomes
+        # orphaned in Cloudinary unless explicitly deleted once the new
+        # image is safely saved.
+        old_cover_image = activity.cover_image if 'cover_image' in request.FILES and activity.cover_image else None
         serializer = ActivitySerializer(activity, data=request.data, partial=True, context={'request': request})
 
         if serializer.is_valid():
             serializer.save()
+
+            if old_cover_image:
+                delete_cloudinary_image(old_cover_image.public_id)
 
             if 'cover_image' in request.FILES:
                 serializer.instance.moderation_status = trigger_image_moderation(serializer.instance.cover_image.public_id)
@@ -662,9 +669,12 @@ class UserProfileCreateView(APIView):
     def post(self, request):
         user = request.user
         profile, created = UserProfile.objects.get_or_create(user=user)
+        old_avatar = profile.avatar if 'avatar' in request.FILES and profile.avatar else None
         serializer = UserProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save(user=user)
+            if old_avatar:
+                delete_cloudinary_image(old_avatar.public_id)
             return Response(serializer.data, status=status.HTTP_200_OK)
         print("Profile errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -870,9 +880,12 @@ class UpdateProfileView(APIView):
 
     def update_profile(self, request, partial):
         profile = request.user.profile
+        old_avatar = profile.avatar if 'avatar' in request.FILES and profile.avatar else None
         serializer = UserProfileSerializer(profile, data=request.data, partial=partial)
         if serializer.is_valid():
             serializer.save()
+            if old_avatar:
+                delete_cloudinary_image(old_avatar.public_id)
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
