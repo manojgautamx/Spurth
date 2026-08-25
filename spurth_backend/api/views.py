@@ -8,6 +8,7 @@ from django.db.models import Q
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.generics import ListAPIView
 import json
+import re
 from django.http import HttpResponse, HttpResponseRedirect
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -33,6 +34,11 @@ from .models import EmailVerificationToken, generate_verification_code
 from django.contrib.auth.backends import ModelBackend
 
 User = get_user_model()
+
+# Same bounds enforced in SignupScreen.js — keep both in sync.
+USERNAME_MIN_LENGTH = 3
+USERNAME_MAX_LENGTH = 20
+USERNAME_RE = re.compile(r'^[a-zA-Z0-9_.-]+$')
 
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import CommentSerializer, ActivitySerializer, NotificationSerializer, PostSerializer, UserProfileSerializer, PublicUserProfileSerializer, PublicUserSerializer, CustomTokenObtainPairSerializer, ActivityJoinRequestSerializer
@@ -88,18 +94,49 @@ def set_username(request):
     return Response({'detail': 'Username updated.'})
 
 
+# Live availability check while typing on the signup screen. Mirrors the
+# exact checks register() enforces below, so a "available" response here
+# is never contradicted by register() rejecting it moments later.
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def check_username(request):
+    username = request.query_params.get('username', '').strip()
+
+    if len(username) < USERNAME_MIN_LENGTH:
+        return Response({'available': False, 'detail': f'At least {USERNAME_MIN_LENGTH} characters.'})
+    if len(username) > USERNAME_MAX_LENGTH:
+        return Response({'available': False, 'detail': f'At most {USERNAME_MAX_LENGTH} characters.'})
+    if not USERNAME_RE.match(username):
+        return Response({'available': False, 'detail': 'Only letters, numbers, _ . - allowed.'})
+
+    taken = User.objects.filter(username__iexact=username).exists()
+    return Response({'available': not taken, 'detail': 'Username already taken.' if taken else ''})
+
+
 # User Registration View
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
-    username = request.data.get('username')
+    username = request.data.get('username', '').strip()
     email = request.data.get('email')
     password = request.data.get('password')
 
     if not username or not email or not password:
         return Response({'detail': 'Username, email, and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if User.objects.filter(username=username).exists():
+    if len(username) < USERNAME_MIN_LENGTH or len(username) > USERNAME_MAX_LENGTH:
+        return Response(
+            {'detail': f'Username must be {USERNAME_MIN_LENGTH}-{USERNAME_MAX_LENGTH} characters.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not USERNAME_RE.match(username):
+        return Response({'detail': 'Username can only contain letters, numbers, _ . -'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # iexact — a case-only variant of an existing username (e.g. "JohnDoe"
+    # vs "johndoe") must be rejected too, otherwise CustomTokenObtainPairSerializer's
+    # case-insensitive login lookup can no longer tell the two accounts apart.
+    if User.objects.filter(username__iexact=username).exists():
         return Response({'detail': 'Username already taken.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(email=email).exists():

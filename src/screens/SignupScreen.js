@@ -1,4 +1,4 @@
-import React, { useState, useContext, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useContext, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -35,9 +35,14 @@ const sanitize = (str, maxLen = 150) =>
   str.replace(/[\x00-\x1F\x7F]/g, '').slice(0, maxLen);
 
 // ── Validators ────────────────────────────────────────────────────────────────
+// Mirrors USERNAME_MIN_LENGTH/USERNAME_MAX_LENGTH in spurth_backend/api/views.py
+// — keep both in sync.
+const USERNAME_MIN_LENGTH = 3;
+const USERNAME_MAX_LENGTH = 20;
 const USERNAME_REGEX  = /^[a-zA-Z0-9_.-]+$/;      // safe chars only
 const EMAIL_REGEX     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INJECTION_RE    = /[<>;"'`\\]|--|\bOR\b|\bAND\b|\bDROP\b|\bSELECT\b/i;
+const USERNAME_CHECK_DEBOUNCE_MS = 500;
 
 const PASSWORD_RULES = [
   { key: 'length',    label: 'At least 8 characters',         test: (p) => p.length >= 8 },
@@ -66,6 +71,10 @@ export default function SignupScreen({ navigation }) {
   // ── Field-level validation errors ─────────────────────────────────────────
   const [usernameError, setUsernameError] = useState('');
   const [emailError, setEmailError]       = useState('');
+
+  // ── Live username availability ('idle' | 'checking' | 'available' | 'taken') ─
+  const [usernameStatus, setUsernameStatus] = useState('idle');
+  const usernameCheckSeq = useRef(0); // guards against an older response landing after a newer one
 
   // ── Brute-force state ──────────────────────────────────────────────────────
   const [attempts, setAttempts]   = useState(0);
@@ -110,9 +119,11 @@ export default function SignupScreen({ navigation }) {
   // ── Field validators (on blur) ────────────────────────────────────────────
   const validateUsername = (val) => {
     if (!val.trim()) { setUsernameError('Username is required.'); return false; }
-    if (val.length < 3) { setUsernameError('At least 3 characters.'); return false; }
+    if (val.length < USERNAME_MIN_LENGTH) { setUsernameError(`At least ${USERNAME_MIN_LENGTH} characters.`); return false; }
+    if (val.length > USERNAME_MAX_LENGTH) { setUsernameError(`At most ${USERNAME_MAX_LENGTH} characters.`); return false; }
     if (!USERNAME_REGEX.test(val)) { setUsernameError('Only letters, numbers, _ . - allowed.'); return false; }
     if (INJECTION_RE.test(val)) { setUsernameError('Invalid characters detected.'); return false; }
+    if (usernameStatus === 'taken') { setUsernameError('Username already taken.'); return false; }
     setUsernameError('');
     return true;
   };
@@ -124,6 +135,34 @@ export default function SignupScreen({ navigation }) {
     setEmailError('');
     return true;
   };
+
+  // ── Live "is this username taken" check, debounced while typing ──────────
+  useEffect(() => {
+    const val = username.trim();
+    // Only worth asking the server once the value could actually be valid —
+    // no point flagging "taken" while it's still too short or has bad chars,
+    // the local format error already covers that.
+    if (val.length < USERNAME_MIN_LENGTH || val.length > USERNAME_MAX_LENGTH || !USERNAME_REGEX.test(val)) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    const seq = ++usernameCheckSeq.current;
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await axiosInstance.get(`${BASE_URL}/api/check-username/`, { params: { username: val } });
+        if (seq !== usernameCheckSeq.current) return; // a newer keystroke already superseded this check
+        setUsernameStatus(res.data.available ? 'available' : 'taken');
+      } catch {
+        if (seq !== usernameCheckSeq.current) return;
+        setUsernameStatus('idle'); // network hiccup — don't block typing on it, register() re-checks anyway
+      }
+    }, USERNAME_CHECK_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [username]);
 
   // ── Main handler ──────────────────────────────────────────────────────────
   const handleSignup = async () => {
@@ -138,7 +177,7 @@ export default function SignupScreen({ navigation }) {
     lastSubmitRef.current = now;
 
     // Sanitize
-    const cleanUsername = sanitize(username.trim(), 50);
+    const cleanUsername = sanitize(username.trim(), USERNAME_MAX_LENGTH);
     const cleanEmail    = sanitize(email.trim(), 150);
     const cleanPassword = sanitize(password.trim(), 150);
 
@@ -255,15 +294,25 @@ export default function SignupScreen({ navigation }) {
             placeholder="e.g. johndoe"
             placeholderTextColor="#444"
             value={username}
-            onChangeText={t => { setUsername(sanitize(t, 50)); setUsernameError(''); }}
+            onChangeText={t => { setUsername(sanitize(t, USERNAME_MAX_LENGTH)); setUsernameError(''); }}
             onBlur={() => validateUsername(username.trim())}
             autoCapitalize="none"
             autoCorrect={false}
             editable={!isDisabled}
-            maxLength={50}
+            maxLength={USERNAME_MAX_LENGTH}
           />
         </View>
-        {!!usernameError && <Text style={styles.fieldError}>{usernameError}</Text>}
+        {usernameError ? (
+          <Text style={styles.fieldError}>{usernameError}</Text>
+        ) : usernameStatus === 'checking' ? (
+          <Text style={styles.fieldHint}>Checking availability…</Text>
+        ) : usernameStatus === 'taken' ? (
+          <Text style={styles.fieldError}>Username already taken.</Text>
+        ) : usernameStatus === 'available' ? (
+          <Text style={styles.fieldSuccess}>✓ Username available</Text>
+        ) : (
+          <Text style={styles.fieldHint}>{USERNAME_MIN_LENGTH}–{USERNAME_MAX_LENGTH} characters, letters/numbers/_ . -</Text>
+        )}
 
         {/* Email */}
         <Text style={styles.label}>Email</Text>
@@ -558,6 +607,20 @@ const styles = StyleSheet.create({
   },
   fieldError: {
     color: '#E53935',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  fieldHint: {
+    color: '#555',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  fieldSuccess: {
+    color: '#00C853',
     fontSize: 12,
     fontFamily: Fonts.regular,
     marginTop: 4,
