@@ -285,6 +285,92 @@ function FlyingCharacter({ style, reduced, imgStyle }) {
   );
 }
 
+// Hero side illustration: a loose scatter of individual head line-arts
+// (src/assets/headslanding/) instead of one grouped illustration. Each head
+// gets its own gentle bob — own duration and a staggered start delay — so
+// the cloud reads as loosely alive rather than one synchronized unit.
+const HEAD_ASSETS = [
+  require('../assets/headslanding/Asset 1.png'),
+  require('../assets/headslanding/Asset 2.png'),
+  require('../assets/headslanding/Asset 3.png'),
+  require('../assets/headslanding/Asset 4.png'),
+  require('../assets/headslanding/Asset 5.png'),
+  require('../assets/headslanding/Asset 6.png'),
+  require('../assets/headslanding/Asset 7.png'),
+  require('../assets/headslanding/Asset 8.png'),
+  require('../assets/headslanding/Asset 9.png'),
+  require('../assets/headslanding/Asset 10.png'),
+  require('../assets/headslanding/Asset 11.png'),
+];
+
+// left/top are percentages of the scatter container; size is the head's
+// display width, aspectRatio comes from each asset's real dimensions so
+// none of them stretch.
+const HEAD_LAYOUT = [
+  { left: '15%', top: '20%', size: 62, aspectRatio: 73 / 83 },
+  { left: '37%', top: '19%', size: 60, aspectRatio: 67 / 84 },
+  { left: '6%',  top: '49%', size: 52, aspectRatio: 55 / 62 },
+  { left: '23%', top: '46%', size: 68, aspectRatio: 90 / 70 },
+  { left: '57%', top: '37%', size: 62, aspectRatio: 74 / 84 },
+  { left: '74%', top: '40%', size: 60, aspectRatio: 73 / 79 },
+  { left: '37%', top: '60%', size: 66, aspectRatio: 82 / 75 },
+  { left: '64%', top: '65%', size: 64, aspectRatio: 77 / 57 },
+  { left: '12%', top: '89%', size: 66, aspectRatio: 82 / 79 },
+  { left: '30%', top: '91%', size: 58, aspectRatio: 66 / 79 },
+  { left: '49%', top: '84%', size: 64, aspectRatio: 77 / 80 },
+];
+
+function FloatingHead({ source, layout, reduced, duration, delay }) {
+  const bob = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    let loop;
+    const id = setTimeout(() => {
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(bob, { toValue: 1, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(bob, { toValue: 0, duration, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+    }, delay);
+    return () => { clearTimeout(id); loop?.stop(); };
+  }, [reduced]);
+  const translateY = reduced ? 0 : bob.interpolate({ inputRange: [0, 1], outputRange: [7, -7] });
+
+  return (
+    <Animated.Image
+      source={source}
+      resizeMode="contain"
+      style={{
+        position: 'absolute',
+        left: layout.left,
+        top: layout.top,
+        width: layout.size,
+        aspectRatio: layout.aspectRatio,
+        transform: [{ translateY }],
+      }}
+    />
+  );
+}
+
+function HeadsCloud({ style, reduced }) {
+  return (
+    <Animated.View style={style}>
+      {HEAD_LAYOUT.map((layout, i) => (
+        <FloatingHead
+          key={i}
+          source={HEAD_ASSETS[i]}
+          layout={layout}
+          reduced={reduced}
+          duration={1500 + (i % 5) * 220}
+          delay={i * 170}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
 function MapPulse() {
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.55)).current;
@@ -495,11 +581,7 @@ export default function LandingScreen({ navigation }) {
 
           {isWide && (
             <View style={styles.heroSideCol}>
-              <Animated.Image
-                source={require('../assets/placeholder.png')}
-                style={[styles.heroSideIllus, heroImgStyle]}
-                resizeMode="contain"
-              />
+              <HeadsCloud style={[styles.heroSideIllus, heroImgStyle]} reduced={reduced} />
             </View>
           )}
         </View>
@@ -888,8 +970,8 @@ const styles = StyleSheet.create({
 
   // Hero layout
   heroTopRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 56, marginBottom: 56 },
-  heroSideCol: { width: 340, alignItems: 'center', justifyContent: 'center' },
-  heroSideIllus: { width: '100%', height: 360 },
+  heroSideCol: { width: 460, alignItems: 'center', justifyContent: 'center' },
+  heroSideIllus: { width: '100%', height: 380 },
   // Categories
   catCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE },
   catCardLabel: { position: 'absolute', left: 22, bottom: 20 },
