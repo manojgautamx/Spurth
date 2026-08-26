@@ -14,7 +14,7 @@
 // — only the photographic images were sourced this way.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
-import Svg, { Rect, Path, Circle, G } from 'react-native-svg';
+import Svg, { Rect, Path, Circle, G, Line } from 'react-native-svg';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { Fonts } from '../theme/fonts';
@@ -32,6 +32,7 @@ function Logo({ height = 28 }) {
 }
 
 const ACCENT = '#6C5CE7';
+const TEAL = '#90E7E2'; // secondary accent — used sparingly, alongside ACCENT not instead of it
 const BG = '#0A0A0C';
 const SURFACE = '#121216';
 const RAISE = '#17171D';
@@ -303,22 +304,37 @@ const HEAD_ASSETS = [
   require('../assets/headslanding/Asset 11.png'),
 ];
 
-// left/top are percentages of the scatter container; size is the head's
-// display width, aspectRatio comes from each asset's real dimensions so
-// none of them stretch.
+// left/top are pixel coordinates within the HEAD_SCATTER_W x
+// HEAD_SCATTER_H scatter container (not percentages) so the connector
+// lines below can share the exact same coordinate space as the heads
+// instead of re-deriving it. size is each head's display width;
+// aspectRatio comes from its real asset dimensions so none of them stretch.
+const HEAD_SCATTER_W = 460;
+const HEAD_SCATTER_H = 380;
 const HEAD_LAYOUT = [
-  { left: '15%', top: '20%', size: 62, aspectRatio: 73 / 83 },
-  { left: '37%', top: '19%', size: 60, aspectRatio: 67 / 84 },
-  { left: '6%',  top: '49%', size: 52, aspectRatio: 55 / 62 },
-  { left: '23%', top: '46%', size: 68, aspectRatio: 90 / 70 },
-  { left: '57%', top: '37%', size: 62, aspectRatio: 74 / 84 },
-  { left: '74%', top: '40%', size: 60, aspectRatio: 73 / 79 },
-  { left: '37%', top: '60%', size: 66, aspectRatio: 82 / 75 },
-  { left: '64%', top: '65%', size: 64, aspectRatio: 77 / 57 },
-  { left: '12%', top: '89%', size: 66, aspectRatio: 82 / 79 },
-  { left: '30%', top: '91%', size: 58, aspectRatio: 66 / 79 },
-  { left: '49%', top: '84%', size: 64, aspectRatio: 77 / 80 },
+  { left: 69,  top: 76,  size: 62, aspectRatio: 73 / 83 },
+  { left: 170, top: 72,  size: 60, aspectRatio: 67 / 84 },
+  { left: 28,  top: 186, size: 52, aspectRatio: 55 / 62 },
+  { left: 106, top: 175, size: 68, aspectRatio: 90 / 70 },
+  { left: 262, top: 141, size: 62, aspectRatio: 74 / 84 },
+  { left: 340, top: 152, size: 60, aspectRatio: 73 / 79 },
+  { left: 170, top: 228, size: 66, aspectRatio: 82 / 75 },
+  { left: 294, top: 247, size: 64, aspectRatio: 77 / 57 },
+  { left: 55,  top: 330, size: 66, aspectRatio: 82 / 79 },
+  { left: 138, top: 338, size: 58, aspectRatio: 66 / 79 },
+  { left: 225, top: 312, size: 64, aspectRatio: 77 / 80 },
 ];
+
+// Which heads get a connecting line drawn between them — sparse on
+// purpose (a handful of links, not a fully-connected mesh) so it reads as
+// "some of these people know each other" rather than a dense web.
+const HEAD_LINKS = [
+  [0, 1], [0, 3], [1, 4], [3, 6], [4, 6], [5, 6], [5, 7], [6, 8], [8, 10], [9, 10],
+];
+
+function headCenter(layout) {
+  return { x: layout.left + layout.size / 2, y: layout.top + (layout.size / layout.aspectRatio) / 2 };
+}
 
 function FloatingHead({ source, layout, reduced, duration, delay }) {
   const bob = useRef(new Animated.Value(0)).current;
@@ -357,6 +373,20 @@ function FloatingHead({ source, layout, reduced, duration, delay }) {
 function HeadsCloud({ style, reduced }) {
   return (
     <Animated.View style={style}>
+      <Svg width="100%" height="100%" viewBox={`0 0 ${HEAD_SCATTER_W} ${HEAD_SCATTER_H}`} style={StyleSheet.absoluteFillObject}>
+        {HEAD_LINKS.map(([a, b], i) => {
+          const p1 = headCenter(HEAD_LAYOUT[a]);
+          const p2 = headCenter(HEAD_LAYOUT[b]);
+          return (
+            <Line
+              key={i}
+              x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+              stroke="rgba(197,189,255,0.35)"
+              strokeWidth={1.3}
+            />
+          );
+        })}
+      </Svg>
       {HEAD_LAYOUT.map((layout, i) => (
         <FloatingHead
           key={i}
@@ -782,7 +812,7 @@ export default function LandingScreen({ navigation }) {
         </Animated.View>
         <Animated.View style={[styles.statementInner, { transform: [{ translateY: stmtTextTranslate }] }]}>
           <Text style={[styles.statementText, { fontSize: isWide ? 64 : 34 }]}>
-            Less scrolling.{'\n'}<Text style={{ color: ACCENT }}>More doing.</Text>
+            Less scrolling.{'\n'}<Text style={{ color: TEAL }}>More doing.</Text>
           </Text>
         </Animated.View>
       </View>
@@ -948,8 +978,8 @@ const styles = StyleSheet.create({
   navActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   navLoginBtn: { paddingVertical: 9, paddingHorizontal: 15, borderRadius: 999, borderWidth: 1, borderColor: LINE },
   navLoginText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.semibold },
-  navJoinBtn: { paddingVertical: 9, paddingHorizontal: 17, borderRadius: 999, backgroundColor: ACCENT },
-  navJoinText: { color: '#fff', fontSize: 13.5, fontFamily: Fonts.bold },
+  navJoinBtn: { paddingVertical: 8, paddingHorizontal: 17, borderRadius: 999, borderWidth: 1.5, borderColor: ACCENT },
+  navJoinText: { color: ACCENT, fontSize: 13.5, fontFamily: Fonts.bold },
 
   // Typography
   h1: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
@@ -981,7 +1011,7 @@ const styles = StyleSheet.create({
   // Story — minimal scroll-parallax photo sections
   parallaxRow: { flexDirection: 'row', alignItems: 'center', gap: 40 },
   parallaxCopy: { gap: 4 },
-  storyNum: { color: ACCENT, fontSize: 13, fontFamily: Fonts.extrabold, letterSpacing: 0.5 },
+  storyNum: { color: TEAL, fontSize: 13, fontFamily: Fonts.extrabold, letterSpacing: 0.5 },
   storyTitle: { color: '#fff', fontSize: 24, fontFamily: Fonts.extrabold, letterSpacing: -0.4, marginTop: 8 },
   storyBody: { color: MUTE, fontSize: 15, lineHeight: 23, fontFamily: Fonts.regular, marginTop: 8, maxWidth: 380 },
 
