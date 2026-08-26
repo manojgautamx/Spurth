@@ -339,6 +339,7 @@ export default function LandingScreen({ navigation }) {
 
   const goJoin = () => navigation.navigate('Welcome');
   const goLogin = () => navigation.navigate('Login');
+  const goSignup = () => navigation.navigate('Signup');
 
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
@@ -467,8 +468,8 @@ export default function LandingScreen({ navigation }) {
             <TouchableOpacity onPress={goLogin} style={styles.navLoginBtn} activeOpacity={0.8}>
               <Text style={styles.navLoginText}>Log in</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={goJoin} style={styles.navJoinBtn} activeOpacity={0.85}>
-              <Text style={styles.navJoinText}>Get the app</Text>
+            <TouchableOpacity onPress={goSignup} style={styles.navJoinBtn} activeOpacity={0.85}>
+              <Text style={styles.navJoinText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
         </Section>
@@ -791,22 +792,35 @@ export default function LandingScreen({ navigation }) {
         </View>
       </Section>
 
-      {/* FINAL CTA */}
+      {/* FINAL CTA — content centered; the character clusters bleed in from
+          both edges as background decoration. Split into two separate
+          portrait-shaped images (each anchored to its own edge, sized
+          independently per breakpoint) rather than one wide combined image —
+          a single wide image under `cover` on a narrow/tall mobile box
+          cropped both character clusters out entirely; two independently-
+          sized images stay fully visible, just smaller, at any width. */}
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
         <View ref={finalRef} style={[styles.finalBox, !isWide && styles.finalBoxNarrow]}>
+          <Animated.Image
+            source={require('../assets/sectionimage1.png')}
+            style={[styles.finalIllusLeft, { width: isWide ? 240 : 110, aspectRatio: 381 / 546 }, finalIllusStyle]}
+            resizeMode="contain"
+          />
+          <Animated.Image
+            source={require('../assets/sectionimage2.png')}
+            style={[styles.finalIllusRight, { width: isWide ? 240 : 110, aspectRatio: 369 / 546 }, finalIllusStyle]}
+            resizeMode="contain"
+          />
           <View style={styles.finalInner}>
             <Animated.Text style={[styles.finalText, { fontSize: isWide ? 56 : 34 }, { opacity: finalTextOpacity, transform: [{ translateY: finalTextTranslate }] }]}>
               You can't scroll{'\n'}anymore. Better{'\n'}go out.
             </Animated.Text>
-            <Animated.View style={{ marginTop: 26, alignSelf: 'flex-start', opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
+            <Animated.View style={{ marginTop: 26, opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
               <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
                 <Text style={styles.ctaFilledText}>touch some grass</Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
-          <Animated.View style={[styles.finalIllusWrap, !isWide && styles.finalIllusWrapNarrow, finalIllusStyle]}>
-            <Image source={require('../assets/placeholder.png')} style={styles.finalIllus} resizeMode="contain" />
-          </Animated.View>
         </View>
       </Section>
 
@@ -934,18 +948,17 @@ const styles = StyleSheet.create({
   faqQ: { color: '#fff', fontSize: 15, fontFamily: Fonts.bold, letterSpacing: -0.2, flex: 1 },
   faqA: { color: MUTE, fontSize: 13.5, lineHeight: 21, fontFamily: Fonts.regular, marginTop: 12 },
 
-  // Final CTA
+  // Final CTA — content centered, character clusters anchored to each edge
   finalBox: {
     borderRadius: 26, borderWidth: 1, borderColor: LINE, backgroundColor: RAISE,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: 56, paddingHorizontal: 56, gap: 24,
+    overflow: 'hidden', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 72, paddingHorizontal: 56,
   },
-  finalBoxNarrow: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 40, paddingHorizontal: 28, gap: 32 },
-  finalInner: { flexShrink: 1 },
-  finalText: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1 },
-  finalIllusWrap: { width: 280, aspectRatio: 746 / 714, alignItems: 'center', justifyContent: 'center' },
-  finalIllusWrapNarrow: { width: '100%', alignSelf: 'center' },
-  finalIllus: { width: '100%', height: '100%' },
+  finalBoxNarrow: { paddingVertical: 48, paddingHorizontal: 28 },
+  finalInner: { alignItems: 'center', zIndex: 1 },
+  finalText: { color: '#fff', fontFamily: Fonts.extrabold, letterSpacing: -1, textAlign: 'center' },
+  finalIllusLeft: { position: 'absolute', left: 0, bottom: 0 },
+  finalIllusRight: { position: 'absolute', right: 0, bottom: 0 },
 
   // Footer
   footerRow: { flexDirection: 'row', justifyContent: 'space-between' },
