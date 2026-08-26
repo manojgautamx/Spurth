@@ -60,6 +60,7 @@ const PHOTO_IDS = {
   expTea: '1604881988758-f76ad2f7aac1',             // two people with mugs, chatting
   expGamingNight: '1696710257827-75e2e5954059',     // lit gaming setup at night
   statement: '1496275068113-fff8c90750d1',          // group silhouetted walking at golden hour
+  catEducation: '1758270705518-b61b40527e76',       // students collaborating around a laptop
 };
 
 const photo = (key, w = 800, h = 600) =>
@@ -78,6 +79,7 @@ const CATEGORIES = {
   arts: { label: 'Arts', img: photo('catArts', 500, 400) },
   lifestyle: { label: 'Lifestyle', img: photo('catLifestyle', 500, 400) },
   tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: photo('catTech', 900, 400) },
+  education: { label: 'Education', sub: 'Study rooms, language swaps, weekend workshops.', img: photo('catEducation', 700, 400) },
 };
 
 const NEARBY_DOTS = [
@@ -524,10 +526,7 @@ export default function LandingScreen({ navigation }) {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 14 }}>
-              <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" distance={40} rotateFrom={1.4} delay={104} style={{ flex: 1, height: 200 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
-                <Text style={styles.educationTitle}>Education</Text>
-                <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
-              </Reveal>
+              <CategoryCard item={CATEGORIES.education} style={{ flex: 1, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={4} from="left" distance={40} rotateFrom={1.4} />
               <CategoryCard item={CATEGORIES.lifestyle} style={{ flex: 1, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={5} from="up" distance={36} rotateFrom={-1.5} />
               <CategoryCard item={CATEGORIES.tech} style={{ flex: 2, height: 200 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={6} from="right" distance={46} rotateFrom={1} />
             </View>
@@ -538,10 +537,7 @@ export default function LandingScreen({ navigation }) {
             <CategoryCard item={CATEGORIES.adventure} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={1} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.gaming} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={2} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.arts} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={3} from="up" distance={36} />
-            <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" distance={36} delay={104} style={{ width: '100%', height: 150 }} innerStyle={[styles.educationCard, { flex: 1 }]}>
-              <Text style={styles.educationTitle}>Education</Text>
-              <Text style={styles.educationBody}>Study rooms, language swaps, weekend workshops.</Text>
-            </Reveal>
+            <CategoryCard item={CATEGORIES.education} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={4} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.lifestyle} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={5} from="up" distance={36} />
             <CategoryCard item={CATEGORIES.tech} style={{ width: '100%', height: 190 }} scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} index={6} from="up" distance={36} />
           </View>
@@ -885,9 +881,6 @@ const styles = StyleSheet.create({
   catCardLabel: { position: 'absolute', left: 22, bottom: 20 },
   catCardTitle: { color: '#fff', fontSize: 22, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
   catCardSub: { color: 'rgba(244,244,246,0.6)', fontSize: 12.5, marginTop: 4, fontFamily: Fonts.medium },
-  educationCard: { borderRadius: 20, borderWidth: 1, borderColor: LINE, backgroundColor: SURFACE, padding: 22, justifyContent: 'space-between' },
-  educationTitle: { color: '#fff', fontSize: 22, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
-  educationBody: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular },
 
   // Story — minimal scroll-parallax photo sections
   parallaxRow: { flexDirection: 'row', alignItems: 'center', gap: 40 },
