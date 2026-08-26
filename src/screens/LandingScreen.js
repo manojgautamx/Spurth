@@ -5,10 +5,13 @@
 // Implements the "Spurth Landing.dc.html" design pulled from claude.ai/design
 // (project 1abe1348-be64-4b4c-bb5e-36bd5820242e). That file's <image-slot>
 // placeholders were never filled with real photos (.image-slots.state.json
-// was empty), so images here come from a small pool of verified-working
-// Unsplash photo IDs (same CDN host pattern as src/constants/heroImages.js),
-// picked per keyword via a deterministic hash — source.unsplash.com's old
-// keyword-search redirect now 503s (deprecated in 2023).
+// was empty), so every photo below is a specific, individually-searched and
+// verified Unsplash image chosen to match its spot's actual caption/keyword
+// (PHOTO_IDS) — not source.unsplash.com's keyword-redirect (deprecated,
+// 503s since 2023), and not a keyword hashed into a small generic pool
+// either, since that could land any photo on any keyword. The line-art
+// illustrations (character.png, placeholder.png, the SVG map) are untouched
+// — only the photographic images were sourced this way.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import Svg, { Rect, Path, Circle, G } from 'react-native-svg';
@@ -35,36 +38,46 @@ const RAISE = '#17171D';
 const LINE = 'rgba(255,255,255,0.09)';
 const MUTE = '#8C8C97';
 
-const UNSPLASH_POOL = [
-  '1517649763962-0c623066013b', '1461896836934-ffe607ba8211', '1552674605-db6ffd4facb5',
-  '1571019613454-1cb2f99b2d8b', '1600880292203-757bb62b4baf', '1500673922987-e212871fec22',
-  '1523240795612-9a054b0db644', '1521737604893-d14cc237f11d', '1552664730-d307ca884978',
-  '1517457373958-b7bdd4587205', '1543269865-cbf427effbad', '1470229722913-7c0e2dbbafd3',
-  '1591370874773-6702e8f12fd8', '1519501025264-65ba15a82390', '1543007630-9710e4a00a20',
-  '1556761175-5973dc0f32e7', '1531482615713-2afd69097998', '1509233725247-49e657c54213',
-  '1487956382158-bb926046304a', '1519750783826-e2420f4d687f',
-];
-
-const unsplash = (keywords, w = 800, h = 600) => {
-  let hash = 0;
-  for (let i = 0; i < keywords.length; i++) hash = (hash * 31 + keywords.charCodeAt(i)) | 0;
-  const id = UNSPLASH_POOL[Math.abs(hash) % UNSPLASH_POOL.length];
-  return `https://images.unsplash.com/photo-${id}?w=${w}&h=${h}&fit=crop&q=80`;
+// Each key is hand-picked (searched + verified individually, not hashed
+// out of a generic pool) so every spot on the page actually shows what its
+// caption says — the previous keyword-hash-into-a-small-pool approach could
+// land any photo on any keyword as long as the hash landed on the same
+// bucket.
+const PHOTO_IDS = {
+  storyNearby: '1723655212285-3f16050a783d',       // people walking a city street
+  storyPeople: '1582298538104-fe2e74c27f59',        // friends laughing together
+  storyMakeItHappen: '1758653003886-a70e78de253d',  // friends jumping/celebrating outdoors
+  catSports: '1606925797300-0b35e9d1794e',          // futsal
+  catAdventure: '1663524963924-4d84fd7204b5',       // hiking a mountain trail
+  catGaming: '1598550476439-6847785fcea6',          // gaming desk, dual monitors
+  catArts: '1595351298020-038700609878',            // pottery wheel
+  catLifestyle: '1758272133395-b0f83eb6f554',       // rooftop gathering, city view
+  catTech: '1631350397792-8e0c2de5b637',            // hackathon / coding together
+  expFutsal: '1630420598913-44208d36f9af',          // futsal, different angle from catSports
+  expBus: '1570714436355-2556087f0912',             // looking out a bus window
+  expPottery: '1609881583302-61548332039c',         // hands shaping clay
+  expHike: '1506748566756-07746caecd61',            // hikers silhouetted at sunrise
+  expTea: '1604881988758-f76ad2f7aac1',             // two people with mugs, chatting
+  expGamingNight: '1696710257827-75e2e5954059',     // lit gaming setup at night
+  statement: '1496275068113-fff8c90750d1',          // group silhouetted walking at golden hour
 };
 
+const photo = (key, w = 800, h = 600) =>
+  `https://images.unsplash.com/photo-${PHOTO_IDS[key]}?w=${w}&h=${h}&fit=crop&q=80`;
+
 const STORY_STEPS = [
-  { n: '01', title: 'Find something nearby', body: "Open the app, see what's actually happening within walking distance today.", img: unsplash('walking,city,street', 900, 700) },
-  { n: '02', title: 'Find your people', body: "See who's going and what they're into before you commit. No cold rooms.", img: unsplash('friends,group,laughing', 900, 700) },
-  { n: '03', title: 'Make it happen', body: 'Show up, do the thing, then post it back so the next person finds it.', img: unsplash('friends,celebrating,activity', 900, 700) },
+  { n: '01', title: 'Find something nearby', body: "Open the app, see what's actually happening within walking distance today.", img: photo('storyNearby', 900, 700) },
+  { n: '02', title: 'Find your people', body: "See who's going and what they're into before you commit. No cold rooms.", img: photo('storyPeople', 900, 700) },
+  { n: '03', title: 'Make it happen', body: 'Show up, do the thing, then post it back so the next person finds it.', img: photo('storyMakeItHappen', 900, 700) },
 ];
 
 const CATEGORIES = {
-  sports: { label: 'Sports', sub: '148 activities · futsal, climbing, laps', img: unsplash('futsal,sports', 900, 800) },
-  adventure: { label: 'Adventure', sub: '62 activities', img: unsplash('hiking,mountain', 700, 400) },
-  gaming: { label: 'Gaming', img: unsplash('gaming,esports', 500, 400) },
-  arts: { label: 'Arts', img: unsplash('pottery,ceramics', 500, 400) },
-  lifestyle: { label: 'Lifestyle', img: unsplash('rooftop,dinner', 500, 400) },
-  tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: unsplash('hackathon,coding', 900, 400) },
+  sports: { label: 'Sports', sub: '148 activities · futsal, climbing, laps', img: photo('catSports', 900, 800) },
+  adventure: { label: 'Adventure', sub: '62 activities', img: photo('catAdventure', 700, 400) },
+  gaming: { label: 'Gaming', img: photo('catGaming', 500, 400) },
+  arts: { label: 'Arts', img: photo('catArts', 500, 400) },
+  lifestyle: { label: 'Lifestyle', img: photo('catLifestyle', 500, 400) },
+  tech: { label: 'Tech', sub: 'Build nights, demo evenings, repair cafés', img: photo('catTech', 900, 400) },
 };
 
 const NEARBY_DOTS = [
@@ -588,7 +601,7 @@ export default function LandingScreen({ navigation }) {
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={8} rotateTo={1.2} delay={0} innerStyle={styles.expCard}>
                 <View style={styles.expImageWrap}>
-                  <Image source={{ uri: unsplash('sweaty,group,futsal', 500, 460) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                  <Image source={{ uri: photo('expFutsal', 500, 460) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 </View>
                 <View style={{ padding: 15 }}>
                   <View style={styles.expHeader}>
@@ -603,7 +616,7 @@ export default function LandingScreen({ navigation }) {
                 </View>
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="left" rotateFrom={-10} rotateTo={-1.6} delay={54} style={{ height: 180 }} innerStyle={[styles.expPhotoOnly, { height: 180 }]}>
-                <Image source={{ uri: unsplash('bus,window,travel', 500, 380) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: photo('expBus', 500, 380) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
             </View>
 
@@ -620,7 +633,7 @@ export default function LandingScreen({ navigation }) {
                 </View>
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={8} rotateTo={1.1} delay={70} style={{ height: 300 }} innerStyle={[styles.expPhotoOnly, { height: 300 }]}>
-                <Image source={{ uri: unsplash('pottery,hands,clay', 500, 620) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: photo('expPottery', 500, 620) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={-7} rotateTo={-0.9} delay={125} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
@@ -635,7 +648,7 @@ export default function LandingScreen({ navigation }) {
             {/* Column 3 */}
             <View style={[styles.expCol, isWide && { width: '24%' }]}>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={-9} rotateTo={-1.2} delay={33} style={{ height: 320 }} innerStyle={[styles.expPhotoOnly, { height: 320 }]}>
-                <Image source={{ uri: unsplash('hike,summit,backlit', 500, 660) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: photo('expHike', 500, 660) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
                 <View style={styles.expPhotoOverlay}>
                   <Text style={styles.expPhotoOverlayTitle}>Sunrise hike to Shivapuri</Text>
                   <Text style={styles.expPhotoOverlaySub}>23 went · 41 photos shared</Text>
@@ -650,14 +663,14 @@ export default function LandingScreen({ navigation }) {
                 <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 331 · Sunrise hike to Shivapuri</Text>
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={10} rotateTo={1.5} delay={140} style={{ height: 170 }} innerStyle={[styles.expPhotoOnly, { height: 170 }]}>
-                <Image source={{ uri: unsplash('tea,break,conversation', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: photo('expTea', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
             </View>
 
             {/* Column 4 */}
             <View style={[styles.expCol, isWide && { width: '24%', marginTop: 52 }]}>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-8} rotateTo={-1.1} delay={50} style={{ height: 260 }} innerStyle={[styles.expPhotoOnly, { height: 260 }]}>
-                <Image source={{ uri: unsplash('screen,lit,gaming,night', 500, 520) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+                <Image source={{ uri: photo('expGamingNight', 500, 520) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="down" rotateFrom={-9} rotateTo={-1.4} delay={104} innerStyle={[styles.expCard, { padding: 18 }]}>
                 <View style={styles.expHeader}>
@@ -676,7 +689,7 @@ export default function LandingScreen({ navigation }) {
           viewport rather than just fading in. */}
       <View ref={stmtRef} style={[styles.statement, { height: stmtHeight }]}>
         <Animated.Image
-          source={{ uri: unsplash('group,walking,dusk', 1400, 700) }}
+          source={{ uri: photo('statement', 1400, 700) }}
           style={[StyleSheet.absoluteFillObject, { transform: [{ scale: stmtImgScale }] }]}
           resizeMode="cover"
         />
