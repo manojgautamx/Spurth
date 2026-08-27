@@ -231,6 +231,12 @@ export default function ProfileViewScreen({ route }) {
   };
   // ───────────────────────────────────────────────────────────────────────────
 
+  // `isMyProfile` is purely route-based (no username param), but WebSidebar
+  // links to your own profile WITH your username (for a nicer URL), so it
+  // also counts as "own profile" once the backend confirms it via the
+  // fetched profile's is_own_profile flag.
+  const isOwnProfile = isMyProfile || !!profile?.is_own_profile;
+
   const avatarUri =
     profile?.avatar &&
     (profile.avatar.startsWith('http')
@@ -295,7 +301,7 @@ export default function ProfileViewScreen({ route }) {
               <Ionicons name="share-outline" size={24} color="#fff" />
             </TouchableOpacity>
 
-            {isMyProfile ? (
+            {isOwnProfile ? (
               <>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('ProfileEdit', { profile })}
@@ -458,7 +464,7 @@ export default function ProfileViewScreen({ route }) {
           )}
         </View>
 
-        {isMyProfile && (
+        {isOwnProfile && (
           <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
