@@ -15,7 +15,11 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import axiosInstance from '../utils/axiosInstance';
-import { appendImageAsset } from '../utils/appendImageAsset';
+import { appendImageAsset, appendVideoAsset } from '../utils/appendImageAsset';
+import { validateVideoAsset } from '../utils/validateVideoAsset';
+import { nearestRatioKey } from '../constants/mediaRatios';
+import MediaRatioPicker from '../components/MediaRatioPicker';
+import MediaPreview from '../components/MediaPreview';
 import { AuthContext } from '../context/AuthContext';
 import { LocationContext } from '../context/LocationContext';
 import { rankByInterest } from '../utils/rankByInterest';
@@ -39,10 +43,12 @@ const ExperienceScreen = () => {
   const [posts, setPosts] = useState([]);
   const [caption, setCaption] = useState('');
   const [image, setImage] = useState(null);
+  const [video, setVideo] = useState(null);
+  const [mediaRatio, setMediaRatio] = useState('original');
   const [profile, setProfile] = useState(null);
 
-  // Poll composing — mutually exclusive with `image` (matches the
-  // reference composer, which switches between an image preview and a
+  // Poll composing — mutually exclusive with `image`/`video` (matches the
+  // reference composer, which switches between a media preview and a
   // poll panel rather than showing both). The caption input doubles as
   // the poll's question — the reference poll panel shows "Ask a question"
   // only as a static header label, no separate question field.
@@ -117,9 +123,23 @@ const ExperienceScreen = () => {
     }
   };
 
-  const pickImage = async () => {
-    const result = await launchImageLibrary({ mediaType: 'photo', quality: 0.7 });
-    if (!result.didCancel && !result.errorCode) setImage(result.assets[0]);
+  const pickMedia = async () => {
+    const result = await launchImageLibrary({ mediaType: 'mixed', quality: 0.7 });
+    if (result.didCancel || result.errorCode) return;
+    const asset = result.assets[0];
+    const isVideo = (asset.type || '').startsWith('video/');
+
+    if (isVideo) {
+      const error = validateVideoAsset(asset);
+      if (error) return Alert.alert('Video not supported', error);
+      setVideo(asset);
+      setImage(null);
+      setMediaRatio(nearestRatioKey(asset.width, asset.height)); // width/height rarely known upfront for video — falls back to 'original'
+    } else {
+      setImage(asset);
+      setVideo(null);
+      setMediaRatio(nearestRatioKey(asset.width, asset.height));
+    }
   };
 
   const togglePoll = () => {
@@ -127,7 +147,8 @@ const ExperienceScreen = () => {
       removePoll();
     } else {
       setShowPoll(true);
-      setImage(null); // image and poll are mutually exclusive
+      setImage(null); // image/video and poll are mutually exclusive
+      setVideo(null);
     }
   };
 
@@ -162,7 +183,7 @@ const ExperienceScreen = () => {
 
     if (showPoll && filledChoices.length < 2) return Alert.alert('Add at least 2 poll choices');
     if (hasPoll && !caption.trim()) return Alert.alert('Add a question for your poll');
-    if (!hasPoll && !caption && !image) return Alert.alert('Add caption or image');
+    if (!hasPoll && !caption && !image && !video) return Alert.alert('Add caption, image, or video');
 
     const formData = new FormData();
     formData.append('activity', selectedActivity);
@@ -173,14 +194,21 @@ const ExperienceScreen = () => {
       formData.append('poll_days', String(pollDays));
       formData.append('poll_hours', String(pollHours));
       formData.append('poll_minutes', String(pollMinutes));
-    } else {
+    } else if (video) {
+      appendVideoAsset(formData, 'video', video);
+      formData.append('media_ratio', mediaRatio);
+      if (video.duration) formData.append('video_duration', String(Math.round(video.duration)));
+    } else if (image) {
       appendImageAsset(formData, 'image', image);
+      formData.append('media_ratio', mediaRatio);
     }
 
     try {
       await axiosInstance.post('posts/', formData);
       setCaption('');
       setImage(null);
+      setVideo(null);
+      setMediaRatio('original');
       removePoll();
       fetchPosts();
     } catch (err) {
@@ -291,7 +319,7 @@ const ExperienceScreen = () => {
 
       <View style={styles.actionsRow}>
         <View style={styles.iconGroup}>
-          <TouchableOpacity onPress={pickImage} style={styles.iconBtn} disabled={showPoll}>
+          <TouchableOpacity onPress={pickMedia} style={styles.iconBtn} disabled={showPoll}>
             <Ionicons name="camera-outline" size={20} color={showPoll ? '#444' : '#888'} />
           </TouchableOpacity>
           <TouchableOpacity onPress={togglePoll} style={styles.iconBtn}>
@@ -308,7 +336,17 @@ const ExperienceScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {!showPoll && image && <Image source={{ uri: image.uri }} style={styles.previewImage} />}
+      {!showPoll && (image || video) && (
+        <>
+          <MediaRatioPicker selectedKey={mediaRatio} onSelect={setMediaRatio} />
+          <MediaPreview
+            asset={image || video}
+            kind={video ? 'video' : 'image'}
+            ratioKey={mediaRatio}
+            naturalRatio={image?.width && image?.height ? image.width / image.height : undefined}
+          />
+        </>
+      )}
     </View>
   );
 
@@ -742,11 +780,5 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '600',
     fontSize: 14,
-  },
-  previewImage: {
-    width: '100%',
-    height: 180,
-    borderRadius: 12,
-    marginTop: 12,
   },
 });

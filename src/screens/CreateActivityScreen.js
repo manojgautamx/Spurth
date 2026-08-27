@@ -8,7 +8,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-  Image,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
@@ -20,6 +19,9 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import * as ImagePicker from 'react-native-image-picker';
+import { nearestRatioKey, COVER_MEDIA_RATIO_KEYS } from '../constants/mediaRatios';
+import MediaRatioPicker from '../components/MediaRatioPicker';
+import MediaPreview from '../components/MediaPreview';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -94,6 +96,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
   const [coverImage, setCoverImage] = useState(
     editingActivity?.cover_image ? { uri: editingActivity.cover_image } : null
   );
+  const [coverRatio, setCoverRatio] = useState(editingActivity?.cover_image_ratio || 'original');
 
   // UI states
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
@@ -108,7 +111,9 @@ const CreateActivityScreen = ({ navigation, route }) => {
       { mediaType: 'photo', quality: 0.9 },
       res => {
         if (res.assets?.length) {
-          setCoverImage(res.assets[0]);
+          const asset = res.assets[0];
+          setCoverImage(asset);
+          setCoverRatio(nearestRatioKey(asset.width, asset.height));
         }
       }
     );
@@ -218,6 +223,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
     formData.append('is_invite_only', isInviteOnly ? 'true' : 'false');
 
     appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
+    formData.append('cover_image_ratio', coverRatio);
 
     try {
       if (isEditing) {
@@ -630,20 +636,25 @@ const CreateActivityScreen = ({ navigation, route }) => {
 
             {/* Cover Image */}
             <Text style={styles.fieldLabel}>Cover Image</Text>
-            <TouchableOpacity style={styles.imageUploadBox} onPress={pickCoverImage}>
-              {coverImage ? (
-                <Image
-                  source={{ uri: coverImage.uri }}
-                  style={styles.coverPreview}
-                  resizeMode="cover"
+            {coverImage ? (
+              <>
+                <TouchableOpacity onPress={pickCoverImage} activeOpacity={0.85}>
+                  <MediaPreview asset={coverImage} kind="image" ratioKey={coverRatio} style={{ marginTop: 0 }} />
+                </TouchableOpacity>
+                <MediaRatioPicker
+                  selectedKey={coverRatio}
+                  onSelect={setCoverRatio}
+                  allowedKeys={COVER_MEDIA_RATIO_KEYS}
                 />
-              ) : (
+              </>
+            ) : (
+              <TouchableOpacity style={styles.imageUploadBox} onPress={pickCoverImage}>
                 <View style={styles.imagePlaceholder}>
                   <Icon name="image-outline" size={28} color="#333" />
                   <Text style={styles.addImageText}>Add Cover Image</Text>
                 </View>
-              )}
-            </TouchableOpacity>
+              </TouchableOpacity>
+            )}
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -924,10 +935,6 @@ const styles = StyleSheet.create({
     color: '#444',
     fontSize: 13,
     fontFamily: Fonts.regular,
-  },
-  coverPreview: {
-    width: '100%',
-    height: '100%',
   },
 
   // ── Error ─────────────────────────────────────────────────────────────────

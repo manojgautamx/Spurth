@@ -6,6 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Fonts } from '../theme/fonts';
 import { promptSignIn } from '../utils/requireAuth';
 import ReportModal from './ReportModal';
+import VideoPlayer from './VideoPlayer';
+import { ratioValue } from '../constants/mediaRatios';
 
 import { BASE_URL } from '../config';
 
@@ -98,6 +100,13 @@ export default function PostCard({
   };
 
   const mainImageUri = getImageUrl(post.image);
+  const mainVideoUri = getImageUrl(post.video);
+  const hasRatio = post.media_ratio && post.media_ratio !== 'original';
+  // Always a full size decision (never leaves a fixed height for
+  // aspectRatio to try to override) — old ratio-less posts fall back to
+  // the same fixed heights the cards always used.
+  const mainMediaSizeStyle = hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 300 };
+  const compactMediaSizeStyle = hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 220 };
   const DEFAULT_COVER = 'https://via.placeholder.com/100x100.png?text=Event';
   const coverImageUri = getImageUrl(post.cover_image) || DEFAULT_COVER;
   const isConcluded = post.activity_is_concluded;
@@ -250,9 +259,11 @@ export default function PostCard({
           <PollBlock post={post} onVote={onVote} />
         ) : (
           <>
-            {mainImageUri && (
-              <Image source={{ uri: mainImageUri }} style={styles.compactImage} />
-            )}
+            {mainVideoUri ? (
+              <VideoPlayer uri={mainVideoUri} style={[styles.compactImage, compactMediaSizeStyle]} />
+            ) : mainImageUri ? (
+              <Image source={{ uri: mainImageUri }} style={[styles.compactImage, compactMediaSizeStyle]} />
+            ) : null}
             {post.caption ? (
               <Text style={styles.compactCaption}>{post.caption}</Text>
             ) : null}
@@ -355,9 +366,11 @@ export default function PostCard({
         <PollBlock post={post} onVote={onVote} />
       ) : (
         <>
-          {mainImageUri && (
-            <Image source={{ uri: mainImageUri }} style={styles.mainImage} />
-          )}
+          {mainVideoUri ? (
+            <VideoPlayer uri={mainVideoUri} style={[styles.mainImage, mainMediaSizeStyle]} />
+          ) : mainImageUri ? (
+            <Image source={{ uri: mainImageUri }} style={[styles.mainImage, mainMediaSizeStyle]} />
+          ) : null}
           {post.caption ? (
             <Text style={styles.caption}>{post.caption}</Text>
           ) : null}
@@ -465,9 +478,13 @@ const styles = StyleSheet.create({
   dotsBtn: {
     padding: 4,
   },
+  // No height here on purpose — it's decided per-post at render time
+  // (fixed 300 for ratio-less posts, aspectRatio otherwise). A static
+  // height here would compile to a CSS class on web that a later inline
+  // aspectRatio override can't cancel (RN-Web skips `height: undefined`
+  // entirely rather than using it to unset the class).
   mainImage: {
     width: '100%',
-    height: 300,
     borderRadius: 16,
     marginBottom: 16,
     backgroundColor: '#1A1A1A',
@@ -530,9 +547,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: Fonts.semibold,
   },
+  // See mainImage's comment — height intentionally left out here too.
   compactImage: {
     width: '100%',
-    height: 220,
     borderRadius: 12,
     marginBottom: 12,
     backgroundColor: '#1A1A1A',
