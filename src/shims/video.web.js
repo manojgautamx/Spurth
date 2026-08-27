@@ -5,7 +5,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
 const Video = forwardRef(function Video(
-  { source, style, paused, muted, repeat, resizeMode = 'cover', onLoad, onProgress },
+  { source, style, paused, muted, repeat, resizeMode = 'cover', onLoad, onProgress, onError },
   ref
 ) {
   const videoRef = useRef(null);
@@ -40,6 +40,7 @@ const Video = forwardRef(function Video(
       controls={false}
       onLoadedMetadata={(e) => onLoad && onLoad({ duration: e.target.duration })}
       onTimeUpdate={(e) => onProgress && onProgress({ currentTime: e.target.currentTime })}
+      onError={() => onError && onError()}
     />
   );
 });
