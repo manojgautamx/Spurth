@@ -95,6 +95,10 @@ const FAQS = [
   { q: 'Do I have to know someone to join?', a: "No. Most people arrive on their own. You can see who else is going and what they're into before you commit." },
   { q: 'Is my exact location shared?', a: 'No. Spurth uses an approximate area to sort activities by distance. Precise meeting points are only visible to people who have joined.' },
   { q: 'What are Experiences?', a: 'Posts made after an activity — photos and a few words, linked back to the activity they came from, so the next person can find it and join.' },
+  { q: 'Can I make my activity invite-only?', a: "Yes. Toggle it on when you create the activity — anyone else has to request to join and you approve them, while people you invite directly get in right away." },
+  { q: 'What if I need to cancel or reschedule?', a: "Hosts can reschedule or cancel from the activity page any time. Everyone who's joined gets notified immediately." },
+  { q: 'Do I need to verify anything to host?', a: 'A quick phone verification, yes — it keeps events real. Joining an activity never requires it.' },
+  { q: 'Can I report something that seems off?', a: "Every activity, post, and profile has a report option, and it's reviewed by our team — not automatically hidden, so nothing disappears from one bad-faith report." },
 ];
 
 function Section({ children, style }) {
@@ -329,7 +333,7 @@ const HEAD_LAYOUT = [
 // purpose (a handful of links, not a fully-connected mesh) so it reads as
 // "some of these people know each other" rather than a dense web.
 const HEAD_LINKS = [
-  [0, 1], [0, 3], [1, 4], [3, 6], [4, 6], [5, 6], [5, 7], [6, 8], [8, 10], [9, 10],
+  [0, 1], [0, 3], [1, 4], [2, 3], [3, 6], [4, 6], [5, 6], [5, 7], [6, 8], [8, 10], [9, 10],
 ];
 
 function headCenter(layout) {
@@ -600,8 +604,8 @@ export default function LandingScreen({ navigation }) {
               Discover activities around you, meet people who are into the same things, and make experiences worth sharing.
             </Animated.Text>
             <View style={styles.heroCtaRow}>
-              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>Explore Activities</Text>
+              <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, styles.ctaTeal]} activeOpacity={0.85}>
+                <Text style={[styles.ctaFilledText, styles.ctaTealText]}>Explore Activities</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={goJoin} style={styles.ctaOutline} activeOpacity={0.85}>
                 <Text style={styles.ctaOutlineText}>Create an Activity</Text>
@@ -929,7 +933,7 @@ export default function LandingScreen({ navigation }) {
             </Animated.Text>
             <Animated.View style={{ marginTop: 26, opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
               <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
-                <Text style={styles.ctaFilledText}>touch some grass</Text>
+                <Text style={styles.ctaFilledText}>Touch Grass</Text>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -993,6 +997,10 @@ const styles = StyleSheet.create({
   heroCtaRow: { flexDirection: 'row', gap: 12, marginTop: 30, flexWrap: 'wrap' },
   ctaFilled: { backgroundColor: ACCENT, paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
   ctaFilledText: { color: '#fff', fontSize: 15, fontFamily: Fonts.bold },
+  // Teal is light, so it needs dark text for contrast — unlike ACCENT, which
+  // is dark enough for white text everywhere else it's used.
+  ctaTeal: { backgroundColor: TEAL },
+  ctaTealText: { color: '#0A0A0C' },
   ctaOutline: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
   ctaOutlineText: { color: '#fff', fontSize: 15, fontFamily: Fonts.semibold },
   ctaOutlineLight: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 999 },
