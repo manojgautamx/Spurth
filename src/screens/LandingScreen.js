@@ -33,6 +33,7 @@ function Logo({ height = 28 }) {
 
 const ACCENT = '#6C5CE7';
 const TEAL = '#90E7E2'; // secondary accent — used sparingly, alongside ACCENT not instead of it
+const BRAND_TEAL = '#2CB9B0'; // deeper teal for the final CTA button
 const BG = '#0A0A0C';
 const SURFACE = '#121216';
 const RAISE = '#17171D';
@@ -604,8 +605,8 @@ export default function LandingScreen({ navigation }) {
               Discover activities around you, meet people who are into the same things, and make experiences worth sharing.
             </Animated.Text>
             <View style={styles.heroCtaRow}>
-              <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, styles.ctaTeal]} activeOpacity={0.85}>
-                <Text style={[styles.ctaFilledText, styles.ctaTealText]}>Explore Activities</Text>
+              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+                <Text style={styles.ctaFilledText}>Explore Activities</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={goJoin} style={styles.ctaOutline} activeOpacity={0.85}>
                 <Text style={styles.ctaOutlineText}>Create an Activity</Text>
@@ -932,7 +933,7 @@ export default function LandingScreen({ navigation }) {
               You can't scroll{'\n'}anymore. Better{'\n'}go out.
             </Animated.Text>
             <Animated.View style={{ marginTop: 26, opacity: finalBtnOpacity, transform: [{ translateY: finalBtnTranslate }] }}>
-              <TouchableOpacity onPress={goJoin} style={styles.ctaFilled} activeOpacity={0.85}>
+              <TouchableOpacity onPress={goJoin} style={[styles.ctaFilled, styles.ctaTeal]} activeOpacity={0.85}>
                 <Text style={styles.ctaFilledText}>Touch Grass</Text>
               </TouchableOpacity>
             </Animated.View>
@@ -997,10 +998,7 @@ const styles = StyleSheet.create({
   heroCtaRow: { flexDirection: 'row', gap: 12, marginTop: 30, flexWrap: 'wrap' },
   ctaFilled: { backgroundColor: ACCENT, paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
   ctaFilledText: { color: '#fff', fontSize: 15, fontFamily: Fonts.bold },
-  // Teal is light, so it needs dark text for contrast — unlike ACCENT, which
-  // is dark enough for white text everywhere else it's used.
-  ctaTeal: { backgroundColor: TEAL },
-  ctaTealText: { color: '#0A0A0C' },
+  ctaTeal: { backgroundColor: BRAND_TEAL },
   ctaOutline: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', paddingVertical: 15, paddingHorizontal: 24, borderRadius: 999 },
   ctaOutlineText: { color: '#fff', fontSize: 15, fontFamily: Fonts.semibold },
   ctaOutlineLight: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 999 },
