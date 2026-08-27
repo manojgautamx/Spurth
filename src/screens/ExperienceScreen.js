@@ -365,6 +365,12 @@ const ExperienceScreen = () => {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 80 }}
     >
+      {/* header/composer live inside the scroll view rather than pinned
+          above it — a tall media preview (e.g. a 9:16 crop) could otherwise
+          push the Post button off-screen with no way to scroll to it. */}
+      {header}
+      {composer}
+
       {joinedPosts.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>Joined</Text>
@@ -488,8 +494,6 @@ const ExperienceScreen = () => {
         <View style={styles.webRow}>
           <View style={styles.webContent}>
             <View style={styles.webCenter}>
-              {header}
-              {composer}
               {list}
             </View>
             <ActivitiesRail />
@@ -504,8 +508,6 @@ const ExperienceScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-      {header}
-      {composer}
       {list}
       {activityPickerModal}
       {numberPickerModal}

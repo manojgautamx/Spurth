@@ -1,7 +1,13 @@
-import React, { useRef, useState } from 'react';
-import { View, TouchableOpacity, StyleSheet, PanResponder } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, PanResponder, ActivityIndicator } from 'react-native';
 import Video from 'react-native-video';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+
+// A freshly-uploaded video's first playback often has to wait on
+// Cloudinary transcoding the requested delivery format on demand — if
+// it's still not ready after this long, tell the viewer why it's slow
+// rather than leaving them staring at a spinner with no explanation.
+const PROCESSING_HINT_DELAY_MS = 3000;
 
 // Inline post-media video player — Instagram-style controls (tap to
 // play/pause, bottom scrubber, mute toggle), not a reels feed: starts
@@ -13,9 +19,17 @@ export default function VideoPlayer({ uri, style }) {
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0); // 0..1
   const [showIcon, setShowIcon] = useState(true);
+  const [isReady, setIsReady] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [showProcessingHint, setShowProcessingHint] = useState(false);
   const videoRef = useRef(null);
   const iconTimeout = useRef(null);
   const barWidthRef = useRef(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setShowProcessingHint(true), PROCESSING_HINT_DELAY_MS);
+    return () => clearTimeout(t);
+  }, []);
 
   const flashIcon = () => {
     setShowIcon(true);
@@ -24,6 +38,7 @@ export default function VideoPlayer({ uri, style }) {
   };
 
   const togglePlay = () => {
+    if (!isReady || hasError) return;
     setPaused((p) => !p);
     flashIcon();
   };
@@ -55,40 +70,60 @@ export default function VideoPlayer({ uri, style }) {
         paused={paused}
         muted={muted}
         repeat
-        onLoad={(data) => setDuration(data.duration)}
+        onLoad={(data) => {
+          setDuration(data.duration);
+          setIsReady(true);
+        }}
+        onError={() => setHasError(true)}
         onProgress={(data) => {
           if (duration) setProgress(data.currentTime / duration);
         }}
       />
 
-      {(paused || showIcon) && (
-        <View style={styles.centerIconWrap} pointerEvents="none">
-          <View style={styles.centerIconBg}>
-            <Ionicons name={paused ? 'play' : 'pause'} size={26} color="#fff" />
-          </View>
+      {hasError ? (
+        <View style={styles.centerIconWrap}>
+          <Ionicons name="alert-circle-outline" size={26} color="#999" />
+          <Text style={styles.statusText}>Couldn't load video</Text>
         </View>
+      ) : !isReady ? (
+        <View style={styles.centerIconWrap} pointerEvents="none">
+          <ActivityIndicator color="#fff" size="small" />
+          {showProcessingHint && (
+            <Text style={styles.statusText}>Processing video…</Text>
+          )}
+        </View>
+      ) : (
+        <>
+          {(paused || showIcon) && (
+            <View style={styles.centerIconWrap} pointerEvents="none">
+              <View style={styles.centerIconBg}>
+                <Ionicons name={paused ? 'play' : 'pause'} size={26} color="#fff" />
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.muteBtn}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              setMuted((m) => !m);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={15} color="#fff" />
+          </TouchableOpacity>
+
+          <View
+            style={styles.scrubTrack}
+            onLayout={(e) => {
+              barWidthRef.current = e.nativeEvent.layout.width;
+            }}
+            {...scrubResponder.panHandlers}
+          >
+            <View style={[styles.scrubFill, { width: `${progress * 100}%` }]} />
+          </View>
+        </>
       )}
-
-      <TouchableOpacity
-        style={styles.muteBtn}
-        onPress={(e) => {
-          e.stopPropagation?.();
-          setMuted((m) => !m);
-        }}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={15} color="#fff" />
-      </TouchableOpacity>
-
-      <View
-        style={styles.scrubTrack}
-        onLayout={(e) => {
-          barWidthRef.current = e.nativeEvent.layout.width;
-        }}
-        {...scrubResponder.panHandlers}
-      >
-        <View style={[styles.scrubFill, { width: `${progress * 100}%` }]} />
-      </View>
     </TouchableOpacity>
   );
 }
@@ -103,6 +138,11 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+  },
+  statusText: {
+    color: '#ccc',
+    fontSize: 12.5,
   },
   centerIconBg: {
     width: 52,
