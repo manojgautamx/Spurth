@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Image, ScrollView, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import VideoPlayer from './VideoPlayer';
@@ -18,6 +18,7 @@ import { ratioValue } from '../constants/mediaRatios';
 export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRatio, style, onRemove }) {
   const [boxWidth, setBoxWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const scrollRef = useRef(null);
 
   const items = assets && assets.length > 0 ? assets : asset ? [asset] : [];
   if (items.length === 0) return null;
@@ -34,6 +35,16 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
     setActiveIndex(Math.max(0, Math.min(items.length - 1, idx)));
   };
 
+  // The counter badge alone isn't an obvious enough cue that a photo set is
+  // swipeable, especially with a mouse (no touch affordance) — these give
+  // an explicit, clickable way to page through, same idea as Instagram's
+  // web hover arrows.
+  const goTo = (index) => {
+    const clamped = Math.max(0, Math.min(items.length - 1, index));
+    scrollRef.current?.scrollTo({ x: clamped * boxWidth, animated: true });
+    setActiveIndex(clamped);
+  };
+
   return (
     <View
       style={[styles.box, { aspectRatio: ratio }, style]}
@@ -43,6 +54,7 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
         <VideoPlayer uri={items[0].uri} style={StyleSheet.absoluteFill} />
       ) : isCarousel ? (
         <ScrollView
+          ref={scrollRef}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
@@ -63,15 +75,36 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
       )}
 
       {isCarousel && (
-        <View style={styles.counterBadge} pointerEvents="none">
-          <Text style={styles.counterText}>{activeIndex + 1}/{items.length}</Text>
-        </View>
+        <>
+          <View style={styles.counterBadge} pointerEvents="none">
+            <Text style={styles.counterText}>{activeIndex + 1}/{items.length}</Text>
+          </View>
+
+          {activeIndex > 0 && (
+            <TouchableOpacity
+              style={[styles.arrowBtn, styles.arrowLeft]}
+              onPress={(e) => { e.stopPropagation?.(); goTo(activeIndex - 1); }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="chevron-back" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+          {activeIndex < items.length - 1 && (
+            <TouchableOpacity
+              style={[styles.arrowBtn, styles.arrowRight]}
+              onPress={(e) => { e.stopPropagation?.(); goTo(activeIndex + 1); }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </>
       )}
 
       {onRemove && kind !== 'video' && (
         <TouchableOpacity
           style={styles.removeBtn}
-          onPress={() => onRemove(activeIndex)}
+          onPress={(e) => { e.stopPropagation?.(); onRemove(activeIndex); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Ionicons name="close" size={16} color="#fff" />
@@ -105,6 +138,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  arrowBtn: {
+    position: 'absolute',
+    top: '50%',
+    marginTop: -16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arrowLeft: {
+    left: 8,
+  },
+  arrowRight: {
+    right: 8,
   },
   removeBtn: {
     position: 'absolute',
