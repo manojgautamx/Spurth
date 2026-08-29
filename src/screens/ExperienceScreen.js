@@ -11,6 +11,7 @@ import {
   Alert,
   StatusBar,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -46,6 +47,7 @@ const ExperienceScreen = () => {
   const [video, setVideo] = useState(null);
   const [mediaRatio, setMediaRatio] = useState('original');
   const [profile, setProfile] = useState(null);
+  const [posting, setPosting] = useState(false);
 
   // Poll composing — mutually exclusive with `image`/`video` (matches the
   // reference composer, which switches between a media preview and a
@@ -176,6 +178,7 @@ const ExperienceScreen = () => {
   };
 
   const createPost = async () => {
+    if (posting) return; // guards against double-submit from a fast repeat tap
     if (!selectedActivity) return Alert.alert('Select an activity first');
 
     const filledChoices = pollChoices.map(c => c.trim()).filter(Boolean);
@@ -203,6 +206,7 @@ const ExperienceScreen = () => {
       formData.append('media_ratio', mediaRatio);
     }
 
+    setPosting(true);
     try {
       await axiosInstance.post('posts/', formData);
       setCaption('');
@@ -215,6 +219,8 @@ const ExperienceScreen = () => {
       const data = err.response?.data;
       console.error('Create post error:', data || err.message);
       Alert.alert('Failed to post', data?.caption?.[0] || data?.detail || 'Something went wrong.');
+    } finally {
+      setPosting(false);
     }
   };
 
@@ -328,11 +334,15 @@ const ExperienceScreen = () => {
         </View>
 
         <TouchableOpacity
-          style={[styles.postBtn, !canPost && styles.postBtnDisabled]}
+          style={[styles.postBtn, (!canPost || posting) && styles.postBtnDisabled]}
           onPress={createPost}
-          disabled={!canPost}
+          disabled={!canPost || posting}
         >
-          <Text style={styles.postText}>Post</Text>
+          {posting ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.postText}>Post</Text>
+          )}
         </TouchableOpacity>
       </View>
 
