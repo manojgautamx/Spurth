@@ -43,13 +43,13 @@ const ExperienceScreen = () => {
   const [activityPickerVisible, setActivityPickerVisible] = useState(false);
   const [posts, setPosts] = useState([]);
   const [caption, setCaption] = useState('');
-  const [image, setImage] = useState(null);
+  const [images, setImages] = useState([]); // 1+ photos, or empty
   const [video, setVideo] = useState(null);
   const [mediaRatio, setMediaRatio] = useState('original');
   const [profile, setProfile] = useState(null);
   const [posting, setPosting] = useState(false);
 
-  // Poll composing — mutually exclusive with `image`/`video` (matches the
+  // Poll composing — mutually exclusive with `images`/`video` (matches the
   // reference composer, which switches between a media preview and a
   // poll panel rather than showing both). The caption input doubles as
   // the poll's question — the reference poll panel shows "Ask a question"
@@ -125,23 +125,35 @@ const ExperienceScreen = () => {
     }
   };
 
+  const MAX_POST_IMAGES = 10;
+
   const pickMedia = async () => {
-    const result = await launchImageLibrary({ mediaType: 'mixed', quality: 0.7 });
+    // selectionLimit enables multi-select on both native and the web shim;
+    // a picked video ignores it (video is always single) — checked below.
+    const result = await launchImageLibrary({ mediaType: 'mixed', quality: 0.7, selectionLimit: MAX_POST_IMAGES });
     if (result.didCancel || result.errorCode) return;
-    const asset = result.assets[0];
-    const isVideo = (asset.type || '').startsWith('video/');
+    const assets = result.assets || [];
+    if (assets.length === 0) return;
+    const first = assets[0];
+    const isVideo = (first.type || '').startsWith('video/');
 
     if (isVideo) {
-      const error = validateVideoAsset(asset);
+      const error = validateVideoAsset(first);
       if (error) return Alert.alert('Video not supported', error);
-      setVideo(asset);
-      setImage(null);
-      setMediaRatio(nearestRatioKey(asset.width, asset.height)); // width/height rarely known upfront for video — falls back to 'original'
+      setVideo(first);
+      setImages([]);
+      setMediaRatio(nearestRatioKey(first.width, first.height)); // width/height rarely known upfront for video — falls back to 'original'
     } else {
-      setImage(asset);
+      // A second pick REPLACES the current selection (matches the old
+      // single-image behavior) rather than appending to it.
+      setImages(assets.slice(0, MAX_POST_IMAGES));
       setVideo(null);
-      setMediaRatio(nearestRatioKey(asset.width, asset.height));
+      setMediaRatio(nearestRatioKey(first.width, first.height)); // ratio applies to the whole set, seeded from the first photo
     }
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const togglePoll = () => {
@@ -149,7 +161,7 @@ const ExperienceScreen = () => {
       removePoll();
     } else {
       setShowPoll(true);
-      setImage(null); // image/video and poll are mutually exclusive
+      setImages([]); // images/video and poll are mutually exclusive
       setVideo(null);
     }
   };
@@ -186,7 +198,7 @@ const ExperienceScreen = () => {
 
     if (showPoll && filledChoices.length < 2) return Alert.alert('Add at least 2 poll choices');
     if (hasPoll && !caption.trim()) return Alert.alert('Add a question for your poll');
-    if (!hasPoll && !caption && !image && !video) return Alert.alert('Add caption, image, or video');
+    if (!hasPoll && !caption && images.length === 0 && !video) return Alert.alert('Add caption, image(s), or video');
 
     const formData = new FormData();
     formData.append('activity', selectedActivity);
@@ -201,8 +213,8 @@ const ExperienceScreen = () => {
       appendVideoAsset(formData, 'video', video);
       formData.append('media_ratio', mediaRatio);
       if (video.duration) formData.append('video_duration', String(Math.round(video.duration)));
-    } else if (image) {
-      appendImageAsset(formData, 'image', image);
+    } else if (images.length > 0) {
+      images.forEach((img) => appendImageAsset(formData, 'images', img));
       formData.append('media_ratio', mediaRatio);
     }
 
@@ -210,7 +222,7 @@ const ExperienceScreen = () => {
     try {
       await axiosInstance.post('posts/', formData);
       setCaption('');
-      setImage(null);
+      setImages([]);
       setVideo(null);
       setMediaRatio('original');
       removePoll();
@@ -346,14 +358,17 @@ const ExperienceScreen = () => {
         </TouchableOpacity>
       </View>
 
-      {!showPoll && (image || video) && (
+      {!showPoll && (images.length > 0 || video) && (
         <>
           <MediaRatioPicker selectedKey={mediaRatio} onSelect={setMediaRatio} />
           <MediaPreview
-            asset={image || video}
+            asset={video}
+            assets={video ? undefined : images}
             kind={video ? 'video' : 'image'}
             ratioKey={mediaRatio}
-            naturalRatio={image?.width && image?.height ? image.width / image.height : undefined}
+            naturalRatio={images[0]?.width && images[0]?.height ? images[0].width / images[0].height : undefined}
+            onRemove={video ? undefined : removeImage}
+            style={{ marginTop: 12 }}
           />
         </>
       )}

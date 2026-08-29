@@ -639,7 +639,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
             {coverImage ? (
               <>
                 <TouchableOpacity onPress={pickCoverImage} activeOpacity={0.85}>
-                  <MediaPreview asset={coverImage} kind="image" ratioKey={coverRatio} style={{ marginTop: 0 }} />
+                  <MediaPreview asset={coverImage} kind="image" ratioKey={coverRatio} />
                 </TouchableOpacity>
                 <MediaRatioPicker
                   selectedKey={coverRatio}

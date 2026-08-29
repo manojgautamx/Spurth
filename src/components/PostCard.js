@@ -8,6 +8,7 @@ import { Fonts } from '../theme/fonts';
 import { promptSignIn } from '../utils/requireAuth';
 import ReportModal from './ReportModal';
 import VideoPlayer from './VideoPlayer';
+import MediaPreview from './MediaPreview';
 import { ratioValue } from '../constants/mediaRatios';
 
 import { BASE_URL } from '../config';
@@ -101,8 +102,11 @@ export default function PostCard({
     return url.startsWith('http') ? url : `${BASE_URL}${url}`;
   };
 
-  const mainImageUri = getImageUrl(post.image);
   const mainVideoUri = getImageUrl(post.video);
+  // Backend always normalizes to a list (including legacy single-image
+  // posts), so this one prop covers both — MediaPreview itself collapses
+  // to plain single-image rendering when there's just one.
+  const mainImageAssets = (post.images || []).map((uri) => ({ uri: getImageUrl(uri) }));
   const hasRatio = post.media_ratio && post.media_ratio !== 'original';
   // Always a full size decision (never leaves a fixed height for
   // aspectRatio to try to override) — old ratio-less posts fall back to
@@ -261,8 +265,8 @@ export default function PostCard({
           <>
             {mainVideoUri ? (
               <VideoPlayer uri={mainVideoUri} style={[styles.compactImage, compactMediaSizeStyle]} />
-            ) : mainImageUri ? (
-              <Image source={{ uri: mainImageUri }} style={[styles.compactImage, compactMediaSizeStyle]} />
+            ) : mainImageAssets.length > 0 ? (
+              <MediaPreview assets={mainImageAssets} kind="image" ratioKey={post.media_ratio} style={[styles.compactImage, compactMediaSizeStyle]} />
             ) : null}
             {post.caption ? (
               <Text style={styles.compactCaption}>{post.caption}</Text>
@@ -375,8 +379,8 @@ export default function PostCard({
         <>
           {mainVideoUri ? (
             <VideoPlayer uri={mainVideoUri} style={[styles.mainImage, mainMediaSizeStyle]} />
-          ) : mainImageUri ? (
-            <Image source={{ uri: mainImageUri }} style={[styles.mainImage, mainMediaSizeStyle]} />
+          ) : mainImageAssets.length > 0 ? (
+            <MediaPreview assets={mainImageAssets} kind="image" ratioKey={post.media_ratio} style={[styles.mainImage, mainMediaSizeStyle]} />
           ) : null}
           {post.caption ? (
             <Text style={styles.caption}>{post.caption}</Text>
