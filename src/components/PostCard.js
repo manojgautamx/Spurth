@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -83,6 +83,7 @@ export default function PostCard({
 }) {
   const navigation = useNavigation();
   const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Centralized here (rather than a parent-supplied onCommentPress) so
   // every screen that renders a PostCard opens the same dedicated post
@@ -131,6 +132,7 @@ export default function PostCard({
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
+          setDeleting(true);
           try {
             // axiosInstance (not a raw fetch) so an expired access token
             // gets silently refreshed-and-retried instead of just failing —
@@ -141,6 +143,7 @@ export default function PostCard({
           } catch (err) {
             console.warn('Delete post failed', err);
             Alert.alert('Error', 'Failed to delete post.');
+            setDeleting(false);
           }
         },
       },
@@ -285,6 +288,13 @@ export default function PostCard({
             <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
           </TouchableOpacity>
         </View>
+
+        {deleting && (
+          <View style={styles.deletingOverlay} pointerEvents="auto">
+            <ActivityIndicator color="#fff" />
+            <Text style={styles.deletingText}>Deleting…</Text>
+          </View>
+        )}
       </TouchableOpacity>
       {reportModal}
       </>
@@ -392,6 +402,13 @@ export default function PostCard({
           <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
         </TouchableOpacity>
       </View>
+
+      {deleting && (
+        <View style={styles.deletingOverlay} pointerEvents="auto">
+          <ActivityIndicator color="#fff" />
+          <Text style={styles.deletingText}>Deleting…</Text>
+        </View>
+      )}
     </TouchableOpacity>
     {reportModal}
     </>
@@ -577,6 +594,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: Fonts.semibold,
     flexShrink: 1,
+  },
+
+  // Shown over the whole card while a delete is in flight — pointerEvents
+  // "auto" so it also blocks stray taps on like/comment/etc. underneath
+  // while the request is out.
+  deletingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  deletingText: {
+    color: '#fff',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
   },
 });
 
