@@ -18,7 +18,7 @@ import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 
 const formatDateTime = (dateTimeStr) => {
-  if (!dateTimeStr) return { date: '', time: '' };
+  if (!dateTimeStr) return { date: '', time: '', combined: '' };
   const date = new Date(dateTimeStr);
   const formattedDate = date.toLocaleDateString('en-US', {
     weekday: 'short',
@@ -30,7 +30,7 @@ const formatDateTime = (dateTimeStr) => {
     hour: '2-digit',
     minute: '2-digit',
   });
-  return { date: formattedDate, time: formattedTime };
+  return { date: formattedDate, time: formattedTime, combined: `${formattedDate} · ${formattedTime}` };
 };
 
 const formatDistance = (km) => {
@@ -154,11 +154,7 @@ const ActivityCard = ({ activity, compact = false }) => {
             </View>
             <View style={styles.infoItemWeb}>
               <Ionicons name="calendar-outline" size={13} color="#ccc" />
-              <Text style={styles.infoTextWeb}>{formatDateTime(activity.date_time).date}</Text>
-            </View>
-            <View style={styles.infoItemWeb}>
-              <Ionicons name="time-outline" size={13} color="#ccc" />
-              <Text style={styles.infoTextWeb}>{formatDateTime(activity.date_time).time}</Text>
+              <Text style={styles.infoTextWeb} numberOfLines={1}>{formatDateTime(activity.date_time).combined}</Text>
             </View>
             <View style={styles.infoItemWeb}>
               <Ionicons name="location-sharp" size={13} color="#ccc" />
@@ -216,12 +212,7 @@ const ActivityCard = ({ activity, compact = false }) => {
 
         <View style={styles.infoRow}>
           <Ionicons name="calendar-outline" size={14} color="#ccc" />
-          <Text style={styles.infoText}>{formatDateTime(activity.date_time).date}</Text>
-        </View>
-
-        <View style={styles.infoRow}>
-          <Ionicons name="time-outline" size={14} color="#ccc" />
-          <Text style={styles.infoText}>{formatDateTime(activity.date_time).time}</Text>
+          <Text style={styles.infoText} numberOfLines={1}>{formatDateTime(activity.date_time).combined}</Text>
         </View>
 
         <View style={styles.infoRow}>
