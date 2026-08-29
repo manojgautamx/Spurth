@@ -33,16 +33,8 @@ function probeImageSize(uri) {
   });
 }
 
-const pickFile = (options = {}) => new Promise((resolve) => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = acceptFor(options.mediaType);
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) {
-      resolve({ didCancel: true });
-      return;
-    }
+function readFileAsAsset(file) {
+  return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = async () => {
       const isVideo = file.type.startsWith('video/');
@@ -60,9 +52,29 @@ const pickFile = (options = {}) => new Promise((resolve) => {
         asset.width = width;
         asset.height = height;
       }
-      resolve({ assets: [asset] });
+      resolve(asset);
     };
     reader.readAsDataURL(file);
+  });
+}
+
+const pickFile = (options = {}) => new Promise((resolve) => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = acceptFor(options.mediaType);
+  // Multi-select only when the caller actually wants it (post composer's
+  // photo picker) — every other call site (avatar, activity cover, video)
+  // omits selectionLimit and keeps today's single-file behavior exactly.
+  const limit = options.selectionLimit || 1;
+  input.multiple = limit > 1;
+  input.onchange = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, limit);
+    if (files.length === 0) {
+      resolve({ didCancel: true });
+      return;
+    }
+    const assets = await Promise.all(files.map(readFileAsAsset));
+    resolve({ assets });
   };
   input.click();
 });
