@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, Alert } from 'react-na
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
 import { promptSignIn } from '../utils/requireAuth';
 import ReportModal from './ReportModal';
@@ -131,16 +132,12 @@ export default function PostCard({
         style: 'destructive',
         onPress: async () => {
           try {
-            const token = await AsyncStorage.getItem('accessToken');
-            const res = await fetch(`${BASE_URL}/api/delete-post/${post.id}/`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.status === 204) {
-              if (onPostDeleted) onPostDeleted();
-            } else {
-              Alert.alert('Error', 'Failed to delete post.');
-            }
+            // axiosInstance (not a raw fetch) so an expired access token
+            // gets silently refreshed-and-retried instead of just failing —
+            // a raw fetch here had no such retry, so deletes would quietly
+            // fail with a generic error once the token aged out.
+            await axiosInstance.delete(`delete-post/${post.id}/`);
+            if (onPostDeleted) onPostDeleted();
           } catch (err) {
             console.warn('Delete post failed', err);
             Alert.alert('Error', 'Failed to delete post.');
