@@ -633,7 +633,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
 
           <View style={styles.hostRow}>
             <View style={styles.column}>
-              <Text style={styles.sectionHeader}>Host</Text>
+              <Text style={styles.sectionHeader}>{activity.is_hosting ? 'Host' : 'Posted by'}</Text>
               <TouchableOpacity
                 style={styles.pill}
                 activeOpacity={0.7}

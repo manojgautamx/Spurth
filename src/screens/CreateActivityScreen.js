@@ -82,6 +82,10 @@ const CreateActivityScreen = ({ navigation, route }) => {
     editingActivity?.price === 0 ? 'Free' : editingActivity?.price?.toString() || ''
   );
   const [isInviteOnly, setIsInviteOnly] = useState(editingActivity?.is_invite_only || false);
+  // ?? not || — false is a real, meaningful value here (unlike the other
+  // booleans above), so falling back on any falsy value would silently
+  // flip an edited activity's "just listing" choice back to hosting.
+  const [isHosting, setIsHosting] = useState(editingActivity?.is_hosting ?? true);
 
   // 🔥 Date & time
   const initialDate = editingActivity?.date_time
@@ -221,6 +225,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
       (!price || price.trim().toLowerCase() === 'free') ? 0 : price
     );
     formData.append('is_invite_only', isInviteOnly ? 'true' : 'false');
+    formData.append('is_hosting', isHosting ? 'true' : 'false');
 
     appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
     formData.append('cover_image_ratio', coverRatio);
@@ -601,6 +606,34 @@ const CreateActivityScreen = ({ navigation, route }) => {
               {isInviteOnly
                 ? 'Others must request to join — you approve or invite them directly.'
                 : 'Anyone can join right away.'}
+            </Text>
+
+            {/* Hosting vs. just listing — either way you keep full control
+                over the activity (edit, cancel, approve requests, etc.);
+                this only changes whether you show up as the "host". */}
+            <Text style={[styles.fieldLabel, { marginTop: 20 }]}>Are You Hosting?</Text>
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.typeBtn, isHosting && styles.typeBtnSelected]}
+                onPress={() => setIsHosting(true)}
+              >
+                <Text style={[styles.typeBtnText, isHosting && styles.typeBtnTextSelected]}>
+                  Hosting
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.typeBtn, !isHosting && styles.typeBtnSelected]}
+                onPress={() => setIsHosting(false)}
+              >
+                <Text style={[styles.typeBtnText, !isHosting && styles.typeBtnTextSelected]}>
+                  Just Listing
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={[styles.optionalLabel, { marginTop: 8 }]}>
+              {isHosting
+                ? "You're personally running this — you'll show up as the host."
+                : "You're just sharing info about an activity you're not personally running — no host badge."}
             </Text>
 
             {/* Price */}
