@@ -85,6 +85,8 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
               style={[styles.arrowBtn, styles.arrowLeft]}
               onPress={(e) => { e.stopPropagation?.(); goTo(activeIndex - 1); }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Previous photo"
             >
               <Ionicons name="chevron-back" size={18} color="#fff" />
             </TouchableOpacity>
@@ -94,6 +96,8 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
               style={[styles.arrowBtn, styles.arrowRight]}
               onPress={(e) => { e.stopPropagation?.(); goTo(activeIndex + 1); }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Next photo"
             >
               <Ionicons name="chevron-forward" size={18} color="#fff" />
             </TouchableOpacity>
@@ -106,6 +110,8 @@ export default function MediaPreview({ asset, assets, kind, ratioKey, naturalRat
           style={styles.removeBtn}
           onPress={(e) => { e.stopPropagation?.(); onRemove(activeIndex); }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Remove this photo"
         >
           <Ionicons name="close" size={16} color="#fff" />
         </TouchableOpacity>

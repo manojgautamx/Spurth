@@ -1,0 +1,21 @@
+# Spurth — https://spurth.com
+User-agent: *
+Allow: /
+
+# App screens behind auth, and the transactional flows. Nothing here is
+# useful in a search result and several are per-user.
+Disallow: /settings
+Disallow: /edit-profile
+Disallow: /setup-profile
+Disallow: /verify-phone
+Disallow: /verify-email-code
+Disallow: /reset-password
+Disallow: /forgot-password
+Disallow: /choose-username
+Disallow: /pick-location
+Disallow: /chats
+Disallow: /chat/
+Disallow: /notifications
+Disallow: /participants
+
+Sitemap: https://spurth.com/sitemap.xml

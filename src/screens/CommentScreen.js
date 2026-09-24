@@ -221,7 +221,11 @@ export default function CommentScreen({ route, navigation }) {
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>Post</Text>
-      <TouchableOpacity onPress={handleSharePost}>
+      <TouchableOpacity
+        onPress={handleSharePost}
+        accessibilityRole="button"
+        accessibilityLabel="Share this post"
+      >
         <Ionicons name="share-outline" size={24} color="#fff" />
       </TouchableOpacity>
     </View>

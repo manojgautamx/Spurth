@@ -65,6 +65,7 @@ export default function ProfileViewScreen({ route }) {
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState(null);
   const [profileError, setProfileError] = useState(null);
+  const [blocking, setBlocking] = useState(false);
   const POSTS_PAGE_SIZE = 2;
   const [visiblePostCount, setVisiblePostCount] = useState(POSTS_PAGE_SIZE);
 
@@ -126,8 +127,12 @@ export default function ProfileViewScreen({ route }) {
           fetchUserPosts(resolvedUserId);
         } catch (err) {
           // A network failure used to surface as "Profile not found", which
-          // reads as "this person doesn't exist" and invites no retry.
-          if (active) setProfileError(getErrorMessage(err, "Couldn't load this profile."));
+          // reads as "this person doesn't exist" and invites no retry. A
+          // real 404 still falls through to the not-found screen below —
+          // retrying that gets you the same 404.
+          if (active && err?.response?.status !== 404) {
+            setProfileError(getErrorMessage(err, "Couldn't load this profile."));
+          }
         } finally {
           if (active) setLoading(false);
         }
@@ -170,6 +175,50 @@ export default function ProfileViewScreen({ route }) {
     } finally {
       setPostsLoading(false);
     }
+  };
+
+  // App Store guideline 1.2 requires blocking alongside reporting for
+  // user-generated content, and reporting on its own leaves the user with
+  // no way to stop seeing someone.
+  const handleToggleBlock = () => {
+    if (!userToken) return promptSignIn(navigation, 'Sign in to block people.');
+    if (!targetUserId) return;
+
+    const currentlyBlocked = !!profile?.is_blocked;
+    const name = profile?.username ? `@${profile.username}` : 'this person';
+
+    Alert.alert(
+      currentlyBlocked ? `Unblock ${name}?` : `Block ${name}?`,
+      currentlyBlocked
+        ? `You'll start seeing ${name}'s posts and activities again.`
+        : `You won't see ${name}'s posts, activities or profile, and they won't see yours. You'll both leave any activities you share.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: currentlyBlocked ? 'Unblock' : 'Block',
+          style: currentlyBlocked ? 'default' : 'destructive',
+          onPress: async () => {
+            setBlocking(true);
+            try {
+              if (currentlyBlocked) {
+                await axiosInstance.delete(`block/${targetUserId}/`);
+                setProfile(prev => (prev ? { ...prev, is_blocked: false } : prev));
+                fetchUserPosts();
+              } else {
+                await axiosInstance.post(`block/${targetUserId}/`);
+                setProfile(prev => (prev ? { ...prev, is_blocked: true } : prev));
+                setPosts([]);
+                navigation.goBack();
+              }
+            } catch (err) {
+              Alert.alert('Error', getErrorMessage(err, "Couldn't update that block."));
+            } finally {
+              setBlocking(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleLike = async (postId) => {
@@ -299,13 +348,21 @@ export default function ProfileViewScreen({ route }) {
             — My profile:      back | edit  settings
             — Other profile:   back | share invite        */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
 
           <View style={{ flexDirection: 'row', gap: 20 }}>
             {/* Share button visible for everyone */}
-            <TouchableOpacity onPress={handleShareProfile}>
+            <TouchableOpacity
+              onPress={handleShareProfile}
+              accessibilityRole="button"
+              accessibilityLabel="Share this profile"
+            >
               <Ionicons name="share-outline" size={24} color="#fff" />
             </TouchableOpacity>
 
@@ -313,11 +370,17 @@ export default function ProfileViewScreen({ route }) {
               <>
                 <TouchableOpacity
                   onPress={() => navigation.navigate('ProfileEdit', { profile })}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit your profile"
                 >
                   <Ionicons name="create-outline" size={24} color="#fff" />
                 </TouchableOpacity>
 
-                <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('Settings')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Settings"
+                >
                   <Ionicons name="settings-outline" size={24} color="#fff" />
                 </TouchableOpacity>
               </>
@@ -329,6 +392,8 @@ export default function ProfileViewScreen({ route }) {
                       ? setInviteModalVisible(true)
                       : promptSignIn(navigation, 'Sign in to invite people to your events.')
                   }
+                  accessibilityRole="button"
+                  accessibilityLabel="Invite this person to an activity"
                 >
                   <Ionicons name="person-add-outline" size={24} color="#fff" />
                 </TouchableOpacity>
@@ -338,8 +403,22 @@ export default function ProfileViewScreen({ route }) {
                       ? setReportModalVisible(true)
                       : promptSignIn(navigation, 'Sign in to report this profile.')
                   }
+                  accessibilityRole="button"
+                  accessibilityLabel="Report this profile"
                 >
                   <Ionicons name="flag-outline" size={24} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleToggleBlock}
+                  disabled={blocking}
+                  accessibilityRole="button"
+                  accessibilityLabel={profile?.is_blocked ? 'Unblock this person' : 'Block this person'}
+                >
+                  <Ionicons
+                    name={profile?.is_blocked ? 'lock-open-outline' : 'ban-outline'}
+                    size={24}
+                    color={profile?.is_blocked ? '#2CB9B0' : '#fff'}
+                  />
                 </TouchableOpacity>
               </>
             )}

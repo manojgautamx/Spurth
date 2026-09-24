@@ -2,7 +2,7 @@ import 'react-native-gesture-handler'; // ✅ MUST be first line
 import React from 'react';
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getStateFromPath } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { navigationRef } from './src/navigation/navigationRef';
@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LocationProvider } from './src/context/LocationContext';
 import { DistanceProvider } from './src/context/DistanceContext';
 import AppAlertModal from './src/components/AppAlertModal';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import { showAlert } from './src/utils/alertController';
 
 import RNBootSplash from "react-native-bootsplash";
@@ -51,35 +52,53 @@ const linking = {
       // reload before being added here — this isn't unique to one screen.
       MainTabs: {
         screens: {
-          Home: 'Home',
-          Explore: 'Explore',
-          Experience: 'Experience',
-          Notification: 'Notification',
+          Home: 'home',
+          Explore: 'explore',
+          Experience: 'experience',
+          Notification: 'notifications',
           // Optional param so selecting a conversation in the wide-web split
           // pane (ChatListScreen) gives it a real, shareable/refreshable URL
           // instead of only living in local component state.
-          Chat: 'Chat/:activityId?',
+          Chat: 'chats/:activityId?',
         },
       },
       // Logged-out branch (AppNavigator.js's `!userToken` screens)
-      Welcome: 'Welcome',
-      Login: 'Login',
-      Signup: 'Signup',
-      GoogleUsername: 'GoogleUsername',
-      ForgotPassword: 'ForgotPassword',
-      ResetPassword: 'ResetPassword',
+      // Lowercase, because that's what a person types and what anyone
+      // linking to the site writes. React Navigation matches paths
+      // case-sensitively, so /login used to fall through to Landing while
+      // only /Login worked. getStateFromPath below keeps the old
+      // capitalised URLs resolving.
+      Welcome: 'welcome',
+      Login: 'login',
+      Signup: 'signup',
+      GoogleUsername: 'choose-username',
+      ForgotPassword: 'forgot-password',
+      ResetPassword: 'reset-password',
       // Logged-in branch
-      Profile: 'Profile',
-      CreateActivity: 'CreateActivity',
-      PhoneVerification: 'PhoneVerification',
-      EmailVerification: 'EmailVerification',
-      MapPicker: 'MapPicker',
-      ProfileEdit: 'ProfileEdit',
+      Profile: 'setup-profile',
+      CreateActivity: 'create',
+      PhoneVerification: 'verify-phone',
+      EmailVerification: 'verify-email-code',
+      MapPicker: 'pick-location',
+      ProfileEdit: 'edit-profile',
       ActivityChatScreen: 'chat/:activityId',
-      ParticipantsList: 'ParticipantsList',
-      ExploreMap: 'ExploreMap',
-      Settings: 'Settings',
+      ParticipantsList: 'participants',
+      ExploreMap: 'map',
+      Settings: 'settings',
     },
+  },
+
+  // Every route above used to be capitalised, so /Home, /Login and the
+  // rest are already out in the world — in bookmarks, in messages, in
+  // whatever anyone has shared. Lowercasing only the first segment leaves
+  // both spellings working, and leaves the rest of the path alone:
+  // /profile/ManojG has to keep its capitals, since that's a username.
+  getStateFromPath: (path, options) => {
+    const [pathname, search = ''] = path.split('?');
+    const segments = pathname.replace(/^\//, '').split('/');
+    if (segments.length) segments[0] = segments[0].toLowerCase();
+    const normalized = '/' + segments.join('/') + (search ? `?${search}` : '');
+    return getStateFromPath(normalized, options);
   },
 };
 
@@ -111,7 +130,13 @@ export default function App() {
         <AuthProvider>
           <DistanceProvider>
             <LocationProvider>
-              <AppNavigator />
+              {/* Inside the providers so a crash in any screen still lands
+                  on a recoverable page rather than a blank one, but outside
+                  AppNavigator so the boundary itself can't be taken down by
+                  the same error. */}
+              <ErrorBoundary>
+                <AppNavigator />
+              </ErrorBoundary>
             </LocationProvider>
           </DistanceProvider>
         </AuthProvider>

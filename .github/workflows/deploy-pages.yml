@@ -35,6 +35,11 @@ jobs:
       - name: Add custom domain file
         run: echo "spurth.com" > web-build/CNAME
 
+      - name: Add robots.txt and sitemap.xml
+        run: |
+          cp web/robots.txt web-build/robots.txt
+          cp web/sitemap.xml web-build/sitemap.xml
+
       - name: Add legal pages
         run: |
           mkdir -p web-build/terms web-build/privacy
@@ -68,6 +73,30 @@ jobs:
               await sharp('src/assets/logo.png')
                 .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
                 .toFile('web-build/favicon.png');
+            })();
+          "
+
+      - name: Build the link-preview image
+        # index.html points og:image and twitter:image at /og-image.png.
+        # Composited here from the same logo rather than committed as a
+        # binary, so it can't drift from the brand art. 1200x630 is what
+        # every platform crops from.
+        run: |
+          node -e "
+            const sharp = require('sharp');
+            (async () => {
+              const logo = await sharp('src/assets/logotext.png')
+                .resize({ width: 620, fit: 'inside', withoutEnlargement: true })
+                .toBuffer();
+              await sharp({
+                create: {
+                  width: 1200, height: 630, channels: 4,
+                  background: { r: 10, g: 10, b: 10, alpha: 1 },
+                },
+              })
+                .composite([{ input: logo, gravity: 'center' }])
+                .png()
+                .toFile('web-build/og-image.png');
             })();
           "
 

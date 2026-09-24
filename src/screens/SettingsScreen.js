@@ -9,6 +9,7 @@ import {
   StatusBar,
   ScrollView,
   ActivityIndicator,
+  Image,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -21,6 +22,8 @@ import { useNavigation } from '@react-navigation/native';
 import { Fonts } from '../theme/fonts';
 import { useDistance } from '../context/DistanceContext';
 import axiosInstance from '../utils/axiosInstance';
+import { listFrom } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
 import { AuthContext } from '../context/AuthContext';
 import { useIsWideWeb } from '../utils/responsive';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
@@ -28,10 +31,19 @@ import PhoneVerifySection from '../components/PhoneVerifySection';
 
 const DISTANCE_KEY = 'user_distance_km';
 
-const SettingRow = ({ label, onPress }) => (
-  <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
+const SettingRow = ({ label, value, onPress }) => (
+  <TouchableOpacity
+    style={styles.row}
+    onPress={onPress}
+    activeOpacity={0.7}
+    accessibilityRole="button"
+    accessibilityLabel={label}
+  >
     <Text style={styles.rowLabel}>{label}</Text>
-    <Ionicons name="chevron-forward" size={18} color="#555" />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {value ? <Text style={styles.rowValue}>{value}</Text> : null}
+      <Ionicons name="chevron-forward" size={18} color="#555" />
+    </View>
   </TouchableOpacity>
 );
 
@@ -42,6 +54,11 @@ export default function SettingsScreen() {
   const { refreshProfileStatus } = useContext(ProfileStatusContext);
   const { distanceKm, setDistanceKm } = useDistance();
   const [localDistance, setLocalDistance] = useState(distanceKm);
+  const [blocked, setBlocked] = useState([]);
+  const [blockedLoading, setBlockedLoading] = useState(false);
+  const [blockedError, setBlockedError] = useState('');
+  const [blockedModalVisible, setBlockedModalVisible] = useState(false);
+  const [unblockingId, setUnblockingId] = useState(null);
   const [email, setEmail] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -176,6 +193,41 @@ export default function SettingsScreen() {
       'Delete Account',
       'This permanently deletes your account and all your data. This cannot be undone.'
     );
+
+  // Blocking is done from a person's profile; this is where you see who
+  // you've blocked and undo it, since their profile is hidden from you
+  // once the block is in place.
+  const loadBlocked = async () => {
+    setBlockedLoading(true);
+    try {
+      const res = await axiosInstance.get('blocked/');
+      setBlocked(listFrom(res.data));
+      setBlockedError('');
+    } catch (err) {
+      setBlockedError(getErrorMessage(err, "Couldn't load your blocked accounts."));
+    } finally {
+      setBlockedLoading(false);
+    }
+  };
+
+  useEffect(() => { loadBlocked(); }, []);
+
+  const openBlockedModal = () => {
+    setBlockedModalVisible(true);
+    loadBlocked();
+  };
+
+  const handleUnblock = async (user) => {
+    setUnblockingId(user.id);
+    try {
+      await axiosInstance.delete(`block/${user.id}/`);
+      setBlocked(prev => prev.filter(b => b.id !== user.id));
+    } catch (err) {
+      Alert.alert('Error', getErrorMessage(err, `Couldn't unblock @${user.username}.`));
+    } finally {
+      setUnblockingId(null);
+    }
+  };
 
   const openHelpModal = () => {
     setHelpSubject('');
@@ -339,6 +391,12 @@ export default function SettingsScreen() {
           <SettingRow
             label="Privacy Policy"
             onPress={() => Linking.openURL('https://spurth.com/privacy')}
+          />
+          <View style={styles.divider} />
+          <SettingRow
+            label="Blocked Accounts"
+            value={blockedLoading ? '' : String(blocked.length)}
+            onPress={openBlockedModal}
           />
           <View style={styles.divider} />
           <SettingRow
@@ -539,6 +597,72 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Helpdesk Modal */}
+      <Modal
+        visible={blockedModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBlockedModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCardWrap}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Blocked Accounts</Text>
+              <Text style={styles.modalSubtitle}>
+                You won't see their posts or activities, and they won't see yours.
+              </Text>
+
+              {blockedLoading ? (
+                <ActivityIndicator color="#2CB9B0" style={{ marginVertical: 24 }} />
+              ) : blockedError ? (
+                <Text style={styles.modalErrorText}>{blockedError}</Text>
+              ) : blocked.length === 0 ? (
+                <Text style={styles.blockedEmpty}>
+                  You haven't blocked anyone. You can block someone from their profile.
+                </Text>
+              ) : (
+                <ScrollView style={styles.blockedList}>
+                  {blocked.map(u => (
+                    <View key={u.id} style={styles.blockedRow}>
+                      <Image
+                        source={
+                          u.avatar
+                            ? { uri: u.avatar }
+                            : require('../assets/avatar-placeholder.png')
+                        }
+                        style={styles.blockedAvatar}
+                      />
+                      <Text style={styles.blockedName} numberOfLines={1}>@{u.username}</Text>
+                      <TouchableOpacity
+                        style={styles.unblockBtn}
+                        onPress={() => handleUnblock(u)}
+                        disabled={unblockingId === u.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Unblock ${u.username}`}
+                      >
+                        {unblockingId === u.id ? (
+                          <ActivityIndicator size="small" color="#2CB9B0" />
+                        ) : (
+                          <Text style={styles.unblockText}>Unblock</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalCancel, { marginTop: 16 }]}
+                onPress={() => setBlockedModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close blocked accounts"
+              >
+                <Text style={styles.modalCancelText}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <Modal
         visible={helpModalVisible}
         transparent
@@ -749,6 +873,56 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 16,
+  },
+  rowValue: {
+    color: '#777',
+    fontSize: 13,
+    fontFamily: Fonts.regular,
+  },
+  blockedList: {
+    maxHeight: 280,
+    marginTop: 6,
+  },
+  blockedEmpty: {
+    color: '#888',
+    fontSize: 13.5,
+    lineHeight: 20,
+    marginVertical: 18,
+    fontFamily: Fonts.regular,
+  },
+  blockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  blockedAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#222',
+  },
+  blockedName: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14.5,
+    fontFamily: Fonts.regular,
+  },
+  unblockBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#2CB9B0',
+    minWidth: 82,
+    alignItems: 'center',
+  },
+  unblockText: {
+    color: '#2CB9B0',
+    fontSize: 12.5,
+    fontFamily: Fonts.semibold,
   },
   rowLabel: {
     color: '#fff',

@@ -81,7 +81,12 @@ export default function Navbar() {
             <TouchableOpacity onPress={() => handleNavigate('ProfileEdit')}>
               <Text style={styles.item}>Edit Profile</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={logout} style={styles.logoutItem}>
+            <TouchableOpacity
+              onPress={logout}
+              style={styles.logoutItem}
+              accessibilityRole="button"
+              accessibilityLabel="Log out"
+            >
               <Ionicons name="log-out-outline" size={24} color="#E81F89" />
               <Text style={styles.logoutText}>Logout</Text>
             </TouchableOpacity>

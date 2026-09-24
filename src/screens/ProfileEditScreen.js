@@ -17,6 +17,7 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
+import { getErrorMessage } from '../utils/errorMessage';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -157,9 +158,9 @@ export default function ProfileEditScreen({ navigation }) {
       Alert.alert('Success', 'Profile updated!');
       navigation.goBack();
     } catch (err) {
-      const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-      console.error('Update failed:', detail);
-      Alert.alert('Error', `Could not update profile: ${detail}`);
+      // This used to print the raw DRF payload at the user, e.g.
+      // Could not update profile: {"full_name":["This field may not be blank."]}
+      Alert.alert('Could not save', getErrorMessage(err, "Your profile couldn't be saved. Try again."));
     } finally {
       setSubmitting(false);
     }

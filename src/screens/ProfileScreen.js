@@ -17,6 +17,7 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
+import { getErrorMessage } from '../utils/errorMessage';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
 import { LocationContext } from '../context/LocationContext';
@@ -82,6 +83,7 @@ export default function ProfileScreen({ navigation }) {
   const [interests, setInterests] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [gender, setGender] = useState('');
 
   const { refreshProfileStatus } = useContext(ProfileStatusContext);
@@ -184,7 +186,22 @@ export default function ProfileScreen({ navigation }) {
 
   // ── Submit ─────────────────────────────────────────────────────────────────
 
+  // Checked here rather than letting the server reject it: the submit is a
+  // multipart upload that can take a while on a phone connection, and
+  // "This field may not be blank" arriving after that wait is a poor way to
+  // learn your name was empty.
+  const validateDetails = () => {
+    const next = {};
+    if (!fullName.trim()) next.fullName = 'Tell people what to call you.';
+    else if (fullName.trim().length < 2) next.fullName = 'That looks too short.';
+    if (!gender) next.gender = 'Pick one so we can tailor suggestions.';
+    if (!location.trim()) next.location = 'We use this to find activities near you.';
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const handleSubmit = async () => {
+    if (!validateDetails()) return;
     try {
       setSubmitting(true);
       const formData = new FormData();
@@ -210,11 +227,7 @@ export default function ProfileScreen({ navigation }) {
       await refreshProfileStatus();
 
     } catch (err) {
-      const detail = err.response?.data
-        ? JSON.stringify(err.response.data)
-        : err.message;
-      console.error('Profile error:', detail);
-      Alert.alert('Error', `Could not save profile: ${detail}`);
+      Alert.alert('Could not save', getErrorMessage(err, "Your profile couldn't be saved. Try again."));
     } finally {
       setSubmitting(false);
     }
@@ -338,9 +351,18 @@ export default function ProfileScreen({ navigation }) {
                 placeholder="Enter your full name"
                 placeholderTextColor="#555"
                 value={fullName}
-                onChangeText={setFullName}
+                onChangeText={text => {
+                  setFullName(text);
+                  if (fieldErrors.fullName) {
+                    setFieldErrors(prev => ({ ...prev, fullName: undefined }));
+                  }
+                }}
+                accessibilityLabel="Full name"
               />
             </View>
+            {fieldErrors.fullName ? (
+              <Text style={styles.fieldError}>{fieldErrors.fullName}</Text>
+            ) : null}
 
             {/* Gender */}
             <Text style={styles.fieldLabel}>Gender</Text>
@@ -349,7 +371,15 @@ export default function ProfileScreen({ navigation }) {
                 <TouchableOpacity
                   key={g}
                   style={[styles.genderBtn, gender === g && styles.genderBtnSelected]}
-                  onPress={() => setGender(g)}
+                  onPress={() => {
+                    setGender(g);
+                    if (fieldErrors.gender) {
+                      setFieldErrors(prev => ({ ...prev, gender: undefined }));
+                    }
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: gender === g }}
+                  accessibilityLabel={g.charAt(0).toUpperCase() + g.slice(1)}
                 >
                   <Text style={[styles.genderBtnText, gender === g && styles.genderBtnTextSelected]}>
                     {g.charAt(0).toUpperCase() + g.slice(1)}
@@ -357,6 +387,9 @@ export default function ProfileScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </View>
+            {fieldErrors.gender ? (
+              <Text style={styles.fieldError}>{fieldErrors.gender}</Text>
+            ) : null}
 
             {/* Date of Birth */}
             <Text style={styles.fieldLabel}>Date of Birth</Text>
@@ -395,9 +428,18 @@ export default function ProfileScreen({ navigation }) {
                 placeholder={autoFillingLocation ? 'Detecting your location…' : 'Where are you based?'}
                 placeholderTextColor="#555"
                 value={location}
-                onChangeText={handleLocationChange}
+                onChangeText={text => {
+                  handleLocationChange(text);
+                  if (fieldErrors.location) {
+                    setFieldErrors(prev => ({ ...prev, location: undefined }));
+                  }
+                }}
+                accessibilityLabel="Your location"
               />
             </View>
+            {fieldErrors.location ? (
+              <Text style={styles.fieldError}>{fieldErrors.location}</Text>
+            ) : null}
             {locationSuggestions.length > 0 && (
               <View style={styles.suggestionsContainer}>
                 {locationSuggestions.map((item, index) => (
@@ -551,6 +593,13 @@ const styles = StyleSheet.create({
   },
 
   // ── Step 2: Fields ────────────────────────────────────────────────────────
+  fieldError: {
+    color: '#E8735A',
+    fontSize: 12.5,
+    marginTop: 5,
+    marginBottom: 2,
+    fontFamily: Fonts.regular,
+  },
   fieldLabel: {
     color: '#fff',
     fontSize: 15,

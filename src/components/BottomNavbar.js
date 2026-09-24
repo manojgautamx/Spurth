@@ -47,6 +47,9 @@ const BottomNavbar = () => {
               style={styles.tabButton}
               onPress={() => setActiveTab(tab.name)}
               activeOpacity={0.7}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={tab.label}
             >
               <Ionicons
                 name={tab.iconName}
