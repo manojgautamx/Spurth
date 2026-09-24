@@ -15,6 +15,9 @@ import {
   Platform,
 } from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
+import { fetchAllPages, listFrom } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { AuthContext } from '../context/AuthContext';
 import { promptSignIn } from '../utils/requireAuth';
@@ -60,6 +63,8 @@ export default function ProfileViewScreen({ route }) {
 
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState(null);
+  const [profileError, setProfileError] = useState(null);
   const POSTS_PAGE_SIZE = 2;
   const [visiblePostCount, setVisiblePostCount] = useState(POSTS_PAGE_SIZE);
 
@@ -89,13 +94,13 @@ export default function ProfileViewScreen({ route }) {
           setTargetUserId(resolvedUserId);
 
           if (isMyProfile) {
-            const [myRes, joinedRes] = await Promise.all([
-              axiosInstance.get('my-activities/'),
-              axiosInstance.get('joined-activities/'),
+            const [mine, joined] = await Promise.all([
+              fetchAllPages(axiosInstance, 'my-activities/'),
+              fetchAllPages(axiosInstance, 'joined-activities/'),
             ]);
             if (!active) return;
-            setMyActivities(myRes.data);
-            setJoinedActivities(joinedRes.data);
+            setMyActivities(mine);
+            setJoinedActivities(joined);
           } else {
             // Fetch the viewed user's activities for display
             const res = await axiosInstance.get(`user-activities/${username}/`);
@@ -110,21 +115,19 @@ export default function ProfileViewScreen({ route }) {
             //    of the profile page (which loaded fine) from failing here.
             if (userToken) {
               const [ownCreated, ownJoined] = await Promise.all([
-                axiosInstance.get('my-activities/'),
-                axiosInstance.get('joined-activities/'),
+                fetchAllPages(axiosInstance, 'my-activities/'),
+                fetchAllPages(axiosInstance, 'joined-activities/'),
               ]);
               if (!active) return;
-              setMyOwnActivities([
-                ...(ownCreated.data || []),
-                ...(ownJoined.data || []),
-              ]);
+              setMyOwnActivities([...ownCreated, ...ownJoined]);
             }
           }
 
           fetchUserPosts(resolvedUserId);
         } catch (err) {
-          console.log('Profile fetch error:', err);
-          Alert.alert('Error', 'Profile not found');
+          // A network failure used to surface as "Profile not found", which
+          // reads as "this person doesn't exist" and invites no retry.
+          if (active) setProfileError(getErrorMessage(err, "Couldn't load this profile."));
         } finally {
           if (active) setLoading(false);
         }
@@ -145,26 +148,25 @@ export default function ProfileViewScreen({ route }) {
     if (!resolvedId) return;
     try {
       setPostsLoading(true);
-      const token = await AsyncStorage.getItem('accessToken');
+      setPostsError(null);
       // Filtered server-side by ?user= — fetching the global feed and
       // filtering client-side (as this used to) silently dropped the user's
       // own posts whenever they weren't within the feed's first page
       // (PAGE_SIZE=10), since anything posted by other users pushes older
       // posts off that page before the client-side filter ever sees them.
-      const res = await fetch(`${BASE_URL}/api/posts/?user=${resolvedId}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      const res = await axiosInstance.get('posts/', {
+        params: { user: resolvedId, page_size: 50 },
       });
-      const data = await res.json();
-      const normalized = (data.results || data)
-        .map(p => ({
+      setPosts(
+        listFrom(res.data).map(p => ({
           ...p,
           activity_id: p.activity,
           event_name: p.activity_name,
           is_host: p.is_host === true,
-        }));
-      setPosts(normalized);
+        }))
+      );
     } catch (err) {
-      console.warn('Failed to fetch user posts', err);
+      setPostsError(getErrorMessage(err, "Couldn't load these posts."));
     } finally {
       setPostsLoading(false);
     }
@@ -173,14 +175,10 @@ export default function ProfileViewScreen({ route }) {
   const handleLike = async (postId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${BASE_URL}/api/posts/${postId}/like/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axiosInstance.post(`posts/${postId}/like/`);
       fetchUserPosts();
     } catch (err) {
-      console.warn('Like failed', err);
+      Alert.alert('Error', getErrorMessage(err, "Couldn't register that like."));
     }
   };
 
@@ -254,6 +252,16 @@ export default function ProfileViewScreen({ route }) {
           </View>
           {isWideWeb && !userToken && <AuthPromptRail />}
         </View>
+      </View>
+    );
+  }
+
+  // A network failure and a genuinely missing profile are different things
+  // and only one of them is worth a retry button.
+  if (!profile && profileError) {
+    return (
+      <View style={styles.centered}>
+        <ErrorState message={profileError} onRetry={() => navigation.replace('ProfileView', { username })} />
       </View>
     );
   }
@@ -431,6 +439,10 @@ export default function ProfileViewScreen({ route }) {
 
           {postsLoading ? (
             <ActivityIndicator color="#36ACA6" style={{ marginTop: 16 }} />
+          ) : postsError ? (
+            <View style={styles.listCard}>
+              <ErrorState message={postsError} onRetry={() => fetchUserPosts()} compact />
+            </View>
           ) : posts.length === 0 ? (
             <View style={styles.listCard}>
               <Text style={{ color: '#777', textAlign: 'center' }}>No posts yet</Text>

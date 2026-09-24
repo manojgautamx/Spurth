@@ -15,6 +15,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../firebase/firebaseConfig';
 import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import axiosInstance from '../utils/axiosInstance';
+import { fetchAllPages } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
@@ -41,6 +44,7 @@ export default function ChatListScreen({ route }) {
   const isWideWeb = useIsWideWeb();
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('All');
   const [lastRead, setLastRead] = useState({});
   // Wide web only — selecting a chat opens it in the adjoining panel
@@ -93,13 +97,12 @@ export default function ChatListScreen({ route }) {
   useEffect(() => {
     const fetchActivities = async () => {
       try {
-        const [createdRes, joinedRes] = await Promise.all([
-          axiosInstance.get('my-activities/'),
-          axiosInstance.get('joined-activities/'),
+        // Every activity you're in needs a chat row, so both lists are
+        // walked to the end rather than stopping at the first page.
+        const [created, joined] = await Promise.all([
+          fetchAllPages(axiosInstance, 'my-activities/'),
+          fetchAllPages(axiosInstance, 'joined-activities/'),
         ]);
-
-        const created = createdRes.data || [];
-        const joined = joinedRes.data || [];
         const merged = [
           ...created,
           ...joined.filter(j => !created.some(c => c.id === j.id)),
@@ -131,7 +134,7 @@ export default function ChatListScreen({ route }) {
           });
         });
       } catch (err) {
-        console.log('Chat list error:', err);
+        setError(getErrorMessage(err, "Couldn't load your chats."));
       } finally {
         setLoading(false);
       }
@@ -250,6 +253,9 @@ export default function ChatListScreen({ route }) {
       showsVerticalScrollIndicator={false}
       contentContainerStyle={isWideWeb ? { paddingBottom: 40, paddingHorizontal: 20 } : { paddingBottom: 120 }}
       ListEmptyComponent={
+        error ? (
+          <ErrorState message={error} compact />
+        ) : (
         <Text style={styles.empty}>
           {activeFilter === 'Unread'
             ? 'No unread messages'
@@ -257,6 +263,7 @@ export default function ChatListScreen({ route }) {
             ? 'No read chats'
             : 'No activities yet. Join or create one!'}
         </Text>
+        )
       }
     />
   );

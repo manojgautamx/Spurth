@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from 'react';
+import React, { useEffect, useRef, useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,9 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import axiosInstance from '../utils/axiosInstance';
+import { fetchAllPages, listFrom, hasMore, mergeById } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import { appendImageAsset, appendVideoAsset } from '../utils/appendImageAsset';
 import { validateVideoAsset } from '../utils/validateVideoAsset';
 import { nearestRatioKey } from '../constants/mediaRatios';
@@ -42,6 +45,10 @@ const ExperienceScreen = () => {
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [activityPickerVisible, setActivityPickerVisible] = useState(false);
   const [posts, setPosts] = useState([]);
+  const [postsError, setPostsError] = useState(null);
+  const [postsHasMore, setPostsHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const postsPageRef = useRef(1);
   const [caption, setCaption] = useState('');
   const [images, setImages] = useState([]); // 1+ photos, or empty
   const [video, setVideo] = useState(null);
@@ -85,19 +92,21 @@ const ExperienceScreen = () => {
 
   const fetchMyActivities = async () => {
     try {
-      const [createdRes, joinedRes] = await Promise.all([
-        axiosInstance.get('my-activities/'),
-        axiosInstance.get('joined-activities/'),
+      // The composer's activity picker has to offer every activity you can
+      // post to, so both lists are walked to the end.
+      const [created, joined] = await Promise.all([
+        fetchAllPages(axiosInstance, 'my-activities/'),
+        fetchAllPages(axiosInstance, 'joined-activities/'),
       ]);
-      const created = createdRes.data || [];
-      const joined = joinedRes.data || [];
       const merged = [...created, ...joined.filter(j => !created.some(c => c.id === j.id))];
       const minimal = merged.map(a => ({ id: a.id, name: a.name }));
       setActivities(minimal);
       setJoinedActivityIds(new Set(merged.map(a => a.id)));
       if (minimal.length) setSelectedActivity(minimal[0].id);
     } catch (err) {
-      console.log('Fetch activities error:', err);
+      // Non-fatal: without this the composer just has no activity to post
+      // to, and the feed below reports its own failures.
+      setActivities([]);
     }
   };
 
@@ -110,19 +119,34 @@ const ExperienceScreen = () => {
   // Explore's, not scoped to your own activities, so it just shows
   // everything now (posts/ has no default restriction server-side either —
   // see PostViewSet.get_queryset).
-  const fetchPosts = async () => {
+  const normalizePost = p => ({
+    ...p,
+    activity_id: p.activity,
+    event_name: p.activity_name,
+  });
+
+  const fetchPosts = async ({ page = 1, append = false } = {}) => {
+    if (append) setLoadingMore(true);
     try {
-      const res = await axiosInstance.get('posts/');
-      const data = res.data;
-      const normalized = (data.results || data).map(p => ({
-        ...p,
-        activity_id: p.activity,
-        event_name: p.activity_name,
-      }));
-      setPosts(normalized);
+      const res = await axiosInstance.get('posts/', { params: { page } });
+      const rows = listFrom(res.data).map(normalizePost);
+      setPosts(prev => (append ? mergeById(prev, rows) : rows));
+      setPostsHasMore(hasMore(res.data));
+      postsPageRef.current = page;
+      setPostsError(null);
     } catch (err) {
-      console.log('Fetch posts error:', err);
+      // A failed "load more" leaves what's already on screen alone; only a
+      // failed first page replaces the feed with the error.
+      if (!append) setPosts([]);
+      setPostsError(getErrorMessage(err, "Couldn't load the feed."));
+    } finally {
+      setLoadingMore(false);
     }
+  };
+
+  const loadMorePosts = () => {
+    if (!postsHasMore || loadingMore) return;
+    fetchPosts({ page: postsPageRef.current + 1, append: true });
   };
 
   const MAX_POST_IMAGES = 10;
@@ -413,7 +437,9 @@ const ExperienceScreen = () => {
       )}
 
       <Text style={styles.sectionLabel}>Explore</Text>
-      {explorePosts.length === 0 ? (
+      {postsError && posts.length === 0 ? (
+        <ErrorState message={postsError} onRetry={() => fetchPosts()} />
+      ) : explorePosts.length === 0 ? (
         <Text style={styles.emptyText}>No experiences yet.</Text>
       ) : (
         explorePosts.map(post => (
@@ -426,6 +452,28 @@ const ExperienceScreen = () => {
             navigation={navigation}
           />
         ))
+      )}
+
+      {/* The feed used to stop at whatever the first page held, with
+          nothing on screen to say more existed. */}
+      {postsHasMore && (
+        <TouchableOpacity
+          style={styles.loadMoreBtn}
+          onPress={loadMorePosts}
+          disabled={loadingMore}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Load more posts"
+        >
+          {loadingMore ? (
+            <ActivityIndicator color="#2CB9B0" size="small" />
+          ) : (
+            <Text style={styles.loadMoreText}>Load more</Text>
+          )}
+        </TouchableOpacity>
+      )}
+      {postsError && posts.length > 0 && (
+        <Text style={styles.loadMoreError}>{postsError}</Text>
       )}
     </ScrollView>
   );
@@ -592,6 +640,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 8,
     marginBottom: 12,
+  },
+  loadMoreBtn: {
+    alignSelf: 'center',
+    marginTop: 8,
+    marginBottom: 24,
+    paddingVertical: 10,
+    paddingHorizontal: 26,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: '#2CB9B0',
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    color: '#2CB9B0',
+    fontSize: 13.5,
+    fontFamily: Fonts.semibold,
+  },
+  loadMoreError: {
+    color: '#9A9A9A',
+    fontSize: 12.5,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Fonts.regular,
   },
   emptyText: {
     color: '#555',

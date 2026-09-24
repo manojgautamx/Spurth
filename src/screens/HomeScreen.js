@@ -30,6 +30,9 @@ import { useIsWideWeb } from '../utils/responsive';
 import PostsRail from '../components/web/PostsRail';
 import HomeSkeleton from '../components/skeletons/HomeSkeleton';
 import { rankByInterest } from '../utils/rankByInterest';
+import { fetchAllPages, listFrom } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 
 const NEARBY_MAX = 5;
 
@@ -39,6 +42,7 @@ const HomeScreen = () => {
   const [otherActivities, setOtherActivities] = useState([]);
   const [joinedActivities, setJoinedActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('Nearby');
   const { location } = useContext(LocationContext);
 
@@ -58,27 +62,27 @@ const HomeScreen = () => {
   const fetchActivities = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      const [myRes, otherRes, joinedRes] = await Promise.all([
-        axios.get(`/my-activities/`),
-        axios.get(`/public-activities/`),
-        axios.get(`/joined-activities/`),
+      // The Created and Going tabs promise the user their own complete
+      // list, so those two are walked to the end — bounded by how many
+      // activities one person has. The public feed is not bounded by
+      // anything, so it takes the first page only; Explore is where you go
+      // to browse the rest.
+      const [mine, otherRes, joined] = await Promise.all([
+        fetchAllPages(axios, 'my-activities/'),
+        axios.get('public-activities/'),
+        fetchAllPages(axios, 'joined-activities/'),
       ]);
 
-      console.log('MY:', myRes.data);
-      console.log('OTHER:', otherRes.data);
-      console.log('JOINED:', joinedRes.data);
+      const joinedIds = new Set(joined.map(a => a.id));
+      const filteredOther = listFrom(otherRes.data).filter(a => !joinedIds.has(a.id));
 
-      const joinedIds = joinedRes.data.map(a => a.id);
-      const filteredOther = otherRes.data.filter(
-        a => !joinedIds.includes(a.id)
-      );
-
-      setMyActivities(myRes.data);
-      setJoinedActivities(joinedRes.data);
+      setMyActivities(mine);
+      setJoinedActivities(joined);
       setOtherActivities(filteredOther);
     } catch (e) {
-      console.log('Fetch error', e);
+      setError(getErrorMessage(e, "Couldn't load your activities."));
     } finally {
       setLoading(false);
     }
@@ -197,7 +201,8 @@ const HomeScreen = () => {
         const res = await axiosInstance.get('profile/');
         setProfile(res.data);
       } catch (err) {
-        console.error('Navbar profile fetch error:', err);
+        // Non-fatal: the avatar falls back to its placeholder and the
+        // interest-ranking below just doesn't personalize.
       }
     };
     fetchProfile();
@@ -221,7 +226,12 @@ const HomeScreen = () => {
 
   // Desktop: guide a new user toward a next action instead of a dead end.
   // Mobile is left exactly as it was.
-  const activitiesEmptyState = isWideWeb ? (
+  // A failed fetch used to fall through to "No Activities here" — the same
+  // screen you get when there genuinely are none, and the only one of the
+  // two worth offering a retry for.
+  const activitiesEmptyState = error ? (
+    <ErrorState message={error} onRetry={fetchActivities} />
+  ) : isWideWeb ? (
     <View style={styles.activitiesEmptyState}>
       <Text style={styles.activitiesEmptyTitle}>Nothing nearby yet</Text>
       <Text style={styles.activitiesEmptySubtitle}>
@@ -742,7 +752,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     fontSize: 14,
-    fontFamily: 'Fonts.regular',
+    fontFamily: Fonts.regular,
   },
 
   /* ───────── Activities empty state (web) — guides toward a next action ── */

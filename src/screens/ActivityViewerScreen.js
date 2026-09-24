@@ -20,6 +20,10 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { AuthContext } from '../context/AuthContext';
 import useAxios from '../utils/useAxios';
+import axiosInstance from '../utils/axiosInstance';
+import { listFrom } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import { promptSignIn } from '../utils/requireAuth';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
@@ -97,6 +101,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [descExpanded, setDescExpanded] = useState(false);
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [postsError, setPostsError] = useState(null);
 
   // Reschedule + map state — ALL before early return
   const [rescheduleVisible, setRescheduleVisible] = useState(false);
@@ -442,23 +447,25 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     ]);
   };
 
+  // These three went through a bare fetch() with a hand-attached token,
+  // which skipped axiosInstance's refresh-and-retry: once the access token
+  // expired, the posts simply stopped arriving and the section rendered as
+  // though the activity had none.
   const fetchActivityPosts = async () => {
     if (!activity?.id) return;
     try {
       setPostsLoading(true);
-      const token = await AsyncStorage.getItem('accessToken');
-      const res = await fetch(`${BASE_URL}/api/posts/?activity=${activity.id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      const normalized = (data.results || data).map(p => ({
-        ...p,
-        activity_id: p.activity,
-        event_name: p.activity_name,
-      }));
-      setPosts(normalized);
+      setPostsError(null);
+      const res = await axiosInstance.get('posts/', { params: { activity: activity.id } });
+      setPosts(
+        listFrom(res.data).map(p => ({
+          ...p,
+          activity_id: p.activity,
+          event_name: p.activity_name,
+        }))
+      );
     } catch (err) {
-      console.warn('Failed to fetch activity posts', err);
+      setPostsError(getErrorMessage(err, "Couldn't load posts for this activity."));
     } finally {
       setPostsLoading(false);
     }
@@ -467,29 +474,20 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const handleLike = async (postId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${BASE_URL}/api/posts/${postId}/like/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await axiosInstance.post(`posts/${postId}/like/`);
       fetchActivityPosts();
     } catch (err) {
-      console.warn('Like failed', err);
+      Alert.alert('Error', getErrorMessage(err, "Couldn't register that like."));
     }
   };
 
   const handleVote = async (postId, choiceId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to vote on polls.');
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      await fetch(`${BASE_URL}/api/posts/${postId}/vote/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ choice_id: choiceId }),
-      });
+      await axiosInstance.post(`posts/${postId}/vote/`, { choice_id: choiceId });
       fetchActivityPosts();
     } catch (err) {
-      console.warn('Vote failed', err);
+      Alert.alert('Error', getErrorMessage(err, "Couldn't record your vote."));
     }
   };
 
@@ -708,6 +706,8 @@ const ActivityViewerScreen = ({ route, navigation }) => {
             <Text style={styles.sectionHeader}>Activity</Text>
             {postsLoading ? (
               <ActivityIndicator color="#2CB9B0" style={{ marginTop: 20 }} />
+            ) : postsError ? (
+              <ErrorState message={postsError} onRetry={fetchActivityPosts} compact />
             ) : posts.length === 0 ? (
               <Text style={styles.noPostsText}>No activity yet for this event.</Text>
             ) : (
