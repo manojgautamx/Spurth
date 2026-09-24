@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, Image, StyleSheet, TouchableOpacity, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BASE_URL } from '../config';
+import axiosInstance from '../utils/axiosInstance';
+import { listFrom } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
 import PostsRail from '../components/web/PostsRail';
@@ -18,32 +21,37 @@ const ParticipantsListScreen = ({ route, navigation }) => {
   // path pattern). activity-detail/<id>/ already includes `participants`.
   const [participants, setParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [respondingId, setRespondingId] = useState(null);
 
-  useEffect(() => {
-    let active = true;
-    fetch(`${BASE_URL}/api/activity-detail/${activityId}/`)
-      .then((res) => res.json())
-      .then((data) => { if (active) setParticipants(data.participants || []); })
-      .catch((err) => console.warn('Failed to fetch participants', err))
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+  // Previously bare fetch() calls with a hand-attached token, so an expired
+  // access token produced an empty participants list rather than a retry.
+  const loadParticipants = useCallback(async () => {
+    try {
+      setError(null);
+      const res = await axiosInstance.get(`activity-detail/${activityId}/`);
+      setParticipants(res.data?.participants || []);
+    } catch (err) {
+      setError(getErrorMessage(err, "Couldn't load the participants."));
+    } finally {
+      setLoading(false);
+    }
   }, [activityId]);
+
+  useEffect(() => { loadParticipants(); }, [loadParticipants]);
 
   useEffect(() => {
     if (!isOwner) return;
     let active = true;
     (async () => {
       try {
-        const token = await AsyncStorage.getItem('accessToken');
-        const res = await fetch(`${BASE_URL}/api/join-requests/${activityId}/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (active) setPendingRequests(Array.isArray(data) ? data : []);
+        const res = await axiosInstance.get(`join-requests/${activityId}/`);
+        if (active) setPendingRequests(listFrom(res.data));
       } catch (err) {
-        console.warn('Failed to fetch join requests', err);
+        // The owner-only pending list is supplementary; the participants
+        // list above already reports its own failure.
+        if (active) setPendingRequests([]);
       }
     })();
     return () => { active = false; };
@@ -52,25 +60,14 @@ const ParticipantsListScreen = ({ route, navigation }) => {
   const handleRespond = async (requestId, action) => {
     setRespondingId(requestId);
     try {
-      const token = await AsyncStorage.getItem('accessToken');
-      const res = await fetch(`${BASE_URL}/api/respond-join-request/${requestId}/`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
-      if (res.ok) {
-        const jr = pendingRequests.find(r => r.id === requestId);
-        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
-        if (action === 'accept' && jr) {
-          setParticipants(prev => [...prev, jr.user]);
-        }
-      } else {
-        const data = await res.json().catch(() => ({}));
-        Alert.alert('Error', data.detail || 'Failed to respond to request.');
+      await axiosInstance.post(`respond-join-request/${requestId}/`, { action });
+      const jr = pendingRequests.find(r => r.id === requestId);
+      setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      if (action === 'accept' && jr) {
+        setParticipants(prev => [...prev, jr.user]);
       }
     } catch (err) {
-      console.warn('Respond to join request failed', err);
-      Alert.alert('Error', 'Something went wrong.');
+      Alert.alert('Error', getErrorMessage(err, "Couldn't respond to that request."));
     } finally {
       setRespondingId(null);
     }
@@ -93,23 +90,10 @@ const ParticipantsListScreen = ({ route, navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              const token = await AsyncStorage.getItem('accessToken');
-              const res = await fetch(
-                `${BASE_URL}/api/remove-participant/${activityId}/${item.id}/`,
-                {
-                  method: 'DELETE',
-                  headers: { Authorization: `Bearer ${token}` },
-                }
-              );
-              if (res.status === 204) {
-                // Remove from local list immediately
-                setParticipants(prev => prev.filter(p => p.id !== item.id));
-              } else {
-                Alert.alert('Error', 'Failed to remove participant.');
-              }
+              await axiosInstance.delete(`remove-participant/${activityId}/${item.id}/`);
+              setParticipants(prev => prev.filter(p => p.id !== item.id));
             } catch (err) {
-              console.warn('Remove participant failed', err);
-              Alert.alert('Error', 'Something went wrong.');
+              Alert.alert('Error', getErrorMessage(err, "Couldn't remove that participant."));
             }
           },
         },
@@ -208,7 +192,11 @@ const ParticipantsListScreen = ({ route, navigation }) => {
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No one has joined yet.</Text>
+            error ? (
+              <ErrorState message={error} onRetry={loadParticipants} compact />
+            ) : (
+              <Text style={styles.emptyText}>No one has joined yet.</Text>
+            )
           }
         />
       )}

@@ -5,6 +5,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import axiosInstance from '../../utils/axiosInstance';
+import { listFrom } from '../../utils/paginated';
 import { LocationContext, filterActivitiesByDistance } from '../../context/LocationContext';
 import { useDistance } from '../../context/DistanceContext';
 import { rankByInterest } from '../../utils/rankByInterest';
@@ -31,8 +32,8 @@ export default function ActivitiesRail() {
           axiosInstance.get('profile/'),
         ]);
 
-        const joinedIds = new Set((joinedRes.data || []).map(a => a.id));
-        const upcoming = (otherRes.data || []).filter(
+        const joinedIds = new Set(listFrom(joinedRes.data).map(a => a.id));
+        const upcoming = listFrom(otherRes.data).filter(
           a => !joinedIds.has(a.id) && !a.is_cancelled && new Date(a.date_time) >= new Date()
         );
         // Same algorithm as Home's Nearby tab / Explore's All Categories:
@@ -42,7 +43,9 @@ export default function ActivitiesRail() {
 
         if (!cancelled) setActivities(ranked.slice(0, PREVIEW_COUNT));
       } catch (err) {
-        console.log('ActivitiesRail fetch error:', err);
+        // A preview rail: it renders its own "nothing to show" state, and
+        // the main feed beside it already reports a failed load.
+        if (!cancelled) setActivities([]);
       } finally {
         if (!cancelled) setLoading(false);
       }

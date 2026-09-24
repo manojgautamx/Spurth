@@ -21,6 +21,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import useAxios from '../utils/useAxios';
 import { BASE_URL } from '../config';
 import { useNavigation } from '@react-navigation/native';
+import axiosInstance from '../utils/axiosInstance';
+import { getErrorMessage } from '../utils/errorMessage';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +85,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   const [username, setUsername]       = useState('');
   const [userAvatar, setUserAvatar]   = useState('');
   const [infoVisible, setInfoVisible] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [activity, setActivity]       = useState(null);
   const [showAllMembers, setShowAllMembers] = useState(false);
 
@@ -137,19 +140,31 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
         timestamp: serverTimestamp()
       });
     } catch (err) {
-      console.error('Firestore write failed:', err.message);
+      Alert.alert('Message not sent', 'Check your connection and try again.');
     }
   };
 
+  // This used to just close the panel and call onBack — no request was ever
+  // sent. The user was told they'd left, stayed a participant, kept getting
+  // the chat, and still counted against the activity's capacity.
   const handleLeaveActivity = () => {
-    Alert.alert('Leave Activity', 'Are you sure you want to leave this activity chat?', [
+    Alert.alert('Leave Activity', 'Are you sure you want to leave this activity?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Leave',
         style: 'destructive',
-        onPress: () => {
-          setInfoVisible(false);
-          if (onBack) onBack();
+        onPress: async () => {
+          if (leaving) return;
+          setLeaving(true);
+          try {
+            await axiosInstance.post(`leave-activity/${activityId}/`);
+            setInfoVisible(false);
+            if (onBack) onBack();
+          } catch (err) {
+            Alert.alert('Error', getErrorMessage(err, "Couldn't leave the activity."));
+          } finally {
+            setLeaving(false);
+          }
         },
       },
     ]);
@@ -378,9 +393,19 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
               </TouchableOpacity>
             )}
 
-            <TouchableOpacity style={styles.leaveBtn} onPress={handleLeaveActivity}>
-              <Ionicons name="exit-outline" size={20} color="#E81F89" />
-              <Text style={styles.leaveText}>Leave Activity</Text>
+            <TouchableOpacity
+              style={styles.leaveBtn}
+              onPress={handleLeaveActivity}
+              disabled={leaving}
+              accessibilityRole="button"
+              accessibilityLabel="Leave this activity"
+            >
+              {leaving ? (
+                <ActivityIndicator size="small" color="#E81F89" />
+              ) : (
+                <Ionicons name="exit-outline" size={20} color="#E81F89" />
+              )}
+              <Text style={styles.leaveText}>{leaving ? 'Leaving…' : 'Leave Activity'}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

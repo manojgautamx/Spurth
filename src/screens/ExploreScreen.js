@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useContext, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,10 @@ import isBetween from 'dayjs/plugin/isBetween';
 import { useNavigation } from '@react-navigation/native';
 
 import useAxios from '../utils/useAxios';
+import axiosInstance from '../utils/axiosInstance';
+import { listFrom, hasMore, mergeById } from '../utils/paginated';
+import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from '../components/ErrorState';
 import ActivityCard from '../components/ActivityCard';
 import { Fonts } from '../theme/fonts';
 import { getMainCategory } from '../utils/categoryMapper';
@@ -80,6 +84,10 @@ const ExploreScreen = () => {
   const [profile, setProfile] = useState(null);
 
   const axios = useAxios();
+  const [error, setError] = useState(null);
+  const [canLoadMore, setCanLoadMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageRef = useRef(1);
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
 
@@ -89,22 +97,33 @@ const ExploreScreen = () => {
       .catch(() => {});
   }, []);
 
-  const fetchActivities = async () => {
+  const fetchActivities = async ({ page = 1, append = false } = {}) => {
     try {
-      setLoading(true);
-      const res = await axios.get(`${BASE_URL}/api/public-activities/`);
+      if (append) setLoadingMore(true);
+      else setLoading(true);
+      setError(null);
 
-      const processed = res.data.map(item => ({
+      const res = await axiosInstance.get('public-activities/', { params: { page } });
+      const processed = listFrom(res.data).map(item => ({
         ...item,
-        mainCategory: getMainCategory(item.activity_type)
+        mainCategory: getMainCategory(item.activity_type),
       }));
 
-      setActivities(processed);
+      setActivities(prev => (append ? mergeById(prev, processed) : processed));
+      setCanLoadMore(hasMore(res.data));
+      pageRef.current = page;
     } catch (e) {
-      console.log('Explore fetch error', e);
+      if (!append) setActivities([]);
+      setError(getErrorMessage(e, "Couldn't load activities right now."));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
+  };
+
+  const loadMoreActivities = () => {
+    if (!canLoadMore || loadingMore || loading) return;
+    fetchActivities({ page: pageRef.current + 1, append: true });
   };
 
   useEffect(() => {
@@ -117,14 +136,9 @@ const ExploreScreen = () => {
       const searchUsers = async () => {
         try {
           setSearchingUsers(true);
-          const res = await axios.get(`${BASE_URL}/api/users/?search=${searchQuery}`);
-          
-          // Fix: Check if data is in .results (paginated) or just the array
-          const data = res.data.results || res.data; 
-          setUserResults(Array.isArray(data) ? data : []);
-          
+          const res = await axiosInstance.get('users/', { params: { search: searchQuery } });
+          setUserResults(listFrom(res.data));
         } catch (e) {
-          console.log('User search error', e);
           setUserResults([]);
         } finally {
           setSearchingUsers(false);
@@ -402,6 +416,11 @@ const ExploreScreen = () => {
     if (item.kind === 'sticky') return stickyHeader;
     if (item.kind === 'search-results') return <SearchResultsHeader />;
     if (item.kind === 'empty') {
+      // "No Activities found." and "we couldn't reach the server" looked
+      // identical here, and only one of them is worth retrying.
+      if (error) {
+        return <ErrorState message={error} onRetry={() => fetchActivities()} />;
+      }
       return (
         <View style={styles.emptyContainer}>
           {!loading && (
@@ -429,6 +448,13 @@ const ExploreScreen = () => {
       style={isWideWeb ? styles.webCenter : undefined}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 100 }}
+      onEndReached={searchQuery.length > 0 ? undefined : loadMoreActivities}
+      onEndReachedThreshold={0.4}
+      ListFooterComponent={
+        loadingMore ? (
+          <ActivityIndicator color="#2CB9B0" style={{ marginVertical: 20 }} />
+        ) : null
+      }
     />
   );
 

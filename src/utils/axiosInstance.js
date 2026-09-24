@@ -4,9 +4,17 @@ import { Alert } from 'react-native';
 import { BASE_URL } from '../config';
 import { triggerLogout } from './authRef';
 
+// A request with no timeout hangs forever on a flaky connection, leaving
+// whatever screen fired it stuck on a skeleton with nothing to react to.
+// Uploads get a much longer budget — a video on a slow connection is
+// legitimately slow, and cutting one off mid-transfer is worse than waiting.
+const REQUEST_TIMEOUT_MS = 20000;
+const UPLOAD_TIMEOUT_MS = 180000;
+
 // 🔥 Create instance (NO default Content-Type)
 const axiosInstance = axios.create({
   baseURL: `${BASE_URL}/api/`,
+  timeout: REQUEST_TIMEOUT_MS,
 });
 
 // 🔐 Attach access token
@@ -21,6 +29,9 @@ axiosInstance.interceptors.request.use(
     // ✅ IMPORTANT: Handle FormData correctly
     if (config.data instanceof FormData) {
       config.headers['Content-Type'] = 'multipart/form-data';
+      if (config.timeout === REQUEST_TIMEOUT_MS) {
+        config.timeout = UPLOAD_TIMEOUT_MS;
+      }
     }
 
     return config;
