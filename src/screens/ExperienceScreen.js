@@ -330,7 +330,12 @@ const ExperienceScreen = () => {
               />
               <Text style={styles.pollChoiceCount}>{choice.length}/25</Text>
               {i === pollChoices.length - 1 && pollChoices.length < 4 && (
-                <TouchableOpacity onPress={addPollChoice} style={styles.pollAddBtn}>
+                <TouchableOpacity
+                  onPress={addPollChoice}
+                  style={styles.pollAddBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add another poll option"
+                >
                   <Ionicons name="add" size={18} color="#2CB9B0" />
                 </TouchableOpacity>
               )}
@@ -361,10 +366,21 @@ const ExperienceScreen = () => {
 
       <View style={styles.actionsRow}>
         <View style={styles.iconGroup}>
-          <TouchableOpacity onPress={pickMedia} style={styles.iconBtn} disabled={showPoll}>
+          <TouchableOpacity
+            onPress={pickMedia}
+            style={styles.iconBtn}
+            disabled={showPoll}
+            accessibilityRole="button"
+            accessibilityLabel="Add photos or a video"
+          >
             <Ionicons name="camera-outline" size={20} color={showPoll ? '#444' : '#888'} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={togglePoll} style={styles.iconBtn}>
+          <TouchableOpacity
+            onPress={togglePoll}
+            style={styles.iconBtn}
+            accessibilityRole="button"
+            accessibilityLabel={showPoll ? 'Remove the poll' : 'Add a poll'}
+          >
             <Ionicons name="stats-chart-outline" size={20} color={showPoll ? '#2CB9B0' : '#888'} />
           </TouchableOpacity>
         </View>

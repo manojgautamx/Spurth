@@ -61,7 +61,13 @@ export default function VideoPlayer({ uri, style }) {
   ).current;
 
   return (
-    <TouchableOpacity activeOpacity={1} onPress={togglePlay} style={[styles.container, style]}>
+    <TouchableOpacity
+      activeOpacity={1}
+      onPress={togglePlay}
+      style={[styles.container, style]}
+      accessibilityRole="button"
+      accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+    >
       <Video
         ref={videoRef}
         source={{ uri }}
@@ -109,6 +115,8 @@ export default function VideoPlayer({ uri, style }) {
               setMuted((m) => !m);
             }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={muted ? 'Unmute video' : 'Mute video'}
           >
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={15} color="#fff" />
           </TouchableOpacity>

@@ -253,7 +253,12 @@ export default function PostCard({
             )}
           </View>
 
-          <TouchableOpacity style={styles.dotsBtn} onPress={showPostOptions}>
+          <TouchableOpacity
+            style={styles.dotsBtn}
+            onPress={showPostOptions}
+            accessibilityRole="button"
+            accessibilityLabel="More options for this post"
+          >
             <Ionicons name="ellipsis-horizontal" size={20} color="#ccc" />
           </TouchableOpacity>
         </View>
@@ -276,7 +281,12 @@ export default function PostCard({
 
         {/* Actions */}
         <View style={styles.actions}>
-          <TouchableOpacity style={styles.actionItem} onPress={() => onLike(post.id)}>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={() => onLike(post.id)}
+            accessibilityRole="button"
+            accessibilityLabel={`${post.is_liked ? 'Remove your like from' : 'Like'} this post. ${post.likes_count || 0} likes`}
+          >
             <Ionicons
               name={post.is_liked ? 'flame' : 'flame-outline'}
               size={22}
@@ -287,7 +297,12 @@ export default function PostCard({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionItem} onPress={goToDetail}>
+          <TouchableOpacity
+            style={styles.actionItem}
+            onPress={goToDetail}
+            accessibilityRole="button"
+            accessibilityLabel={`Open comments. ${post.comments_count || 0} comments`}
+          >
             <Ionicons name="chatbubble-outline" size={20} color="#fff" />
             <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
           </TouchableOpacity>
@@ -366,7 +381,12 @@ export default function PostCard({
               </Text>
             </View>
           )}
-          <TouchableOpacity style={styles.dotsBtn} onPress={showPostOptions}>
+          <TouchableOpacity
+            style={styles.dotsBtn}
+            onPress={showPostOptions}
+            accessibilityRole="button"
+            accessibilityLabel="More options for this post"
+          >
             <Ionicons name="ellipsis-horizontal" size={20} color="#888" />
           </TouchableOpacity>
         </View>
@@ -390,7 +410,12 @@ export default function PostCard({
 
       {/* Actions */}
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.actionItem} onPress={() => onLike(post.id)}>
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={() => onLike(post.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`${post.is_liked ? 'Remove your like from' : 'Like'} this post. ${post.likes_count || 0} likes`}
+        >
           <Ionicons
             name={post.is_liked ? 'flame' : 'flame-outline'}
             size={24}
@@ -401,7 +426,12 @@ export default function PostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionItem} onPress={goToDetail}>
+        <TouchableOpacity
+          style={styles.actionItem}
+          onPress={goToDetail}
+          accessibilityRole="button"
+          accessibilityLabel={`Open comments. ${post.comments_count || 0} comments`}
+        >
           <Ionicons name="chatbubble-outline" size={22} color="#fff" />
           <Text style={styles.actionText}>{post.comments_count || '0'}</Text>
         </TouchableOpacity>
