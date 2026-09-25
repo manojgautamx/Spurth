@@ -8,6 +8,35 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:23044304139:android:4d0ef5d25ac6335542460e",
+        "android_client_info": {
+          "package_name": "com.spurth"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrswMH-sy9qA9DqeEU08CY1Vk0yYWdf60"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:23044304139:android:0629bc4cd6c3830942460e",
         "android_client_info": {
           "package_name": "com.streetleague"
