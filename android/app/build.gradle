@@ -80,6 +80,31 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Real release signing. Every existing release build was signed with the
+// world-readable debug key (committed to this repo) until now — this loads
+// android/keystore.properties (gitignored; generated once, alongside
+// android/app/spurth-release.keystore, also gitignored) when it exists.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+// A fresh checkout (or CI) with no keystore.properties can still run every
+// OTHER task — only a task that actually assembles/bundles/installs a
+// Release variant is refused, rather than that task silently succeeding
+// signed with the debug key instead.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasReleaseKeystore && graph.allTasks.any { it.name.contains('Release') }) {
+        throw new GradleException(
+            "Refusing to build a Release variant signed with the debug key. " +
+            "android/keystore.properties is missing — see the comment at the " +
+            "top of that file (or its template) for what it needs to contain."
+        )
+    }
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -100,15 +125,28 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            if (hasReleaseKeystore) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Real signing when keystore.properties exists; falls back to
+            // the debug config only so tasks that don't actually produce a
+            // Release artifact (assembleDebug, tasks, lint, ...) keep
+            // working on a checkout that doesn't have it yet — the
+            // taskGraph check above is what actually refuses a Release
+            // build in that case, this fallback just keeps configuration
+            // from failing outright.
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
