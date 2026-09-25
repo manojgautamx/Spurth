@@ -1,4 +1,4 @@
-package com.streetleague
+package com.spurth
 
 import android.app.Application
 import com.facebook.react.PackageList
