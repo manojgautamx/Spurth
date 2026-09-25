@@ -32,6 +32,19 @@
       android:name="com.google.android.geo.API_KEY"
       android:value="AIzaSyA3_dtp1rNdfWEWaEfEZBPrPKtfL1ddlsk" />
 
+    <!-- FCM shows a push under this channel id on Android 8+; the backend
+         sends every push with channel_id='default' (api/push.py) so this
+         has to match, or Android silently drops the notification instead
+         of falling back to some default channel. ic_launcher is a
+         placeholder — Android prefers a flat white/transparent icon for
+         the status bar, worth swapping in once there's a proper one. -->
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_channel_id"
+      android:value="default" />
+    <meta-data
+      android:name="com.google.firebase.messaging.default_notification_icon"
+      android:resource="@mipmap/ic_launcher" />
+
     <activity
       android:name=".MainActivity"
       android:label="@string/app_name"
