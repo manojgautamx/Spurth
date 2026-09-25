@@ -31,6 +31,7 @@ module.exports = (env, argv) => {
         '@react-native-google-signin/google-signin': path.resolve(__dirname, 'src/shims/googleSignin.web.js'),
         'react-native-maps': path.resolve(__dirname, 'src/shims/maps.web.js'),
         'react-native-video': path.resolve(__dirname, 'src/shims/video.web.js'),
+        '@react-native-firebase/messaging': path.resolve(__dirname, 'src/shims/push.web.js'),
       },
       fallback: {
         crypto: false,
