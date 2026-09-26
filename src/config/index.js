@@ -20,4 +20,4 @@ export const GOOGLE_MAPS_API_KEY = 'AIzaSyA3_dtp1rNdfWEWaEfEZBPrPKtfL1ddlsk';
 // events in, never reading any back) — same reasoning as the Maps key above.
 // One project receives both the Android app and the web build; the SDK tags
 // each event with its platform. Leave empty and monitoring stays fully off.
-export const SENTRY_DSN = '';
+export const SENTRY_DSN = 'https://ea32c9deac58f27f82bf39acdc604a03@o4512147938344960.ingest.us.sentry.io/4512152054398976';
