@@ -29,9 +29,13 @@
       android:name="org.apache.http.legacy"
       android:required="false" />
 
+    <!-- Restricted to com.spurth + this app's signing SHA-1 in Google
+         Cloud Console — the web bundle uses a separate, HTTP-referrer-
+         restricted key (src/config/index.js) instead of this one, since
+         an API key can only carry one restriction type. -->
     <meta-data
       android:name="com.google.android.geo.API_KEY"
-      android:value="AIzaSyA3_dtp1rNdfWEWaEfEZBPrPKtfL1ddlsk" />
+      android:value="AIzaSyBrqFBNEZXEvz21GemqCADvz9pDgKi-lUQ" />
 
     <!-- FCM shows a push under this channel id on Android 8+; the backend
          sends every push with channel_id='default' (api/push.py) so this
