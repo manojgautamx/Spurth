@@ -2,9 +2,11 @@
  * @format
  */
 
+import './src/utils/monitoringInit';
 import {AppRegistry} from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import App from './App';
+import {wrapRoot} from './src/utils/monitoring';
 import {name as appName} from './app.json';
 
 // Must be registered here, before AppRegistry mounts anything — a handler
@@ -15,4 +17,6 @@ import {name as appName} from './app.json';
 // hands the message off, so there's nothing further to do in the body.
 messaging().setBackgroundMessageHandler(async () => {});
 
-AppRegistry.registerComponent(appName, () => App);
+const Root = wrapRoot(App);
+
+AppRegistry.registerComponent(appName, () => Root);

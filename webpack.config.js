@@ -82,6 +82,12 @@ module.exports = (env, argv) => {
         // localhost instead of the real API — every hosted request would
         // have silently gone nowhere.
         __DEV__: JSON.stringify(!isProduction),
+        // Names the deploy on every error report (src/utils/monitoring.web.js)
+        // so Sentry can say which release introduced a regression. CI sets
+        // GITHUB_SHA; a local build is just "dev".
+        __SENTRY_RELEASE__: JSON.stringify(
+          process.env.GITHUB_SHA ? `spurth-web@${process.env.GITHUB_SHA.slice(0, 12)}` : 'spurth-web@dev'
+        ),
       }),
       new webpack.ProvidePlugin({
         process: 'process/browser',
