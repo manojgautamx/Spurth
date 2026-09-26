@@ -439,13 +439,18 @@ function FaqItem({ f, open, onPress, isWide }) {
         <Text style={styles.faqQ}>{f.q}</Text>
         <Ionicons name={open ? 'remove' : 'add'} size={20} color={ACCENT} />
       </View>
-      {open && (
+      {/* Always mounted — closed state collapses it to zero height instead
+          of unmounting it, so the answer is identically invisible to a
+          sighted user either way, but stays in the DOM for a crawler (or
+          the Landing prerender step, which never clicks a question) that
+          only ever sees the page's default, all-collapsed state. */}
+      <View style={{ height: open ? undefined : 0, overflow: 'hidden' }}>
         <Animated.Text
           style={[styles.faqA, { opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}
         >
           {f.a}
         </Animated.Text>
-      )}
+      </View>
     </TouchableOpacity>
   );
 }
