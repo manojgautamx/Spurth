@@ -40,6 +40,15 @@ jobs:
           cp web/robots.txt web-build/robots.txt
           cp web/sitemap.xml web-build/sitemap.xml
 
+      - name: Add Android App Links verification file
+        # Lets a shared https://spurth.com/... link open the Android app
+        # directly instead of the browser — Android fetches this exact
+        # path over plain HTTPS (no redirect) before trusting the app's
+        # intent-filter (see AndroidManifest.xml's autoVerify filter).
+        run: |
+          mkdir -p web-build/.well-known
+          cp web/.well-known/assetlinks.json web-build/.well-known/assetlinks.json
+
       - name: Add legal pages
         run: |
           mkdir -p web-build/terms web-build/privacy
