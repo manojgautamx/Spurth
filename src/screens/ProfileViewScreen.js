@@ -12,7 +12,6 @@ import {
   Modal,
   FlatList,
   Share,                     // ← ADD 1: import Share
-  Platform,
 } from 'react-native';
 import axiosInstance from '../utils/axiosInstance';
 import { fetchAllPages, listFrom } from '../utils/paginated';
@@ -321,7 +320,7 @@ export default function ProfileViewScreen({ route }) {
         <Text style={{ color: '#fff', marginBottom: 16 }}>Profile not found</Text>
         <TouchableOpacity
           style={styles.notFoundBtn}
-          onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+          onPress={() => navigation.navigate(userToken ? 'MainTabs' : 'Welcome')}
         >
           <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
         </TouchableOpacity>

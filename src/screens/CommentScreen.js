@@ -146,7 +146,7 @@ export default function CommentScreen({ route, navigation }) {
         <Text style={styles.notFoundText}>Post not found</Text>
         <TouchableOpacity
           style={styles.notFoundBtn}
-          onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+          onPress={() => navigation.navigate(userToken ? 'MainTabs' : 'Welcome')}
         >
           <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
         </TouchableOpacity>
@@ -214,7 +214,7 @@ export default function CommentScreen({ route, navigation }) {
           // A deep link (shared post URL) has no navigation history behind
           // it — goBack() would silently no-op there.
           if (navigation.canGoBack()) navigation.goBack();
-          else navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'));
+          else navigation.navigate(userToken ? 'MainTabs' : 'Welcome');
         }}
         style={styles.backButton}
       >

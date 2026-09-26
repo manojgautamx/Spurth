@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, createContext, useRef } from 'react';
-import { ActivityIndicator, View, Alert, Linking, Platform } from 'react-native';
+import { ActivityIndicator, View, Alert, Linking } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -268,7 +268,7 @@ export default function AppNavigator() {
       const target =
         nextPhase === 'main' ? 'MainTabs' :
         nextPhase === 'onboarding' ? 'Profile' :
-        (Platform.OS === 'web' ? 'Landing' : 'Welcome');
+        'Welcome';
       navigationRef.reset({ index: 0, routes: [{ name: target }] });
     }
     prevPhaseRef.current = nextPhase;
@@ -289,9 +289,15 @@ export default function AppNavigator() {
   // are now the first children in JSX; without this, Stack.Navigator would
   // default to whichever of those happens to be first, which crashes on a
   // plain cold-boot (no params to render).
+  //
+  // Logged out lands on Welcome on every platform. The marketing Landing page
+  // is still what a logged-out visitor gets at the bare `/` — the `linking`
+  // config maps that path straight to it, so it never reaches this fallback —
+  // but a signed-out user who ends up anywhere else (after logging out, or on
+  // a stale /home bookmark) belongs at the sign-in entry point, not the pitch.
   const initialRouteName = userToken
     ? (profileComplete ? 'MainTabs' : 'Profile')
-    : (Platform.OS === 'web' ? 'Landing' : 'Welcome');
+    : 'Welcome';
 
   return (
     <ProfileStatusContext.Provider

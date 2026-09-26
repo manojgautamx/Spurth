@@ -32,6 +32,8 @@ function Logo({ height = 28 }) {
 }
 
 const ACCENT = '#6C5CE7';
+// The colour PostCard.js gives a liked post's flame.
+const FIRE = '#FF6B35';
 const TEAL = '#90E7E2'; // secondary accent — used sparingly, alongside ACCENT not instead of it
 const BRAND_TEAL = '#2CB9B0'; // deeper teal for the final CTA button
 const BG = '#0A0A0C';
@@ -104,6 +106,18 @@ const FAQS = [
 
 function Section({ children, style }) {
   return <View style={[styles.section, style]}>{children}</View>;
+}
+
+// The real feed's like button is a flame (PostCard.js), not a heart — these
+// marketing cards should show visitors the same thing they'll see once
+// they're inside.
+function LikeStat({ count, label, style, textStyle }) {
+  return (
+    <View style={[styles.likeStat, style]}>
+      <Ionicons name="flame" size={14} color={FIRE} />
+      <Text style={[styles.expFooterText, textStyle]}>{count} · {label}</Text>
+    </View>
+  );
 }
 
 function InitialsAvatar({ text, size = 28, bg = '#2A2A33', color = '#ccc', style }) {
@@ -464,7 +478,9 @@ export default function LandingScreen({ navigation }) {
   const viewportH = useViewportHeight();
 
   const goJoin = () => navigation.navigate('Welcome');
-  const goLogin = () => navigation.navigate('Login');
+  // Welcome is the one sign-in/sign-up entry point — it offers login itself,
+  // so "Log in" here doesn't skip past it to the bare login form.
+  const goLogin = () => navigation.navigate('Welcome');
   const goSignup = () => navigation.navigate('Signup');
 
   const handleScroll = Animated.event(
@@ -729,7 +745,7 @@ export default function LandingScreen({ navigation }) {
                   </View>
                   <Text style={styles.expQuote}>"Turned up alone to a 6 a-side and left with a WhatsApp group of nine."</Text>
                   <View style={styles.expFooter}>
-                    <Ionicons name="heart" size={12} color={ACCENT} />
+                    <Ionicons name="flame" size={14} color={FIRE} />
                     <Text style={styles.expFooterText}>214 · linked to <Text style={{ color: '#DEDEE4', fontFamily: Fonts.semibold }}>Sunday 6 a-side</Text></Text>
                   </View>
                 </View>
@@ -748,7 +764,7 @@ export default function LandingScreen({ navigation }) {
                 </View>
                 <Text style={styles.expHighlightQuote}>"I moved here in March and knew nobody. Fourteen activities later my weekends are full."</Text>
                 <View style={[styles.expFooter, { borderTopWidth: 0, marginTop: 16, paddingTop: 0 }]}>
-                  <Text style={[styles.expFooterText, { color: ACCENT, fontFamily: Fonts.semibold }]}>♥ 512 · Pottery, beginners</Text>
+                  <LikeStat count="512" label="Pottery, beginners" textStyle={{ color: ACCENT, fontFamily: Fonts.semibold }} />
                 </View>
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="up" rotateFrom={8} rotateTo={1.1} delay={70} style={{ height: 300 }} innerStyle={[styles.expPhotoOnly, { height: 300 }]}>
@@ -760,7 +776,7 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Kiran T. <Text style={styles.expUserTime}>· 3d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Hosted a chess table in the park expecting two people. Sixteen showed up."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 189 · Chess in the park</Text>
+                <LikeStat count="189" label="Chess in the park" style={{ marginTop: 12 }} />
               </Reveal>
             </View>
 
@@ -779,7 +795,7 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Sneha M. <Text style={styles.expUserTime}>· 5d</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Left the house at 4 a.m. with five strangers. Watched the valley wake up."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 331 · Sunrise hike to Shivapuri</Text>
+                <LikeStat count="331" label="Sunrise hike to Shivapuri" style={{ marginTop: 12 }} />
               </Reveal>
               <Reveal scrollY={scrollY} scrollOffsetRef={scrollOffsetRef} reduced={reduced} from="right" rotateFrom={10} rotateTo={1.5} delay={140} style={{ height: 170 }} innerStyle={[styles.expPhotoOnly, { height: 170 }]}>
                 <Image source={{ uri: photo('expTea', 500, 340) }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
@@ -797,7 +813,7 @@ export default function LandingScreen({ navigation }) {
                   <Text style={styles.expUser}>Dev J. <Text style={styles.expUserTime}>· 1w</Text></Text>
                 </View>
                 <Text style={styles.expQuote}>"Found a 5-stack that actually communicates. We've played every Friday since."</Text>
-                <Text style={[styles.expFooterText, { marginTop: 12 }]}>♥ 96 · Valorant 5-stack</Text>
+                <LikeStat count="96" label="Valorant 5-stack" style={{ marginTop: 12 }} />
               </Reveal>
             </View>
           </View>
@@ -1044,6 +1060,7 @@ const styles = StyleSheet.create({
   expHighlightQuote: { color: '#141419', fontSize: 18, lineHeight: 25, fontFamily: Fonts.bold, letterSpacing: -0.3 },
   expFooter: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
   expFooterText: { color: MUTE, fontSize: 11.5, fontFamily: Fonts.semibold },
+  likeStat: { flexDirection: 'row', alignItems: 'center', gap: 5 },
 
   // Statement
   statement: { overflow: 'hidden', justifyContent: 'center' },
