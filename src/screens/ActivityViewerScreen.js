@@ -13,7 +13,6 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Dimensions,
-  Platform,
   TextInput,
   FlatList,
 } from 'react-native';
@@ -259,7 +258,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
           <Text style={styles.notFoundText}>Activity not found</Text>
           <TouchableOpacity
             style={styles.notFoundBtn}
-            onPress={() => navigation.navigate(userToken ? 'MainTabs' : (Platform.OS === 'web' ? 'Landing' : 'Welcome'))}
+            onPress={() => navigation.navigate(userToken ? 'MainTabs' : 'Welcome')}
           >
             <Text style={styles.notFoundBtnText}>Go to Spurth</Text>
           </TouchableOpacity>
