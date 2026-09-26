@@ -64,9 +64,21 @@ async function main() {
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
 
-    const errors = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
-    page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
+    // Only uncaught exceptions in the app's own JS are treated as fatal.
+    // console 'error' messages are logged but never block the prerender —
+    // that channel is also where Chromium reports things like a single
+    // resource 404, which found the real bug the first time this ran in
+    // CI: the pipeline generates favicon.png in a step that used to run
+    // AFTER this one, so index.html's own <link rel="icon"> 404'd on every
+    // single CI run even though the page's actual text content — the only
+    // thing this script cares about — rendered completely correctly.
+    // Reordered the workflow so that's no longer true, but a stray 404
+    // (a slow third-party image, e.g.) genuinely shouldn't discard an
+    // otherwise-good snapshot either.
+    const fatalErrors = [];
+    const consoleErrors = [];
+    page.on('pageerror', (e) => fatalErrors.push(String(e)));
+    page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
 
     await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'networkidle0', timeout: 60000 });
 
@@ -101,8 +113,11 @@ async function main() {
     // meta-tag.
     const rootHtml = await page.evaluate(() => document.getElementById('root').innerHTML);
 
-    if (errors.length) {
-      throw new Error(`Landing page threw while prerendering:\n${errors.join('\n')}`);
+    if (consoleErrors.length) {
+      console.warn(`(non-fatal) console errors during prerender:\n${consoleErrors.join('\n')}`);
+    }
+    if (fatalErrors.length) {
+      throw new Error(`Landing page threw while prerendering:\n${fatalErrors.join('\n')}`);
     }
     if (!rootHtml.includes('worth doing') || !rootHtml.includes('Is Spurth free to use')) {
       throw new Error('Prerendered HTML is missing expected landing copy — refusing to overwrite index.html with a broken snapshot.');

@@ -32,36 +32,6 @@ jobs:
       - name: Build web bundle
         run: npm run web:build
 
-      - name: Prerender the Landing page for crawlers
-        # A client-only bundle serves <div id="root"></div> to anything
-        # that doesn't execute JS — this drives a real headless Chromium
-        # against the just-built app and bakes what it actually renders
-        # into index.html, so a crawler's first fetch sees the real
-        # headline, categories and FAQ text. See scripts/prerender-landing.js
-        # for why this only touches #root and leaves <head> untouched.
-        #
-        # The script itself exits 0 either way (see its own comment on why)
-        # so a Chromium quirk on this runner can never block the rest of the
-        # deploy — which also means this step always shows green, whether
-        # or not prerendering actually happened. Piping its output into the
-        # job summary is what makes a silent failure visible again, without
-        # needing the admin-only log-download API.
-        run: |
-          node scripts/prerender-landing.js 2>&1 | tee prerender-output.log
-          {
-            echo "## Landing page prerender"
-            echo '```'
-            cat prerender-output.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          # TEMPORARY, for one debugging cycle: $GITHUB_STEP_SUMMARY isn't
-          # exposed through any API surface readable without admin rights
-          # on this repo, so there's no way to read it after the fact.
-          # Publishing the same log as a plain file on the deployed site
-          # makes it fetchable with a bare curl instead. Remove once
-          # prerendering is confirmed working from spurth.com itself.
-          cp prerender-output.log web-build/prerender-debug.log
-
       - name: Add custom domain file
         run: echo "spurth.com" > web-build/CNAME
 
@@ -84,16 +54,6 @@ jobs:
           mkdir -p web-build/terms web-build/privacy
           cp web/terms.html web-build/terms/index.html
           cp web/privacy.html web-build/privacy/index.html
-
-      - name: Add SPA fallback for deep links
-        # GitHub Pages has no server-side routing — a direct hit on e.g.
-        # /profile/42 or /event/17 (from a shared link) 404s before any JS
-        # loads, since no such file exists. GitHub Pages serves 404.html for
-        # any unmatched path *without* rewriting the address bar, and the
-        # app already reads the real URL at runtime via Linking.getInitialURL()
-        # (see parseDeepLink in AppNavigator.js), so serving the same bundle
-        # for 404s is sufficient — no redirect/rewrite trick needed.
-        run: cp web-build/index.html web-build/404.html
 
       - name: Add favicon
         # logo.png isn't square, and browsers render favicons in a square
@@ -138,6 +98,46 @@ jobs:
                 .toFile('web-build/og-image.png');
             })();
           "
+
+      - name: Prerender the Landing page for crawlers
+        # A client-only bundle serves <div id="root"></div> to anything
+        # that doesn't execute JS — this drives a real headless Chromium
+        # against the just-built app and bakes what it actually renders
+        # into index.html, so a crawler's first fetch sees the real
+        # headline, categories and FAQ text. See scripts/prerender-landing.js
+        # for why this only touches #root and leaves <head> untouched.
+        #
+        # Runs last among the content-generating steps, after favicon.png
+        # and og-image.png exist — index.html's own <link rel="icon"> 404'd
+        # on every CI run while this used to run right after the build,
+        # before either file existed.
+        #
+        # The script itself exits 0 either way (see its own comment on why)
+        # so a Chromium quirk on this runner can never block the rest of the
+        # deploy — which also means this step always shows green, whether
+        # or not prerendering actually happened. Piping its output into the
+        # job summary is what makes a silent failure visible again, without
+        # needing the admin-only log-download API.
+        run: |
+          node scripts/prerender-landing.js 2>&1 | tee prerender-output.log
+          {
+            echo "## Landing page prerender"
+            echo '```'
+            cat prerender-output.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add SPA fallback for deep links
+        # GitHub Pages has no server-side routing — a direct hit on e.g.
+        # /profile/42 or /event/17 (from a shared link) 404s before any JS
+        # loads, since no such file exists. GitHub Pages serves 404.html for
+        # any unmatched path *without* rewriting the address bar, and the
+        # app already reads the real URL at runtime via Linking.getInitialURL()
+        # (see parseDeepLink in AppNavigator.js), so serving the same bundle
+        # for 404s is sufficient — no redirect/rewrite trick needed. Runs
+        # after prerendering so 404.html carries the same prerendered
+        # content as index.html, not the empty pre-prerender shell.
+        run: cp web-build/index.html web-build/404.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
