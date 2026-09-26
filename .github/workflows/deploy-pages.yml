@@ -32,6 +32,31 @@ jobs:
       - name: Build web bundle
         run: npm run web:build
 
+      - name: Upload source maps to Sentry
+        # The production bundle is minified, so a browser error reaches Sentry
+        # as "bundle.js:1:483920". This stamps the bundle with a debug id and
+        # uploads its source map, letting Sentry show the original file and
+        # line instead. Needs the SENTRY_AUTH_TOKEN repo secret (an org token
+        # from Sentry > Settings > Developer Settings > Organization Tokens);
+        # without it this is skipped and deploys carry on as before.
+        #
+        # The .map files are deleted below no matter what happened above —
+        # they hold the app's full source, and must never be published to
+        # spurth.com. An upload failure is a warning, not a failed deploy.
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: spurth
+          SENTRY_PROJECT: spurth-native
+        run: |
+          if [ -n "$SENTRY_AUTH_TOKEN" ]; then
+            npx sentry-cli sourcemaps inject web-build \
+              && npx sentry-cli sourcemaps upload --release "spurth-web@${GITHUB_SHA::12}" web-build \
+              || echo "::warning::Sentry source map upload failed - browser stack traces will be minified for this deploy"
+          else
+            echo "::notice::SENTRY_AUTH_TOKEN is not set - skipping the source map upload"
+          fi
+          find web-build -name '*.map' -delete
+
       - name: Add custom domain file
         run: echo "spurth.com" > web-build/CNAME
 

@@ -1,4 +1,5 @@
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
+const {withSentryConfig} = require('@sentry/react-native/metro');
 
 /**
  * Metro configuration
@@ -10,5 +11,7 @@ const config = {
     resetCache: true
 };
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+// withSentryConfig stamps each bundle with a debug id, which is how an
+// uploaded source map is matched to the bundle a crash came from.
+module.exports = withSentryConfig(mergeConfig(getDefaultConfig(__dirname), config));
 

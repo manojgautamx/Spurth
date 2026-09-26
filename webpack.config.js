@@ -7,6 +7,11 @@ module.exports = (env, argv) => {
 
   return {
     target: 'web',
+    // Production only, and "hidden": the .map file is generated but bundle.js
+    // never points at it, so browsers don't fetch it. The deploy workflow
+    // uploads it to Sentry (so minified stack traces read as real source)
+    // and then deletes it before publishing — see deploy-pages.yml.
+    devtool: isProduction ? 'hidden-source-map' : false,
     entry: path.resolve(__dirname, 'web/index.web.js'),
     output: {
       path: path.resolve(__dirname, 'web-build'),
