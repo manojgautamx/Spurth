@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.spurth",
+      "sha256_cert_fingerprints": [
+        "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C",
+        "E1:2E:C0:BB:66:3E:DC:6C:A7:19:0A:B3:18:C7:87:E6:02:92:02:CD:30:C4:D2:19:97:F8:1F:34:29:79:46:7A"
+      ]
+    }
+  }
+]

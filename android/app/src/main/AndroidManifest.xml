@@ -76,6 +76,21 @@
         <data android:scheme="spurth" />
       </intent-filter>
 
+      <!-- Android App Links — a shared https://spurth.com/... link opens
+           this app directly instead of a browser, once Android has
+           verified /.well-known/assetlinks.json (deployed alongside the
+           web app — see deploy-pages.yml) against this app's own signing
+           certificate. autoVerify is what triggers that check; without it
+           this intent-filter would still match the URL, but only after
+           Android already offered the browser as a competing option. -->
+      <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https" android:host="spurth.com" />
+        <data android:scheme="https" android:host="www.spurth.com" />
+      </intent-filter>
+
     </activity>
   </application>
 </manifest>
