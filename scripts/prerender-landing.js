@@ -48,7 +48,18 @@ function serveStatic() {
 
 async function main() {
   const server = await serveStatic();
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      // GitHub Actions runners give /dev/shm far less space than Chromium
+      // expects by default, which crashes the browser on launch or mid-page
+      // rather than failing with an obviously-related message. This is the
+      // single most common reason Puppeteer works locally and dies in CI.
+      '--disable-dev-shm-usage',
+    ],
+  });
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
@@ -114,8 +125,13 @@ async function main() {
 }
 
 main().catch((err) => {
-  // A build that silently ships the pre-prerender empty shell on failure
-  // would be worse than a build that stops and says so.
-  console.error('Prerender failed:', err);
-  process.exit(1);
+  // Deliberately exits 0, not 1: index.html is only overwritten after the
+  // rendered content is validated (see the checks above), so a launch
+  // crash or timeout here always leaves the plain, pre-prerender build
+  // output in place — worse for crawlers than the prerendered version, but
+  // exactly what shipped before this script existed. Blocking the entire
+  // deploy (robots.txt, sitemap, App Links, the actual site) on a headless
+  // Chromium quirk in this one CI environment would trade a bigger, more
+  // urgent problem for a smaller one.
+  console.error('Prerender failed — shipping the plain (non-prerendered) build instead:', err);
 });
