@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
+import { captureException } from '../utils/monitoring';
 
 // Without this, a single component throwing during render unmounts the whole
 // tree and leaves a blank screen — permanently, with nothing on it to say
@@ -18,9 +19,10 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // Deliberately kept as the one console call in the app: until crash
-    // reporting is wired up this is the only trace of a render crash, and
-    // it costs the user nothing.
+    // React swallows a render error once a boundary catches it, so the
+    // global error handlers never see it — this is the only place it can be
+    // reported from.
+    captureException(error, { componentStack: info?.componentStack });
     if (__DEV__) {
       console.error('Render error:', error, info?.componentStack);
     }

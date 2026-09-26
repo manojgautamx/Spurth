@@ -1,3 +1,4 @@
+import '../src/utils/monitoringInit';
 import 'react-native-reanimated';
 import './fonts';
 import './inputFocus';

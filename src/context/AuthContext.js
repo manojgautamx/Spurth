@@ -2,6 +2,8 @@ import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setAuthLogout } from '../utils/authRef';
 import { registerForPushNotifications, unregisterPushNotifications } from '../utils/pushNotifications';
+import { jwtDecode } from 'jwt-decode';
+import { setMonitoringUser } from '../utils/monitoring';
 
 export const AuthContext = createContext();
 
@@ -56,6 +58,17 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', e);
     }
   };
+
+  // One place covers every way the session changes — fresh login, a stored
+  // session resuming on launch, logout, and forced expiry — so error reports
+  // always say which account they came from (id only; see monitoring.js).
+  useEffect(() => {
+    try {
+      setMonitoringUser(userToken ? jwtDecode(userToken).user_id : null);
+    } catch (e) {
+      setMonitoringUser(null);
+    }
+  }, [userToken]);
 
   // Registered so axiosInstance's session-expiry handler can trigger a real
   // logout (state included), not just clear storage out from under React.

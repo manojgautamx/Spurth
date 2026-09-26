@@ -15,3 +15,9 @@ export const BASE_URL = __DEV__ ? DEV_BASE_URL : "https://api.spurth.com";
 // AndroidManifest.xml / AppDelegate.swift; this is the one JS-side copy,
 // used by the web maps shim (src/shims/maps.web.js).
 export const GOOGLE_MAPS_API_KEY = 'AIzaSyA3_dtp1rNdfWEWaEfEZBPrPKtfL1ddlsk';
+
+// Sentry DSNs are meant to be embedded client-side (they only allow sending
+// events in, never reading any back) — same reasoning as the Maps key above.
+// One project receives both the Android app and the web build; the SDK tags
+// each event with its platform. Leave empty and monitoring stays fully off.
+export const SENTRY_DSN = '';
