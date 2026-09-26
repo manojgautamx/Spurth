@@ -39,7 +39,21 @@ jobs:
         # into index.html, so a crawler's first fetch sees the real
         # headline, categories and FAQ text. See scripts/prerender-landing.js
         # for why this only touches #root and leaves <head> untouched.
-        run: node scripts/prerender-landing.js
+        #
+        # The script itself exits 0 either way (see its own comment on why)
+        # so a Chromium quirk on this runner can never block the rest of the
+        # deploy — which also means this step always shows green, whether
+        # or not prerendering actually happened. Piping its output into the
+        # job summary is what makes a silent failure visible again, without
+        # needing the admin-only log-download API.
+        run: |
+          node scripts/prerender-landing.js 2>&1 | tee prerender-output.log
+          {
+            echo "## Landing page prerender"
+            echo '```'
+            cat prerender-output.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Add custom domain file
         run: echo "spurth.com" > web-build/CNAME
