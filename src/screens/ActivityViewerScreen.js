@@ -70,6 +70,13 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   // crashes instead of showing "not found".
   const { activity: initialActivity, activityId } = route.params || {};
   const [activity, setActivity] = useState(initialActivity);
+  // The activity's id is known from the very start — from the object passed in
+  // when navigating inside the app, or from the URL for a shared link. The
+  // status, chat-access and posts requests only need that id, not the full
+  // activity, so they use this instead of waiting for `activity` to load
+  // (which used to make a shared link's requests run strictly one after
+  // another: each round trip to the API is ~100 ms of pure waiting).
+  const resolvedId = initialActivity?.id ?? activityId;
   const { user, userToken } = useContext(AuthContext);
   const axios = useAxios();
   // Anonymous visitors get a stripped-down, read-only view of just the
@@ -101,6 +108,33 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsError, setPostsError] = useState(null);
+
+  // Defined here, above every early return, and not down with the other post
+  // handlers: the effect that calls it now runs on the very first render —
+  // while the component is still returning its loading skeleton — and a
+  // function declared after those returns doesn't exist yet at that point.
+  // (It failed as "fetchActivityPosts is not a function" on every shared
+  // link.) Goes through axiosInstance so an expired access token is
+  // refreshed and retried rather than the posts silently not arriving.
+  const fetchActivityPosts = async () => {
+    if (!resolvedId) return;
+    try {
+      setPostsLoading(true);
+      setPostsError(null);
+      const res = await axiosInstance.get('posts/', { params: { activity: resolvedId } });
+      setPosts(
+        listFrom(res.data).map(p => ({
+          ...p,
+          activity_id: p.activity,
+          event_name: p.activity_name,
+        }))
+      );
+    } catch (err) {
+      setPostsError(getErrorMessage(err, "Couldn't load posts for this activity."));
+    } finally {
+      setPostsLoading(false);
+    }
+  };
 
   // Reschedule + map state — ALL before early return
   const [rescheduleVisible, setRescheduleVisible] = useState(false);
@@ -190,12 +224,21 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   }, [activity?.location]);
 
   useEffect(() => {
-    if (!activity?.id) return;
+    if (!resolvedId) return;
+    // Joined/chat state only exists for a signed-in user — both endpoints
+    // answer a visitor with 401, so asking is a wasted round trip.
+    if (!userToken) {
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     const fetchAll = async () => {
       try {
-        const statusRes = await axios.get(`${BASE_URL}/api/activity-status/${activity.id}/`);
-        const chatRes = await axios.get(`${BASE_URL}/api/can-enter-chat/${activity.id}/`);
+        // Independent of each other, so together rather than one after the other.
+        const [statusRes, chatRes] = await Promise.all([
+          axios.get(`${BASE_URL}/api/activity-status/${resolvedId}/`),
+          axios.get(`${BASE_URL}/api/can-enter-chat/${resolvedId}/`),
+        ]);
         if (!mounted) return;
         setIsJoined(statusRes.data.joined);
         setRequestStatus(statusRes.data.request_status || null);
@@ -208,12 +251,12 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     };
     fetchAll();
     return () => { mounted = false; };
-  }, [activity?.id]);
+  }, [resolvedId, userToken]);
 
   useEffect(() => {
-    if (!activity?.id) return;
+    if (!resolvedId) return;
     fetchActivityPosts();
-  }, [activity?.id]);
+  }, [resolvedId]);
 
   // Invite People picker — same debounce/fallback pattern as ExploreScreen's
   // people search.
@@ -446,30 +489,10 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     ]);
   };
 
-  // These three went through a bare fetch() with a hand-attached token,
+  // Like and vote went through a bare fetch() with a hand-attached token,
   // which skipped axiosInstance's refresh-and-retry: once the access token
-  // expired, the posts simply stopped arriving and the section rendered as
-  // though the activity had none.
-  const fetchActivityPosts = async () => {
-    if (!activity?.id) return;
-    try {
-      setPostsLoading(true);
-      setPostsError(null);
-      const res = await axiosInstance.get('posts/', { params: { activity: activity.id } });
-      setPosts(
-        listFrom(res.data).map(p => ({
-          ...p,
-          activity_id: p.activity,
-          event_name: p.activity_name,
-        }))
-      );
-    } catch (err) {
-      setPostsError(getErrorMessage(err, "Couldn't load posts for this activity."));
-    } finally {
-      setPostsLoading(false);
-    }
-  };
-
+  // expired they simply stopped working. (So did the posts fetch, which now
+  // lives up with the state it fills — see fetchActivityPosts.)
   const handleLike = async (postId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
     try {

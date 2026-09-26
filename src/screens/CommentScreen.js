@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import {
   View,
   Text,
@@ -86,8 +86,15 @@ export default function CommentScreen({ route, navigation }) {
     }
   }, [postId]);
 
+  // Whether a full post object came in with the navigation, checked once at
+  // mount. A screen opened from a shared link has none, and the effect above
+  // is already fetching that post — refreshing it here too fired the same
+  // request twice at once. With one in hand, this refresh brings its counts
+  // and like state up to date.
+  const hadPostOnMount = useRef(!!post);
+
   useEffect(() => {
-    fetchPost();
+    if (hadPostOnMount.current) fetchPost();
     fetchComments();
   }, [fetchPost, fetchComments]);
 
