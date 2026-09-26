@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "23044304139-c0jpkcjt07qqaqp2da139jfcshflrooa.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.spurth",
+            "certificate_hash": "a3100ca6adef58c48386983029636de60fe3e51e"
+          }
+        },
+        {
           "client_id": "23044304139-qa1ni7ln2r3keke8aash7n90vmuctp6e.apps.googleusercontent.com",
           "client_type": 3
         }
