@@ -74,6 +74,7 @@ export default function ProfileViewScreen({ route }) {
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [myOwnActivities, setMyOwnActivities] = useState([]);
+  const [ownActivitiesLoading, setOwnActivitiesLoading] = useState(false);
   const [inviting, setInviting] = useState(false);
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,14 @@ export default function ProfileViewScreen({ route }) {
           const resolvedUserId = profileRes.data.user_id;
           setTargetUserId(resolvedUserId);
 
+          // The posts and the activities both need only what the profile just
+          // told us, and neither needs the other — so they load together.
+          // They used to run one after another (profile, then activities,
+          // then the viewer's own activities, then posts), each waiting on
+          // a full round trip to the API. The posts carry their own loading
+          // state, so they're started here and not waited for.
+          fetchUserPosts(resolvedUserId);
+
           if (isMyProfile) {
             const [mine, joined] = await Promise.all([
               fetchAllPages(axiosInstance, 'my-activities/'),
@@ -107,23 +116,11 @@ export default function ProfileViewScreen({ route }) {
             if (!active) return;
             setMyActivities(res.data.created || []);
             setJoinedActivities(res.data.joined || []);
-
-            // ── ADD 3: Also fetch the CURRENT user's own activities for the
-            //    invite picker. We need to show activities the inviter belongs
-            //    to — only meaningful (and only authorized) for a logged-in
-            //    visitor; skipping this for anonymous visitors keeps the rest
-            //    of the profile page (which loaded fine) from failing here.
-            if (userToken) {
-              const [ownCreated, ownJoined] = await Promise.all([
-                fetchAllPages(axiosInstance, 'my-activities/'),
-                fetchAllPages(axiosInstance, 'joined-activities/'),
-              ]);
-              if (!active) return;
-              setMyOwnActivities([...ownCreated, ...ownJoined]);
-            }
+            // The viewer's own activities (for the invite picker) are fetched
+            // when the picker is opened — see openInvitePicker. Loading them
+            // up front cost two more round trips on every profile view, for a
+            // feature most visits never touch.
           }
-
-          fetchUserPosts(resolvedUserId);
         } catch (err) {
           // A network failure used to surface as "Profile not found", which
           // reads as "this person doesn't exist" and invites no retry. A
@@ -142,6 +139,25 @@ export default function ProfileViewScreen({ route }) {
       return () => (active = false);
     }, [username])
   );
+
+  // Only meaningful (and only authorized) for a signed-in visitor, and only
+  // needed once the picker is actually opened.
+  const openInvitePicker = async () => {
+    setInviteModalVisible(true);
+    if (myOwnActivities.length > 0 || ownActivitiesLoading) return;
+    setOwnActivitiesLoading(true);
+    try {
+      const [ownCreated, ownJoined] = await Promise.all([
+        fetchAllPages(axiosInstance, 'my-activities/'),
+        fetchAllPages(axiosInstance, 'joined-activities/'),
+      ]);
+      setMyOwnActivities([...ownCreated, ...ownJoined]);
+    } catch (err) {
+      console.warn('Failed to load your activities for the invite picker');
+    } finally {
+      setOwnActivitiesLoading(false);
+    }
+  };
 
   // targetId is passed explicitly right after the profile fetch resolves
   // (see fetchProfile above); later refresh calls (like/delete callbacks)
@@ -388,7 +404,7 @@ export default function ProfileViewScreen({ route }) {
                 <TouchableOpacity
                   onPress={() =>
                     userToken
-                      ? setInviteModalVisible(true)
+                      ? openInvitePicker()
                       : promptSignIn(navigation, 'Sign in to invite people to your events.')
                   }
                   accessibilityRole="button"
@@ -585,7 +601,9 @@ export default function ProfileViewScreen({ route }) {
             Invite {profile?.full_name?.split(' ')[0]} to…
           </Text>
 
-          {myOwnActivities.length === 0 ? (
+          {ownActivitiesLoading && myOwnActivities.length === 0 ? (
+            <ActivityIndicator color="#36ACA6" style={{ padding: 32 }} />
+          ) : myOwnActivities.length === 0 ? (
             <View style={{ padding: 32, alignItems: 'center' }}>
               <Text style={{ color: '#555', textAlign: 'center' }}>
                 You haven't created or joined any events yet.
