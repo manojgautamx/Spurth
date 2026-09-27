@@ -261,8 +261,13 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   cardImage: {
+    // Square, matching the cover image's own crop (see CoverImageCropper)
+    // — was a fixed 140px-tall banner, which cut off most of the left/right
+    // of the square the user actually chose. Cards get noticeably taller
+    // as a result; that's the intended effect of the cover always being
+    // square now, not a bug.
     width: '100%',
-    height: 140,
+    aspectRatio: 1,
   },
   distancePill: {
     position: 'absolute',
