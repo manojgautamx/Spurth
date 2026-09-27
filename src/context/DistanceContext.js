@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const DISTANCE_KEY = 'user_distance_km';
-const DEFAULT_DISTANCE = 10;
+const DEFAULT_DISTANCE = 80;
 
 const DistanceContext = createContext({
   distanceKm: DEFAULT_DISTANCE,

@@ -8,9 +8,12 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../../utils/axiosInstance';
 import { LocationContext } from '../../context/LocationContext';
+import { useDistance } from '../../context/DistanceContext';
 import { AuthContext } from '../../context/AuthContext';
 import { promptSignIn } from '../../utils/requireAuth';
 import { rankByInterest } from '../../utils/rankByInterest';
+import { isPostVisible } from '../../utils/postVisibility';
+import useMyActivityIds from '../../utils/useMyActivityIds';
 import { listFrom } from '../../utils/paginated';
 import { getErrorMessage } from '../../utils/errorMessage';
 import PostCard from '../PostCard';
@@ -22,7 +25,9 @@ const PREVIEW_COUNT = 3;
 export default function PostsRail() {
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
+  const { distanceKm } = useDistance();
   const { userToken } = useContext(AuthContext);
+  const myActivityIds = useMyActivityIds(axiosInstance, !!userToken);
   // The whole first page of the feed, in server order. What's shown is
   // derived from it below, so a new location or a like re-ranks it without
   // another request.
@@ -75,17 +80,17 @@ export default function PostsRail() {
     load();
   }, [userToken, load]);
 
-  // The Experiences tab shows every post, and this rail is a preview of that
-  // same feed, so it must too. It used to drop every post whose activity was
-  // further than the viewer's radius (10 km by default) from them — and with
-  // few activities that is usually all of them, so the rail read "No
-  // experiences yet" beside a full Experiences tab. Interests and distance
-  // now only decide the ORDER (matching interests first, then nearest first),
-  // never whether a post appears.
-  const posts = useMemo(
-    () => rankByInterest(feed, interests, location).slice(0, PREVIEW_COUNT),
-    [feed, interests, location]
-  );
+  // The Experiences tab shows every post from an activity you created or
+  // joined, and scopes everything else to your distance radius — this rail
+  // is a preview of that same feed, so it matches: exempt your own
+  // activities' posts, distance-filter the rest. It used to distance-filter
+  // everything (including your own), then briefly showed everything
+  // unfiltered — both left it either empty or is inconsistent with the
+  // Experience tab.
+  const posts = useMemo(() => {
+    const visible = feed.filter(p => isPostVisible(p, myActivityIds, location, distanceKm));
+    return rankByInterest(visible, interests, location).slice(0, PREVIEW_COUNT);
+  }, [feed, interests, location, distanceKm, myActivityIds]);
 
   const handleLike = async (postId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
