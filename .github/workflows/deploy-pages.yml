@@ -80,6 +80,23 @@ jobs:
           cp web/terms.html web-build/terms/index.html
           cp web/privacy.html web-build/privacy/index.html
 
+      - name: Build blog pages
+        # Fetches published posts from the live API and bakes /blog/ and
+        # /blog/<slug>/ as real static files (see scripts/build-blog.js) —
+        # same "extra static content" family as the legal pages above, and
+        # it merges into the sitemap.xml the previous step just copied, so
+        # it has to run after that one.
+        #
+        # Unlike every other content-generating step here, a failure in
+        # this one is NOT swallowed: it exits non-zero and fails the whole
+        # build job. See the long comment at the top of build-blog.js for
+        # why — a GitHub Pages deploy replaces the whole site in one shot,
+        # so silently shipping an empty web-build/blog/ would delete every
+        # already-published post, not just skip adding a new one.
+        env:
+          BLOG_API_BASE_URL: https://api.spurth.com
+        run: node scripts/build-blog.js
+
       - name: Add favicon
         # logo.png isn't square, and browsers render favicons in a square
         # slot — a plain copy gets visibly stretched in the tab. Pad it onto

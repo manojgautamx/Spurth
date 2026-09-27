@@ -4,6 +4,11 @@
   isn't signed in. Activity and profile pages are public too, but they're
   generated from the database, so listing them needs a build step that can
   query the API — worth doing once there's enough content to matter.
+
+  Blog posts are the first thing that hit that bar: scripts/build-blog.js
+  appends /blog/ and one entry per published post into this exact file
+  during the deploy build, right after it's copied in — see the "Build blog
+  pages" step in deploy-pages.yml. The 5 URLs below stay hand-maintained.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
