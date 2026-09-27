@@ -9,11 +9,6 @@ export const MEDIA_RATIOS = [
   { key: '4:3', label: '4:3', value: 4 / 3 },
 ];
 
-// Activity covers render in landscape-leaning boxes everywhere today, so
-// 9:16 (tall) is left out of the picker there — it's still a valid stored
-// value (in case older data has it), just not offered as a choice.
-export const COVER_MEDIA_RATIO_KEYS = ['original', '1:1', '4:5', '16:9', '4:3'];
-
 // Nearest standard ratio to a natural width/height, comparing decimal
 // ratios and picking the smallest absolute difference. 'original' is never
 // auto-selected — it's a manual override only.

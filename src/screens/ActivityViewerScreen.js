@@ -1141,8 +1141,12 @@ const styles = StyleSheet.create({
 
   // ── Header ──────────────────────────────────────
   imageContainer: {
-    height: 280,
+    // True square hero, matching the cover's own crop (see
+    // CoverImageCropper) — was a fixed 280px banner. Resolves to a
+    // full-width square on both mobile (device width) and web (the
+    // 680px center column mainContent renders inside).
     width: '100%',
+    aspectRatio: 1,
   },
   headerImage: {
     width: '100%',

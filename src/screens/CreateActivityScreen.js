@@ -19,9 +19,8 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import axiosInstance from '../utils/axiosInstance';
 import { appendImageAsset } from '../utils/appendImageAsset';
 import * as ImagePicker from 'react-native-image-picker';
-import { nearestRatioKey, COVER_MEDIA_RATIO_KEYS } from '../constants/mediaRatios';
-import MediaRatioPicker from '../components/MediaRatioPicker';
 import MediaPreview from '../components/MediaPreview';
+import CoverImageCropper from '../components/CoverImageCropper';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -100,7 +99,12 @@ const CreateActivityScreen = ({ navigation, route }) => {
   const [coverImage, setCoverImage] = useState(
     editingActivity?.cover_image ? { uri: editingActivity.cover_image } : null
   );
-  const [coverRatio, setCoverRatio] = useState(editingActivity?.cover_image_ratio || 'original');
+  // {x,y,size} once a fresh image is picked this session and the cropper
+  // has reported a position; null when no image is picked yet, or when
+  // editing an existing activity whose cover was never re-picked this
+  // session (that remote image's natural size is unknown without a fetch,
+  // so it isn't interactively re-croppable here — see the render below).
+  const [coverCrop, setCoverCrop] = useState(null);
 
   // UI states
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
@@ -115,9 +119,8 @@ const CreateActivityScreen = ({ navigation, route }) => {
       { mediaType: 'photo', quality: 0.9 },
       res => {
         if (res.assets?.length) {
-          const asset = res.assets[0];
-          setCoverImage(asset);
-          setCoverRatio(nearestRatioKey(asset.width, asset.height));
+          setCoverImage(res.assets[0]);
+          setCoverCrop(null); // CoverImageCropper below re-centers and reports the initial crop itself
         }
       }
     );
@@ -228,7 +231,16 @@ const CreateActivityScreen = ({ navigation, route }) => {
     formData.append('is_hosting', isHosting ? 'true' : 'false');
 
     appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
-    formData.append('cover_image_ratio', coverRatio);
+    // Only sent when a fresh crop was actually made this session — editing
+    // an activity without touching its cover sends none of these, which
+    // leaves the stored cover/ratio/crop exactly as they were (see
+    // ActivitySerializer.validate on the backend).
+    if (coverCrop) {
+      formData.append('cover_image_ratio', '1:1');
+      formData.append('cover_crop_x', String(coverCrop.x));
+      formData.append('cover_crop_y', String(coverCrop.y));
+      formData.append('cover_crop_size', String(coverCrop.size));
+    }
 
     try {
       if (isEditing) {
@@ -667,19 +679,25 @@ const CreateActivityScreen = ({ navigation, route }) => {
               />
             </View>
 
-            {/* Cover Image */}
+            {/* Cover Image — always square now, no ratio choice. A fresh
+                pick (real width/height from the picker) gets the
+                interactive cropper; an untouched existing cover (editing,
+                only a remote URL, no known natural size) gets the old
+                static preview minus the ratio picker. */}
             <Text style={styles.fieldLabel}>Cover Image</Text>
             {coverImage ? (
-              <>
+              coverImage.width && coverImage.height ? (
+                <>
+                  <CoverImageCropper asset={coverImage} onCropChange={setCoverCrop} />
+                  <TouchableOpacity onPress={pickCoverImage} style={styles.changeCoverLink}>
+                    <Text style={styles.changeCoverText}>Choose a different photo</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
                 <TouchableOpacity onPress={pickCoverImage} activeOpacity={0.85}>
-                  <MediaPreview asset={coverImage} kind="image" ratioKey={coverRatio} />
+                  <MediaPreview asset={coverImage} kind="image" ratioKey="1:1" />
                 </TouchableOpacity>
-                <MediaRatioPicker
-                  selectedKey={coverRatio}
-                  onSelect={setCoverRatio}
-                  allowedKeys={COVER_MEDIA_RATIO_KEYS}
-                />
-              </>
+              )
             ) : (
               <TouchableOpacity style={styles.imageUploadBox} onPress={pickCoverImage}>
                 <View style={styles.imagePlaceholder}>
@@ -951,7 +969,11 @@ const styles = StyleSheet.create({
 
   // ── Cover Image ───────────────────────────────────────────────────────────
   imageUploadBox: {
-    height: 150,
+    // Square, matching the cropper it turns into once a photo is picked —
+    // was a fixed 150px-tall rectangle, which made the section visibly
+    // grow taller the moment a cover was added.
+    width: '100%',
+    aspectRatio: 1,
     backgroundColor: '#111',
     borderRadius: 12,
     borderWidth: 1,
@@ -968,6 +990,15 @@ const styles = StyleSheet.create({
     color: '#444',
     fontSize: 13,
     fontFamily: Fonts.regular,
+  },
+  changeCoverLink: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  changeCoverText: {
+    color: '#ce49d7',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
   },
 
   // ── Error ─────────────────────────────────────────────────────────────────
