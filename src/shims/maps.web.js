@@ -39,12 +39,14 @@ const DEFAULT_CENTER = { lat: 27.7172, lng: 85.3240 }; // Kathmandu — matches 
 
 const MapContext = createContext(null);
 
-const MapView = forwardRef(function MapView({ style, initialRegion, region, onPress, children }, ref) {
+const MapView = forwardRef(function MapView({ style, initialRegion, region, onPress, onMapReady, children }, ref) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const onPressRef = useRef(onPress);
   onPressRef.current = onPress;
   const [ready, setReady] = useState(false);
+  const onMapReadyRef = useRef(onMapReady);
+  onMapReadyRef.current = onMapReady;
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +65,11 @@ const MapView = forwardRef(function MapView({ style, initialRegion, region, onPr
         });
       });
       setReady(true);
+      // Mirrors real react-native-maps' onMapReady — a caller's imperative
+      // ref calls (animateToRegion in particular) are no-ops until this
+      // fires, since the underlying google.maps.Map instance doesn't exist
+      // before it.
+      onMapReadyRef.current?.();
     }).catch((err) => console.warn('Google Maps failed to load', err));
     return () => { cancelled = true; };
   }, []);
