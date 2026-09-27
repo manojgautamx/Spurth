@@ -26,7 +26,9 @@ import MediaRatioPicker from '../components/MediaRatioPicker';
 import MediaPreview from '../components/MediaPreview';
 import { AuthContext } from '../context/AuthContext';
 import { LocationContext } from '../context/LocationContext';
+import { useDistance } from '../context/DistanceContext';
 import { rankByInterest } from '../utils/rankByInterest';
+import { isPostVisible } from '../utils/postVisibility';
 import PostCard from '../components/PostCard';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL } from '../config';
@@ -39,6 +41,7 @@ const ExperienceScreen = () => {
   const isWideWeb = useIsWideWeb();
   const { user } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
+  const { distanceKm } = useDistance();
 
   const [activities, setActivities] = useState([]);
   const [joinedActivityIds, setJoinedActivityIds] = useState(new Set());
@@ -416,12 +419,17 @@ const ExperienceScreen = () => {
   );
 
   // "Joined" — posts from activities you created or joined, newest first
-  // (posts/ already orders that way server-side). "Explore" — everything
-  // else, ranked the same way Home's Nearby tab and Explore's All
-  // Categories rank activities: exact interest match, then same-category,
-  // then the rest, with distance as the tiebreaker within each tier.
+  // (posts/ already orders that way server-side), regardless of distance:
+  // an activity you're actually part of is meaningfully yours no matter
+  // where you currently are. "Explore" — everything else, scoped to your
+  // distance radius (Settings), then ranked the same way Home's Nearby tab
+  // and Explore's All Categories rank activities: exact interest match,
+  // then same-category, then the rest, with distance as the tiebreaker
+  // within each tier.
   const joinedPosts = posts.filter(p => joinedActivityIds.has(p.activity_id));
-  const explorePostsRaw = posts.filter(p => !joinedActivityIds.has(p.activity_id));
+  const explorePostsRaw = posts.filter(
+    p => !joinedActivityIds.has(p.activity_id) && isPostVisible(p, joinedActivityIds, location, distanceKm)
+  );
   const explorePosts = rankByInterest(explorePostsRaw, profile?.interests, location);
 
   const list = (
