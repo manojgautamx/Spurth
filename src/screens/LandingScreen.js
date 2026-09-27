@@ -604,6 +604,16 @@ export default function LandingScreen({ navigation }) {
               <Text style={styles.navLink}>How it works</Text>
               <Text style={styles.navLink}>Experiences</Text>
               <Text style={styles.navLink}>Nearby</Text>
+              {/* A real anchor, not a Text/TouchableOpacity — this screen
+                  only ever renders in the web bundle (native skips straight
+                  to WelcomeScreen), and StyleSheet.create() output isn't a
+                  plain DOM style object on react-native-web, so styles.navLink
+                  can't be handed to a raw <a> directly. The other items above
+                  have no onPress/href at all yet — this is the nav's first
+                  actually-clickable link, not a regression of one. */}
+              <a href="/blog" style={{ color: MUTE, fontSize: 14, fontFamily: Fonts.medium, textDecoration: 'none' }}>
+                Blog
+              </a>
             </View>
           )}
           <View style={styles.navActions}>

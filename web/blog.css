@@ -1,0 +1,175 @@
+/* Shared stylesheet for both generated blog page types (the list at /blog/
+   and each article at /blog/<slug>/) — see scripts/build-blog.js, which
+   copies this file into web-build/blog/blog.css at deploy time. Same custom
+   properties as terms.html/privacy.html, since this is that same "separate
+   static platform" family, not a Landing-style React screen. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --border: #222;
+  --text: #ffffff;
+  --muted: #999;
+  --accent: #7c6ff7;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+}
+a { color: var(--accent); }
+a.back {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+a.back:hover { color: var(--text); }
+
+/* List page — wider than an article's prose measure, to fit the card grid. */
+.blog-wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+}
+.blog-wrap h1 {
+  font-size: 32px;
+  margin: 28px 0 40px;
+  letter-spacing: -0.4px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+.card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--text);
+}
+.card .cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--border);
+  display: block;
+}
+.card .body {
+  padding: 16px 18px 20px;
+}
+.card .title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  letter-spacing: -0.2px;
+}
+.card .excerpt {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+  margin: 0 0 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card .date {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.empty {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+/* Article page — same 720px measure as terms.html/privacy.html. */
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+}
+.wrap h1 {
+  font-size: 32px;
+  margin: 28px 0 8px;
+  letter-spacing: -0.4px;
+}
+.byline {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+.cover-hero {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 14px;
+  margin-bottom: 32px;
+  background: var(--surface);
+}
+
+/* Rendered markdown body (server-rendered by BlogPostSerializer.body_html —
+   see api/serializers.py) — scoped under .prose so it never leaks into the
+   list page's card styles above. */
+.prose h1, .prose h2, .prose h3 {
+  color: var(--text);
+  letter-spacing: -0.2px;
+  margin: 32px 0 12px;
+}
+.prose h1 { font-size: 24px; }
+.prose h2 { font-size: 20px; color: var(--accent); }
+.prose h3 { font-size: 17px; }
+.prose p, .prose li {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 16px;
+}
+.prose ul, .prose ol { padding-left: 22px; }
+.prose a { text-decoration: underline; }
+.prose a:hover { color: var(--text); }
+.prose blockquote {
+  margin: 20px 0;
+  padding: 4px 18px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  color: rgba(255, 255, 255, 0.75);
+}
+.prose code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 0.9em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.prose pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  overflow-x: auto;
+}
+.prose pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+}
+.prose th, .prose td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+}
