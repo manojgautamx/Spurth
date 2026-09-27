@@ -104,9 +104,14 @@ a.back:hover { color: var(--text); }
   margin-bottom: 32px;
 }
 .cover-hero {
+  /* No fixed aspect-ratio/object-fit here on purpose — this is the article's
+     own uncropped original (see cover_image_full_url in
+     api/serializers.py), so the box should follow whatever shape the image
+     actually is, not force it into a crop. The list page's .cover above is
+     the one place a fixed 16:9 crop still applies. */
+  display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
+  height: auto;
   border-radius: 14px;
   margin-bottom: 32px;
   background: var(--surface);

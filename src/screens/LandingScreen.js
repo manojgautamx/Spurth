@@ -19,6 +19,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
+import axiosInstance from '../utils/axiosInstance';
 
 const LOGO_RATIO = 1862 / 489;
 function Logo({ height = 28 }) {
@@ -477,6 +478,20 @@ export default function LandingScreen({ navigation }) {
   const reduced = usePrefersReducedMotion();
   const viewportH = useViewportHeight();
 
+  // The one section on this page backed by live data rather than a fixed
+  // marketing fixture — latest published posts for the "From the blog"
+  // section below. Silently stays empty on any failure (a marketing page's
+  // blog teaser isn't worth a visible error state); the section itself
+  // just doesn't render when there's nothing to show.
+  const [blogPosts, setBlogPosts] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    axiosInstance.get('blog-posts/?page_size=3')
+      .then((res) => { if (!cancelled) setBlogPosts(res.data?.results || []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const goJoin = () => navigation.navigate('Welcome');
   // Welcome is the one sign-in/sign-up entry point — it offers login itself,
   // so "Log in" here doesn't skip past it to the bare login form.
@@ -930,6 +945,55 @@ export default function LandingScreen({ navigation }) {
         </View>
       </Section>
 
+      {/* BLOG — latest published posts (see the fetch above); the section
+          just doesn't render when there's nothing published yet. Cards use
+          the same Reveal scroll-entrance every other card grid on this page
+          uses (CategoryCard above), staggered by index, so it reads as one
+          consistent motion language rather than a bolted-on section. */}
+      {blogPosts.length > 0 && (
+        <Section id="blog" style={{ marginTop: isWide ? 140 : 80 }}>
+          <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
+            <Text style={[styles.h2, { fontSize: isWide ? 54 : 30 }]}>From the blog</Text>
+            <a href="/blog" style={{ color: MUTE, fontSize: 15, fontFamily: Fonts.semibold, textDecoration: 'none' }}>
+              View all posts →
+            </a>
+          </View>
+          <View style={[{ flexDirection: 'row', gap: 16 }, !isWide && { flexDirection: 'column' }]}>
+            {blogPosts.map((post, i) => (
+              <Reveal
+                key={post.slug}
+                scrollY={scrollY}
+                scrollOffsetRef={scrollOffsetRef}
+                reduced={reduced}
+                from="up"
+                distance={40}
+                delay={i * 26}
+                style={{ flex: 1 }}
+                innerStyle={styles.blogCard}
+              >
+                {/* A real anchor, not Text/TouchableOpacity — same reasoning
+                    as the nav/footer Blog links: this screen only renders in
+                    the web bundle, and StyleSheet.create() output isn't a
+                    plain DOM style object on react-native-web. */}
+                <a href={`/blog/${post.slug}/`} style={{ textDecoration: 'none', display: 'block' }}>
+                  {post.cover_image_url ? (
+                    <Image source={{ uri: post.cover_image_url }} style={styles.blogCardImage} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.blogCardImage, { backgroundColor: RAISE }]} />
+                  )}
+                  <View style={styles.blogCardBody}>
+                    <Text style={styles.blogCardTitle} numberOfLines={2}>{post.title}</Text>
+                    {post.excerpt ? (
+                      <Text style={styles.blogCardExcerpt} numberOfLines={2}>{post.excerpt}</Text>
+                    ) : null}
+                  </View>
+                </a>
+              </Reveal>
+            ))}
+          </View>
+        </Section>
+      )}
+
       {/* FAQ */}
       <Section style={{ marginTop: isWide ? 140 : 80 }}>
         <Text style={[styles.h2, { fontSize: isWide ? 54 : 30, marginBottom: 32 }]}>Questions</Text>
@@ -992,6 +1056,13 @@ export default function LandingScreen({ navigation }) {
             <Text style={styles.footerLink}>Create an activity</Text>
             <Text style={styles.footerLink}>Safety</Text>
             <Text style={styles.footerLink}>Privacy</Text>
+            {/* A real anchor, not Text — same reasoning as the nav's Blog
+                link above (this screen only renders in the web bundle). The
+                other items in this column have no onPress/href at all yet —
+                this isn't a regression of one. */}
+            <a href="/blog" style={{ color: MUTE, fontSize: 13.5, fontFamily: Fonts.medium, textDecoration: 'none' }}>
+              Blog
+            </a>
           </View>
         </View>
         <Text style={styles.copyright}>© {new Date().getFullYear()} Spurth</Text>
@@ -1044,6 +1115,13 @@ const styles = StyleSheet.create({
   catCardLabel: { position: 'absolute', left: 22, bottom: 20 },
   catCardTitle: { color: '#fff', fontSize: 22, fontFamily: Fonts.extrabold, letterSpacing: -0.5 },
   catCardSub: { color: 'rgba(244,244,246,0.6)', fontSize: 12.5, marginTop: 4, fontFamily: Fonts.medium },
+
+  // Blog
+  blogCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE, borderWidth: 1, borderColor: LINE },
+  blogCardImage: { width: '100%', aspectRatio: 16 / 9 },
+  blogCardBody: { padding: 18 },
+  blogCardTitle: { color: '#fff', fontSize: 17, fontFamily: Fonts.bold, letterSpacing: -0.2 },
+  blogCardExcerpt: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 8 },
 
   // Story — minimal scroll-parallax photo sections
   parallaxRow: { flexDirection: 'row', alignItems: 'center', gap: 40 },
