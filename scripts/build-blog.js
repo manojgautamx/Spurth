@@ -137,7 +137,6 @@ async function main() {
   );
 
   for (const post of posts) {
-    const authorName = post.author?.full_name || post.author?.username || 'Spurth';
     const dir = path.join(BLOG_DIR, post.slug);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
@@ -150,9 +149,12 @@ async function main() {
         OG_IMAGE: post.og_image_url || DEFAULT_OG_IMAGE,
         PUBLISHED_TIME: post.published_at,
         PUBLISHED_DATE: formatDate(post.published_at),
-        AUTHOR_NAME: escapeHtml(authorName),
-        COVER_HERO: post.cover_image_url
-          ? `<img class="cover-hero" src="${escapeHtml(post.cover_image_url)}" alt="" />`
+        AUTHOR_NAME: escapeHtml(post.author_name || 'Spurth'),
+        // The article's own hero uses the uncropped original (whatever its
+        // native aspect ratio) — cover_image_url is the list page's
+        // consistently-cropped thumbnail, a different shape on purpose.
+        COVER_HERO: post.cover_image_full_url
+          ? `<img class="cover-hero" src="${escapeHtml(post.cover_image_full_url)}" alt="" />`
           : '',
         // Not escaped: body_html is server-rendered markdown, meant to be
         // real HTML in the page. The only author is the trusted admin
