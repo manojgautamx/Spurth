@@ -63,6 +63,36 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+// BlogPosting structured data — every field comes from the same `post`
+// object already fetched, no extra requests. author/publisher are
+// Organization, not Person: author_name is unconditionally "Spurth" (see
+// BlogPostSerializer.get_author_name), never a real account's name.
+// publisher.logo is a nested ImageObject on purpose — Google's own
+// guidance wants that specific shape there, unlike the plain-string `image`
+// field above it.
+function buildArticleJsonLd(post, canonicalUrl, ogImage) {
+  const json = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: post.title,
+    description: descriptionFor(post),
+    image: ogImage,
+    datePublished: post.published_at,
+    dateModified: post.updated_at || post.published_at,
+    author: { '@type': 'Organization', name: 'Spurth', url: SITE },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Spurth',
+      logo: { '@type': 'ImageObject', url: `${SITE}/favicon.png` },
+    },
+    mainEntityOfPage: canonicalUrl,
+  });
+  // `<` escaped so a title/excerpt containing a literal "</script>" (however
+  // unlikely from a trusted admin) can never break out of the tag.
+  const escaped = json.replace(/</g, '\\u003c');
+  return `<script type="application/ld+json">${escaped}</script>`;
+}
+
 // A short, plain-text fallback meta description for a post with no excerpt —
 // strips the tags body_html already carries rather than re-deriving from raw
 // markdown (which this script never sees; BlogPostSerializer never exposes it).
@@ -92,9 +122,13 @@ function updateSitemap(posts) {
   let xml = fs.readFileSync(sitemapPath, 'utf8');
   const urls = [
     `  <url>\n    <loc>${SITE}/blog/</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`,
+    // <lastmod> from the real updated_at column — Google doesn't treat this
+    // as a ranking signal, but does trust it for recrawl scheduling as long
+    // as it's accurate, which this is. Not added to the 5 hand-maintained
+    // static URLs above/below (no per-page timestamp tracked for those).
     ...posts.map(
       (post) =>
-        `  <url>\n    <loc>${SITE}/blog/${post.slug}/</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`
+        `  <url>\n    <loc>${SITE}/blog/${post.slug}/</loc>\n    <lastmod>${post.updated_at}</lastmod>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`
     ),
   ].join('');
   xml = xml.replace('</urlset>', urls + '</urlset>');
@@ -138,6 +172,8 @@ async function main() {
 
   for (const post of posts) {
     const dir = path.join(BLOG_DIR, post.slug);
+    const canonicalUrl = `${SITE}/blog/${post.slug}/`;
+    const ogImage = post.og_image_url || DEFAULT_OG_IMAGE;
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, 'index.html'),
@@ -145,11 +181,13 @@ async function main() {
         TITLE: `${escapeHtml(post.title)} — Spurth Blog`,
         ARTICLE_TITLE: escapeHtml(post.title),
         DESCRIPTION: escapeHtml(descriptionFor(post)),
-        CANONICAL: `${SITE}/blog/${post.slug}/`,
-        OG_IMAGE: post.og_image_url || DEFAULT_OG_IMAGE,
+        CANONICAL: canonicalUrl,
+        OG_IMAGE: ogImage,
         PUBLISHED_TIME: post.published_at,
         PUBLISHED_DATE: formatDate(post.published_at),
         AUTHOR_NAME: escapeHtml(post.author_name || 'Spurth'),
+        AUTHOR_URL: SITE,
+        JSON_LD: buildArticleJsonLd(post, canonicalUrl, ogImage),
         // The article's own hero uses the uncropped original (whatever its
         // native aspect ratio) — cover_image_url is the list page's
         // consistently-cropped thumbnail, a different shape on purpose.

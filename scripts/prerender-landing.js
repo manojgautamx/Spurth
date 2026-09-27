@@ -113,6 +113,38 @@ async function main() {
     // meta-tag.
     const rootHtml = await page.evaluate(() => document.getElementById('root').innerHTML);
 
+    // FAQPage JSON-LD — extracted from the live DOM, not hand-copied from
+    // LandingScreen.js's FAQS array, for the same reason the rest of this
+    // file prerenders instead of hand-summarizing: a hand-copy can drift
+    // from what's actually displayed. Safe specifically because FaqItem
+    // keeps the answer always mounted (collapsed via height:0, not
+    // unmounted) so it's in the DOM in the page's default, all-collapsed
+    // state — confirmed by reading that component directly.
+    const faqs = await page.evaluate(() => {
+      const heading = Array.from(document.querySelectorAll('*')).find(
+        (el) => el.children.length === 0 && el.textContent.trim() === 'Questions'
+      );
+      const grid = heading && heading.nextElementSibling;
+      if (!grid) return [];
+      return Array.from(grid.children).map((item) => {
+        const [headerRow, answerWrap] = item.children;
+        if (!headerRow || !answerWrap) return null;
+        // The longest text leaf in the header row is the question — this
+        // naturally excludes the add/remove icon (a single glyph whether
+        // it renders as an SVG with no text, or an icon-font <Text> one
+        // character long) without needing to know which one it is.
+        const leaves = Array.from(headerRow.querySelectorAll('*'))
+          .filter((el) => el.children.length === 0 && el.textContent.trim().length > 0)
+          .sort((a, b) => b.textContent.length - a.textContent.length);
+        const question = leaves[0] ? leaves[0].textContent.trim() : '';
+        // No icon to exclude here, so the whole subtree's text IS the
+        // answer regardless of how many spans react-native-web puts in
+        // between the wrapper and the actual text.
+        const answer = answerWrap.textContent.trim();
+        return question && answer ? { q: question, a: answer } : null;
+      }).filter(Boolean);
+    });
+
     if (consoleErrors.length) {
       console.warn(`(non-fatal) console errors during prerender:\n${consoleErrors.join('\n')}`);
     }
@@ -129,10 +161,34 @@ async function main() {
     if (!original.includes(marker)) {
       throw new Error(`Expected to find an empty ${marker} in web-build/index.html to fill in — the build output's shape may have changed.`);
     }
-    const merged = original.replace(marker, `<div id="root">${rootHtml}</div>`);
+    let merged = original.replace(marker, `<div id="root">${rootHtml}</div>`);
+
+    // No independent count to check the extraction against without
+    // hand-copying FAQS (exactly what this avoids) — so the only real
+    // failure signal is "found nothing at all," which just skips the
+    // block rather than blocking the whole prerender over it.
+    if (faqs.length > 0) {
+      const faqJsonLd = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqs.map(({ q, a }) => ({
+          '@type': 'Question',
+          name: q,
+          acceptedAnswer: { '@type': 'Answer', text: a },
+        })),
+      }).replace(/</g, '\\u003c');
+      const headMarker = '</head>';
+      if (merged.includes(headMarker)) {
+        merged = merged.replace(headMarker, `<script type="application/ld+json">${faqJsonLd}</script>\n  ${headMarker}`);
+      } else {
+        console.warn('(non-fatal) no </head> found — skipping FAQPage JSON-LD');
+      }
+    } else {
+      console.warn('(non-fatal) could not extract any FAQ text from the rendered DOM — skipping FAQPage JSON-LD');
+    }
 
     fs.writeFileSync(indexPath, merged);
-    console.log('Prerendered Landing page into web-build/index.html (%d bytes added)', rootHtml.length);
+    console.log('Prerendered Landing page into web-build/index.html (%d bytes added, %d FAQ entries)', rootHtml.length, faqs.length);
   } finally {
     await browser.close();
     server.close();
