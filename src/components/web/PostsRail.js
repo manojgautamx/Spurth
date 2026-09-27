@@ -2,17 +2,19 @@
 // preview of the Experiences feed (posts users share after attending an
 // activity). Full posting/commenting still happens on the Experiences tab
 // (route name "Experience"); this is a widget, not a duplicate of that screen.
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../../utils/axiosInstance';
-import { LocationContext, filterActivitiesByDistance } from '../../context/LocationContext';
-import { useDistance } from '../../context/DistanceContext';
+import { LocationContext } from '../../context/LocationContext';
 import { AuthContext } from '../../context/AuthContext';
 import { promptSignIn } from '../../utils/requireAuth';
 import { rankByInterest } from '../../utils/rankByInterest';
+import { listFrom } from '../../utils/paginated';
+import { getErrorMessage } from '../../utils/errorMessage';
 import PostCard from '../PostCard';
+import ErrorState from '../ErrorState';
 import { Fonts } from '../../theme/fonts';
 
 const PREVIEW_COUNT = 3;
@@ -20,57 +22,74 @@ const PREVIEW_COUNT = 3;
 export default function PostsRail() {
   const navigation = useNavigation();
   const { location } = useContext(LocationContext);
-  const { distanceKm } = useDistance();
   const { userToken } = useContext(AuthContext);
-  const [posts, setPosts] = useState([]);
+  // The whole first page of the feed, in server order. What's shown is
+  // derived from it below, so a new location or a like re-ranks it without
+  // another request.
+  const [feed, setFeed] = useState([]);
+  const [interests, setInterests] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [postsRes, profileRes] = await Promise.all([
+        axiosInstance.get('posts/'),
+        // Only used to order the posts. Losing it costs the personalised
+        // ordering, not the posts — so a failure here must not empty the rail.
+        axiosInstance.get('profile/').catch(() => null),
+      ]);
+      if (!mounted.current) return;
+      setFeed(
+        listFrom(postsRes.data).map(p => ({
+          ...p,
+          activity_id: p.activity,
+          event_name: p.activity_name,
+        }))
+      );
+      setInterests(profileRes?.data?.interests ?? null);
+    } catch (err) {
+      if (mounted.current) setError(getErrorMessage(err, "Couldn't load experiences."));
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // An unfiltered `posts/` list stays authenticated by design (see
     // PostViewSet.get_permissions on the backend) — this rail just renders
     // its empty state for an anonymous visitor rather than 401ing.
     if (!userToken) {
+      setFeed([]);
       setLoading(false);
       return;
     }
+    load();
+  }, [userToken, load]);
 
-    let cancelled = false;
-
-    const fetchPosts = async () => {
-      try {
-        const [postsRes, profileRes] = await Promise.all([
-          axiosInstance.get('posts/'),
-          axiosInstance.get('profile/'),
-        ]);
-
-        if (cancelled) return;
-
-        const data = postsRes.data;
-        const normalized = (data.results || data).map(p => ({
-          ...p,
-          activity_id: p.activity,
-          event_name: p.activity_name,
-        }));
-
-        // Same algorithm as Home's Nearby tab / Explore's All Categories:
-        // distance-radius filter, then rank by the viewer's interests.
-        const nearby = filterActivitiesByDistance(normalized, location?.latitude, location?.longitude, distanceKm);
-        const ranked = rankByInterest(nearby, profileRes.data?.interests, location);
-        setPosts(ranked.slice(0, PREVIEW_COUNT));
-      } catch (err) {
-        console.log('PostsRail fetch error:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchPosts();
-    return () => { cancelled = true; };
-  }, [location, distanceKm, userToken]);
+  // The Experiences tab shows every post, and this rail is a preview of that
+  // same feed, so it must too. It used to drop every post whose activity was
+  // further than the viewer's radius (10 km by default) from them — and with
+  // few activities that is usually all of them, so the rail read "No
+  // experiences yet" beside a full Experiences tab. Interests and distance
+  // now only decide the ORDER (matching interests first, then nearest first),
+  // never whether a post appears.
+  const posts = useMemo(
+    () => rankByInterest(feed, interests, location).slice(0, PREVIEW_COUNT),
+    [feed, interests, location]
+  );
 
   const handleLike = async (postId) => {
     if (!userToken) return promptSignIn(navigation, 'Sign in to like posts.');
-    setPosts(prev => prev.map(p =>
+    setFeed(prev => prev.map(p =>
       p.id === postId
         ? { ...p, is_liked: !p.is_liked, likes_count: (p.likes_count || 0) + (p.is_liked ? -1 : 1) }
         : p
@@ -96,6 +115,8 @@ export default function PostsRail() {
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
         {loading ? (
           <Text style={styles.emptyText}>Loading…</Text>
+        ) : error ? (
+          <ErrorState compact message={error} onRetry={load} />
         ) : posts.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No experiences yet</Text>
@@ -112,7 +133,7 @@ export default function PostsRail() {
                 compact
                 hideUsername
                 onLike={handleLike}
-                onPostDeleted={() => setPosts(prev => prev.filter(p => p.id !== post.id))}
+                onPostDeleted={() => setFeed(prev => prev.filter(p => p.id !== post.id))}
               />
             ))}
             <TouchableOpacity style={styles.seeMoreBtn} onPress={goToExperiences} activeOpacity={0.8}>
