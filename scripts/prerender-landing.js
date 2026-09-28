@@ -24,7 +24,18 @@ const http = require('http');
 const puppeteer = require('puppeteer');
 
 const WEB_BUILD = path.resolve(__dirname, '..', 'web-build');
-const PORT = 4173;
+// Must be 3000, not an arbitrary free port: the Landing page's own "From
+// the blog" section fetches https://api.spurth.com/api/blog-posts/ on
+// mount, and the backend's CORS_ALLOWED_ORIGINS only allows
+// https://spurth.com, https://www.spurth.com and http://localhost:3000 —
+// any other origin (e.g. the previous 4173) gets silently CORS-blocked,
+// leaving blogPosts empty and the whole section missing from the
+// prerendered snapshot this script produces, even though it renders fine
+// for a real visitor on spurth.com itself. Conflicts with `npm run web`'s
+// dev server if one happens to already be running locally on 3000 — not
+// an issue in CI, where nothing else is listening on it at this point in
+// the build.
+const PORT = 3000;
 
 function serveStatic() {
   const mimeTypes = {
