@@ -13,7 +13,7 @@
 // illustrations (character.png, placeholder.png, the SVG map) are untouched
 // — only the photographic images were sourced this way.
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Animated, Easing, Dimensions, ScrollView } from 'react-native';
 import Svg, { Rect, Path, Circle, G, Line } from 'react-native-svg';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LinearGradient from 'react-native-linear-gradient';
@@ -946,10 +946,15 @@ export default function LandingScreen({ navigation }) {
       </Section>
 
       {/* BLOG — latest published posts (see the fetch above); the section
-          just doesn't render when there's nothing published yet. Cards use
-          the same Reveal scroll-entrance every other card grid on this page
-          uses (CategoryCard above), staggered by index, so it reads as one
-          consistent motion language rather than a bolted-on section. */}
+          just doesn't render when there's nothing published yet. A
+          horizontal rail (fixed-width cards, same `ScrollView horizontal`
+          pattern MediaRatioPicker/HomeScreen's tab pills already use) rather
+          than a flex row — a flex row with `flex: 1` cards stretched a
+          single post to the section's full width, giving a giant thumbnail.
+          Cards use the same Reveal scroll-entrance every other card grid on
+          this page uses (CategoryCard above), staggered by index, so it
+          reads as one consistent motion language rather than a bolted-on
+          section. */}
       {blogPosts.length > 0 && (
         <Section id="blog" style={{ marginTop: isWide ? 140 : 80 }}>
           <View style={[styles.rowBetween, !isWide && { flexDirection: 'column', alignItems: 'flex-start', gap: 12 }]}>
@@ -958,7 +963,11 @@ export default function LandingScreen({ navigation }) {
               View all posts →
             </a>
           </View>
-          <View style={[{ flexDirection: 'row', gap: 16 }, !isWide && { flexDirection: 'column' }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.blogRailContent}
+          >
             {blogPosts.map((post, i) => (
               <Reveal
                 key={post.slug}
@@ -968,7 +977,7 @@ export default function LandingScreen({ navigation }) {
                 from="up"
                 distance={40}
                 delay={i * 26}
-                style={{ flex: 1 }}
+                style={{ width: isWide ? 300 : 260 }}
                 innerStyle={styles.blogCard}
               >
                 {/* A real anchor, not Text/TouchableOpacity — same reasoning
@@ -990,7 +999,32 @@ export default function LandingScreen({ navigation }) {
                 </a>
               </Reveal>
             ))}
-          </View>
+            {/* End-of-rail card, same size as a post card — an explicit
+                "keep scrolling to see more" affordance into /blog, on top
+                of the header's own "View all posts" link. */}
+            <Reveal
+              scrollY={scrollY}
+              scrollOffsetRef={scrollOffsetRef}
+              reduced={reduced}
+              from="up"
+              distance={40}
+              delay={blogPosts.length * 26}
+              style={{ width: isWide ? 300 : 260 }}
+              innerStyle={styles.blogCard}
+            >
+              <a href="/blog" style={{ textDecoration: 'none', display: 'block' }}>
+                <View style={[styles.blogCardImage, styles.blogViewAllImage]}>
+                  <View style={styles.blogViewAllCircle}>
+                    <Ionicons name="arrow-forward" size={20} color="#fff" />
+                  </View>
+                </View>
+                <View style={styles.blogCardBody}>
+                  <Text style={styles.blogCardTitle}>View all posts</Text>
+                  <Text style={styles.blogCardExcerpt}>See everything on the blog</Text>
+                </View>
+              </a>
+            </Reveal>
+          </ScrollView>
         </Section>
       )}
 
@@ -1117,11 +1151,18 @@ const styles = StyleSheet.create({
   catCardSub: { color: 'rgba(244,244,246,0.6)', fontSize: 12.5, marginTop: 4, fontFamily: Fonts.medium },
 
   // Blog
+  // Extra right padding so the last (real) card, and the end-of-rail "View
+  // all" card after it, don't sit flush against the viewport edge once
+  // scrolled all the way — same reasoning a horizontal ScrollView elsewhere
+  // in the app (MediaRatioPicker's chip row) already follows.
+  blogRailContent: { gap: 16, paddingRight: 16 },
   blogCard: { borderRadius: 20, overflow: 'hidden', backgroundColor: RAISE, borderWidth: 1, borderColor: LINE },
   blogCardImage: { width: '100%', aspectRatio: 16 / 9 },
   blogCardBody: { padding: 18 },
   blogCardTitle: { color: '#fff', fontSize: 17, fontFamily: Fonts.bold, letterSpacing: -0.2 },
   blogCardExcerpt: { color: MUTE, fontSize: 13.5, lineHeight: 20, fontFamily: Fonts.regular, marginTop: 8 },
+  blogViewAllImage: { alignItems: 'center', justifyContent: 'center', backgroundColor: RAISE },
+  blogViewAllCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: ACCENT, alignItems: 'center', justifyContent: 'center' },
 
   // Story — minimal scroll-parallax photo sections
   parallaxRow: { flexDirection: 'row', alignItems: 'center', gap: 40 },
