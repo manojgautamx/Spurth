@@ -16,20 +16,31 @@ import { getActivityTypeIcon } from '../utils/activityTypeIcons';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
+import { getActivitySchedule } from '../utils/activityDateRange';
 
-const formatDateTime = (dateTimeStr) => {
+// No end set (the overwhelming majority of activities): byte-for-byte
+// today's single-date-and-time look. An end on the same day appends a time
+// range instead of just the start time. An end on a different day switches
+// to a compact date-only range (no weekday, no time) — this card has one
+// line to work with (numberOfLines={1} at every call site), not enough room
+// for a full weekday+date+time-range string on both ends.
+const formatDateTime = (dateTimeStr, endDateTimeStr) => {
   if (!dateTimeStr) return { date: '', time: '', combined: '' };
-  const date = new Date(dateTimeStr);
-  const formattedDate = date.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  const { start, end, isRange, sameDay } = getActivitySchedule(dateTimeStr, endDateTimeStr);
+  const timeOpts = { hour: '2-digit', minute: '2-digit' };
+
+  if (isRange && !sameDay) {
+    const shortDateOpts = { month: 'short', day: 'numeric' };
+    const dateRange = `${start.toLocaleDateString('en-US', shortDateOpts)} – ${end.toLocaleDateString('en-US', { ...shortDateOpts, year: 'numeric' })}`;
+    return { date: dateRange, time: '', combined: dateRange };
+  }
+
+  const formattedDate = start.toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
   });
-  const formattedTime = date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const formattedTime = isRange
+    ? `${start.toLocaleTimeString('en-US', timeOpts)} – ${end.toLocaleTimeString('en-US', timeOpts)}`
+    : start.toLocaleTimeString('en-US', timeOpts);
   return { date: formattedDate, time: formattedTime, combined: `${formattedDate} · ${formattedTime}` };
 };
 
@@ -117,7 +128,7 @@ const ActivityCard = ({ activity, compact = false }) => {
           </View>
           <View style={styles.categoryRowCompact}>
             <Ionicons name="calendar-outline" size={10} color="#ccc" />
-            <Text style={styles.categoryCompact}>{formatDateTime(activity.date_time).date}</Text>
+            <Text style={styles.categoryCompact}>{formatDateTime(activity.date_time, activity.end_date_time).date}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -154,7 +165,7 @@ const ActivityCard = ({ activity, compact = false }) => {
             </View>
             <View style={styles.infoItemWeb}>
               <Ionicons name="calendar-outline" size={13} color="#ccc" />
-              <Text style={styles.infoTextWeb} numberOfLines={1}>{formatDateTime(activity.date_time).combined}</Text>
+              <Text style={styles.infoTextWeb} numberOfLines={1}>{formatDateTime(activity.date_time, activity.end_date_time).combined}</Text>
             </View>
             <View style={styles.infoItemWeb}>
               <Ionicons name="location-sharp" size={13} color="#ccc" />
@@ -212,7 +223,7 @@ const ActivityCard = ({ activity, compact = false }) => {
 
         <View style={styles.infoRow}>
           <Ionicons name="calendar-outline" size={14} color="#ccc" />
-          <Text style={styles.infoText} numberOfLines={1}>{formatDateTime(activity.date_time).combined}</Text>
+          <Text style={styles.infoText} numberOfLines={1}>{formatDateTime(activity.date_time, activity.end_date_time).combined}</Text>
         </View>
 
         <View style={styles.infoRow}>

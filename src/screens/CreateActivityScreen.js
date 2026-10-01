@@ -25,6 +25,7 @@ import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
+import { localDateString } from '../utils/activityDateRange';
 
 const CATEGORIES = [
   'Music',
@@ -96,6 +97,19 @@ const CreateActivityScreen = ({ navigation, route }) => {
   const [date, setDate] = useState(initialDate);
   const [time, setTime] = useState(initialTime);
 
+  // 🔥 Optional end date & time — a multi-day event, or just a same-day
+  // activity with a defined end. Off by default; the common single-moment
+  // case stays exactly as fast to create as before.
+  const initialEndDate = editingActivity?.end_date_time
+    ? editingActivity.end_date_time.split('T')[0]
+    : '';
+  const initialEndTime = editingActivity?.end_date_time
+    ? editingActivity.end_date_time.split('T')[1].slice(0, 5)
+    : '';
+  const [hasEndDateTime, setHasEndDateTime] = useState(!!editingActivity?.end_date_time);
+  const [endDate, setEndDate] = useState(initialEndDate);
+  const [endTime, setEndTime] = useState(initialEndTime);
+
   const [coverImage, setCoverImage] = useState(
     editingActivity?.cover_image ? { uri: editingActivity.cover_image } : null
   );
@@ -109,6 +123,8 @@ const CreateActivityScreen = ({ navigation, route }) => {
   // UI states
   const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
   const [isTimePickerVisible, setTimePickerVisibility] = useState(false);
+  const [isEndDatePickerVisible, setEndDatePickerVisibility] = useState(false);
+  const [isEndTimePickerVisible, setEndTimePickerVisibility] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -200,6 +216,16 @@ const CreateActivityScreen = ({ navigation, route }) => {
       Alert.alert('Missing Fields', 'Please fill in all event details.');
       return;
     }
+    if (hasEndDateTime) {
+      if (!endDate || !endTime) {
+        Alert.alert('Missing Fields', 'Please select an end date and time, or turn off the end date/time toggle.');
+        return;
+      }
+      if (`${endDate}T${endTime}` <= `${date}T${time}`) {
+        Alert.alert('Invalid End Time', 'The end date & time must be after the start.');
+        return;
+      }
+    }
     setStep(3);
   };
 
@@ -221,6 +247,13 @@ const CreateActivityScreen = ({ navigation, route }) => {
     formData.append('latitude', latitude);
     formData.append('longitude', longitude);
     formData.append('date_time', `${date}T${time}`);
+    // Same naive-string shape as date_time above (not .toISOString()) — kept
+    // deliberately consistent since the backend compares the two directly.
+    // Only sent when the toggle is actually on; editing an activity without
+    // touching this leaves whatever end_date_time is already stored as-is.
+    if (hasEndDateTime && endDate && endTime) {
+      formData.append('end_date_time', `${endDate}T${endTime}`);
+    }
     formData.append('format', isCasual ? 'casual' : 'competitive');
     formData.append('max_players', parseInt(maxPlayers));
     formData.append(
@@ -528,6 +561,52 @@ const CreateActivityScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
               </View>
 
+              {/* Optional end date & time — off by default, an add-on for
+                  multi-day events or a same-day activity with a defined
+                  end, not a forced second choice. Disabled while editing
+                  the same way the start date/time already is — a date/time
+                  range only ever changes via ActivityViewerScreen's
+                  Reschedule flow. */}
+              <TouchableOpacity
+                style={[styles.endDateToggleRow, isEditing && { opacity: 0.5 }]}
+                onPress={() => { if (!isEditing) setHasEndDateTime(!hasEndDateTime); }}
+                disabled={isEditing}
+                activeOpacity={0.8}
+              >
+                <Icon
+                  name={hasEndDateTime ? 'checkbox' : 'square-outline'}
+                  size={20}
+                  color={hasEndDateTime ? '#ce49d7' : '#555'}
+                />
+                <Text style={styles.endDateToggleText}>This event has an end date & time</Text>
+              </TouchableOpacity>
+
+              {hasEndDateTime && (
+                <View style={styles.row}>
+                  <TouchableOpacity
+                    style={[styles.fieldInput, { flex: 1 }, isEditing && { opacity: 0.5 }]}
+                    onPress={() => { if (!isEditing) setEndDatePickerVisibility(true); }}
+                    disabled={isEditing}
+                  >
+                    <Icon name="calendar-outline" size={16} color="#555" style={styles.fieldIcon} />
+                    <Text style={[styles.fieldInputText, !endDate && styles.placeholderText]}>
+                      {endDate || 'End Date'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.fieldInput, { flex: 1 }, isEditing && { opacity: 0.5 }]}
+                    onPress={() => { if (!isEditing) setEndTimePickerVisibility(true); }}
+                    disabled={isEditing}
+                  >
+                    <Icon name="time-outline" size={16} color="#555" style={styles.fieldIcon} />
+                    <Text style={[styles.fieldInputText, !endTime && styles.placeholderText]}>
+                      {endTime || 'End Time'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               <View style={{ height: 100 }} />
             </View>
           </ScrollView>
@@ -543,8 +622,9 @@ const CreateActivityScreen = ({ navigation, route }) => {
           <DateTimePickerModal
             isVisible={isDatePickerVisible}
             mode="date"
+            minimumDate={new Date()}
             onConfirm={(d) => {
-              setDate(d.toISOString().split('T')[0]);
+              setDate(localDateString(d));
               setDatePickerVisibility(false);
             }}
             onCancel={() => setDatePickerVisibility(false)}
@@ -557,6 +637,25 @@ const CreateActivityScreen = ({ navigation, route }) => {
               setTimePickerVisibility(false);
             }}
             onCancel={() => setTimePickerVisibility(false)}
+          />
+          <DateTimePickerModal
+            isVisible={isEndDatePickerVisible}
+            mode="date"
+            minimumDate={date ? new Date(date) : new Date()}
+            onConfirm={(d) => {
+              setEndDate(localDateString(d));
+              setEndDatePickerVisibility(false);
+            }}
+            onCancel={() => setEndDatePickerVisibility(false)}
+          />
+          <DateTimePickerModal
+            isVisible={isEndTimePickerVisible}
+            mode="time"
+            onConfirm={(t) => {
+              setEndTime(t.toTimeString().slice(0, 5));
+              setEndTimePickerVisibility(false);
+            }}
+            onCancel={() => setEndTimePickerVisibility(false)}
           />
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -942,6 +1041,18 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 10,
+  },
+  endDateToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 14,
+  },
+  endDateToggleText: {
+    color: '#ccc',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
   },
   typeBtn: {
     flex: 1,

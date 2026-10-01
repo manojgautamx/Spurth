@@ -34,7 +34,9 @@ export default function ActivitiesRail() {
 
         const joinedIds = new Set(listFrom(joinedRes.data).map(a => a.id));
         const upcoming = listFrom(otherRes.data).filter(
-          a => !joinedIds.has(a.id) && !a.is_cancelled && new Date(a.date_time) >= new Date()
+          // a.end_date_time || a.date_time: a multi-day activity that has
+          // already started but hasn't ended yet still counts as upcoming.
+          a => !joinedIds.has(a.id) && !a.is_cancelled && new Date(a.end_date_time || a.date_time) >= new Date()
         );
         // Same algorithm as Home's Nearby tab / Explore's All Categories:
         // distance-radius filter, then rank by the viewer's interests.
