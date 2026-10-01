@@ -31,6 +31,16 @@ import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
 import AuthPromptRail from '../components/web/AuthPromptRail';
 import ProfileSkeleton from '../components/skeletons/ProfileSkeleton';
+import { getActivitySchedule } from '../utils/activityDateRange';
+
+// Both activity-date displays in this file are a bare en-GB numeric date
+// with no time — kept in that same style here; a range just appends the end
+// date in the identical format rather than switching to a different look.
+const formatActivityDate = (dateTime, endDateTime) => {
+  const { start, end, isRange } = getActivitySchedule(dateTime, endDateTime);
+  const startStr = start.toLocaleDateString('en-GB');
+  return isRange ? `${startStr} – ${end.toLocaleDateString('en-GB')}` : startStr;
+};
 
 const getCoverSource = (item) => {
   if (item.cover_image) {
@@ -630,7 +640,7 @@ export default function ProfileViewScreen({ route }) {
                       {item.name}
                     </Text>
                     <Text style={styles.inviteActivityDate}>
-                      {new Date(item.date_time).toLocaleDateString('en-GB')}
+                      {formatActivityDate(item.date_time, item.end_date_time)}
                     </Text>
                   </View>
                   {inviting ? (
@@ -706,7 +716,7 @@ const ListCard = ({ data = [], navigation }) => {
           <View style={{ flex: 1 }}>
             <Text style={styles.listTitle} numberOfLines={1}>{item.name}</Text>
             <Text style={styles.listDate}>
-              {new Date(item.date_time).toLocaleDateString('en-GB')}
+              {formatActivityDate(item.date_time, item.end_date_time)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color="#444" />

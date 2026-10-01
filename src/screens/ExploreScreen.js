@@ -165,16 +165,23 @@ const ExploreScreen = () => {
     const now = dayjs();
 
     let data = activities.filter(item => {
-      const eventDate = dayjs(item.date_time);
+      // eventStart..eventEnd is the activity's full range — eventEnd falls
+      // back to eventStart for the (overwhelming majority) of activities
+      // with no end_date_time, so every case below is a point check exactly
+      // as before whenever there's no range, and an interval-overlap check
+      // once there is. This is what keeps a multi-day event that's already
+      // started but hasn't finished yet showing under "Today"/"Upcoming"
+      // instead of vanishing the moment its start time passes.
+      const eventStart = dayjs(item.date_time);
+      const eventEnd = dayjs(item.end_date_time || item.date_time);
 
       switch (activeDate) {
         case 'Today':
-          return eventDate.isSame(now, 'day');
+          return now.isBetween(eventStart.startOf('day'), eventEnd.endOf('day'), null, '[]');
         case 'Tomorrow':
-          return eventDate.isSame(now.add(1, 'day'), 'day');
+          return now.add(1, 'day').isBetween(eventStart.startOf('day'), eventEnd.endOf('day'), null, '[]');
         case 'This Week':
-          return eventDate.isAfter(now.startOf('week')) &&
-                eventDate.isBefore(now.endOf('week'));
+          return eventStart.isBefore(now.endOf('week')) && eventEnd.isAfter(now.startOf('week'));
         case 'This Weekend': {
           // dayjs .day() only ever returns 0–6, so `now.day() > 6` here was
           // dead code that could never fire. The real edge case is Sunday
@@ -183,18 +190,16 @@ const ExploreScreen = () => {
           const weekendSaturday = now.day() === 0 ? now.subtract(1, 'day') : now.day(6);
           const weekendSunday = weekendSaturday.add(1, 'day');
 
-          return eventDate.isBetween(
-            weekendSaturday.startOf('day'),
-            weekendSunday.endOf('day'),
-            null,
-            '[]'
-          );
+          return eventStart.isBefore(weekendSunday.endOf('day')) &&
+                eventEnd.isAfter(weekendSaturday.startOf('day'));
         }
         case 'Upcoming':
         default:
-          // "Upcoming" means not-yet-happened — it was previously returning
-          // true unconditionally, which let already-past activities through.
-          return eventDate.isAfter(now);
+          // "Upcoming" means not-yet-*concluded* — checked against the
+          // activity's end (itself if there's no separate end_date_time),
+          // not just its start, so an in-progress multi-day event stays
+          // listed instead of disappearing once it begins.
+          return eventEnd.isAfter(now);
       }
     });
 

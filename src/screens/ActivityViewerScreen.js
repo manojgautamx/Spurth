@@ -40,6 +40,7 @@ import PostsRail from '../components/web/PostsRail';
 import WebSidebar from '../components/web/WebSidebar';
 import AuthPromptRail from '../components/web/AuthPromptRail';
 import ActivityDetailSkeleton from '../components/skeletons/ActivityDetailSkeleton';
+import { getActivitySchedule, localDateString } from '../utils/activityDateRange';
 
 const geocodeLocation = async (location) => {
   try {
@@ -142,6 +143,13 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   const [newDate, setNewDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  // Optional end date & time, same "off by default" shape as
+  // CreateActivityScreen — hasEndDateTime starts false and gets set true by
+  // the activity-loaded effect below only when one is actually already set.
+  const [hasEndDateTime, setHasEndDateTime] = useState(false);
+  const [newEndDate, setNewEndDate] = useState(new Date());
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const { location } = useContext(LocationContext);
 
@@ -200,6 +208,13 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     }
     if (activity.date_time) {
       setNewDate(new Date(activity.date_time));
+    }
+    if (activity.end_date_time) {
+      setHasEndDateTime(true);
+      setNewEndDate(new Date(activity.end_date_time));
+    } else {
+      setHasEndDateTime(false);
+      setNewEndDate(new Date(activity.date_time || Date.now()));
     }
   }, [activity?.id]);
 
@@ -457,10 +472,19 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   };
 
   const handleReschedule = async () => {
+    if (hasEndDateTime && newEndDate <= newDate) {
+      Alert.alert('Invalid End Time', 'The end date & time must be after the start.');
+      return;
+    }
     try {
       setRescheduling(true);
       await axios.put(`${BASE_URL}/api/update-activity/${activity.id}/`, {
         date_time: newDate.toISOString(),
+        // Explicit null (not just omitting the key) is what actually clears
+        // a previously-set end here — this call sends a plain JSON body, so
+        // it round-trips correctly; the multipart edit screen has no way to
+        // express JSON null and deliberately never tries to clear this.
+        end_date_time: hasEndDateTime ? newEndDate.toISOString() : null,
       });
       Alert.alert('Success', 'Event rescheduled!');
       setRescheduleVisible(false);
@@ -515,6 +539,9 @@ const ActivityViewerScreen = ({ route, navigation }) => {
 
   const statusColor = isCancelled ? '#B00020' : isConcluded ? '#444' : '#F2994A';
   const statusLabel = isCancelled ? 'Cancelled' : isConcluded ? 'Concluded' : 'Upcoming';
+
+  const schedule = getActivitySchedule(activity.date_time, activity.end_date_time);
+  const timeOptions = { hour: '2-digit', minute: '2-digit' };
 
   const descriptionText = activity.description || 'No description provided for this activity.';
   const isLongDesc = descriptionText.length > 220;
@@ -610,13 +637,23 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                 <Ionicons name="time-outline" size={20} color="#2CB9B0" />
               </View>
               <View>
-                <Text style={styles.infoValue}>
-                  {new Date(activity.date_time).toLocaleDateString('en-GB', {
-                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-                  })}
-                </Text>
+                {schedule.isRange && !schedule.sameDay ? (
+                  <Text style={styles.infoValue}>
+                    {schedule.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })}
+                    {' – '}
+                    {schedule.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Text>
+                ) : (
+                  <Text style={styles.infoValue}>
+                    {schedule.start.toLocaleDateString('en-GB', {
+                      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+                    })}
+                  </Text>
+                )}
                 <Text style={styles.infoSubValue}>
-                  {new Date(activity.date_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} Onwards
+                  {schedule.isRange
+                    ? `${schedule.start.toLocaleTimeString([], timeOptions)} – ${schedule.end.toLocaleTimeString([], timeOptions)}`
+                    : `${schedule.start.toLocaleTimeString([], timeOptions)} Onwards`}
                 </Text>
               </View>
             </View>
@@ -961,6 +998,35 @@ const ActivityViewerScreen = ({ route, navigation }) => {
               </Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.endDateToggleRow}
+              onPress={() => setHasEndDateTime(!hasEndDateTime)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={hasEndDateTime ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={hasEndDateTime ? '#2CB9B0' : '#777'}
+              />
+              <Text style={styles.endDateToggleText}>Has an end date & time</Text>
+            </TouchableOpacity>
+
+            {hasEndDateTime && (
+              <>
+                <TouchableOpacity style={styles.dateTimeInput} onPress={() => setShowEndDatePicker(true)}>
+                  <Ionicons name="calendar-outline" size={18} color="#2CB9B0" style={{ marginRight: 8 }} />
+                  <Text style={styles.dateTimeText}>{newEndDate.toDateString()}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.dateTimeInput, { marginTop: 10 }]} onPress={() => setShowEndTimePicker(true)}>
+                  <Ionicons name="time-outline" size={18} color="#2CB9B0" style={{ marginRight: 8 }} />
+                  <Text style={styles.dateTimeText}>
+                    {newEndDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setRescheduleVisible(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -1072,6 +1138,34 @@ const ActivityViewerScreen = ({ route, navigation }) => {
           setShowTimePicker(false);
         }}
         onCancel={() => setShowTimePicker(false)}
+      />
+
+      <DateTimePickerModal
+        isVisible={showEndDatePicker}
+        mode="date"
+        minimumDate={newDate}
+        onConfirm={(date) => {
+          const updated = new Date(newEndDate);
+          updated.setFullYear(date.getFullYear());
+          updated.setMonth(date.getMonth());
+          updated.setDate(date.getDate());
+          setNewEndDate(updated);
+          setShowEndDatePicker(false);
+        }}
+        onCancel={() => setShowEndDatePicker(false)}
+      />
+
+      <DateTimePickerModal
+        isVisible={showEndTimePicker}
+        mode="time"
+        onConfirm={(time) => {
+          const updated = new Date(newEndDate);
+          updated.setHours(time.getHours());
+          updated.setMinutes(time.getMinutes());
+          setNewEndDate(updated);
+          setShowEndTimePicker(false);
+        }}
+        onCancel={() => setShowEndTimePicker(false)}
       />
 
     </View>
@@ -1509,6 +1603,18 @@ const styles = StyleSheet.create({
   },
   dateTimeText: {
     color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.regular,
+  },
+  endDateToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  endDateToggleText: {
+    color: '#ccc',
     fontSize: 14,
     fontFamily: Fonts.regular,
   },
