@@ -26,6 +26,7 @@ import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import ActivityChatScreen from '../screens/ActivityChatScreen';
 import ParticipantsListScreen from '../screens/ParticipantsListScreen';
+import HostsListScreen from '../screens/HostsListScreen';
 import ExperienceScreen from '../screens/ExperienceScreen';
 import CommentsScreen from '../screens/CommentScreen';
 import ExploreMapScreen from '../screens/ExploreMapScreen';
@@ -362,6 +363,7 @@ export default function AppNavigator() {
               <Stack.Screen name="ProfileEdit"       component={ProfileEditScreen} options={{ title: 'Edit Profile' }} />
               <Stack.Screen name="ActivityChatScreen" component={ActivityChatScreen} options={{ title: 'Chat' }} />
               <Stack.Screen name="ParticipantsList"  component={ParticipantsListScreen} options={{ headerShown: false, title: 'Participants' }} />
+              <Stack.Screen name="HostsList"         component={HostsListScreen} options={{ headerShown: false, title: 'Hosts' }} />
               <Stack.Screen name="ExploreMap"        component={ExploreMapScreen} options={{ title: 'Map' }} />
               <Stack.Screen name="Settings"          component={SettingsScreen} options={{ title: 'Settings' }} />
             </>

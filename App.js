@@ -83,6 +83,7 @@ const linking = {
       ProfileEdit: 'edit-profile',
       ActivityChatScreen: 'chat/:activityId',
       ParticipantsList: 'participants',
+      HostsList: 'hosts',
       ExploreMap: 'map',
       Settings: 'settings',
     },
