@@ -308,11 +308,19 @@ const ActivityViewerScreen = ({ route, navigation }) => {
   // 0 in that state, only 1 (creator alone, today's collapsed single-pill
   // look) or more (co-hosts accepted, the separate stacked "Host" pill).
   const hosts = useMemo(() => activity?.hosts || [], [activity?.hosts]);
-  const displayedHosts = useMemo(() => {
-    if (hosts.length === 0) return [];
-    if (hosts.length <= 3) return hosts;
-    return [...hosts].sort(() => 0.5 - Math.random()).slice(0, 3);
-  }, [hosts]);
+  // First 3 in order, not a random sample like displayedParticipants above —
+  // the pill now names them (hostNamesLabel below), so the avatars shown
+  // must be the exact same people the text lists, not an arbitrary subset
+  // that could silently mismatch.
+  const displayedHosts = useMemo(() => hosts.slice(0, 3), [hosts]);
+  const hostNamesLabel = useMemo(() => {
+    const names = displayedHosts.map((h) => h.full_name || h.username);
+    if (hosts.length <= 3) {
+      if (names.length <= 1) return names.join('');
+      return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+    }
+    return `${names.join(', ')} & ${hosts.length - 3} more`;
+  }, [displayedHosts, hosts.length]);
 
   const [cohostResponding, setCohostResponding] = useState(false);
   const handleCohostInviteResponse = async (action) => {
@@ -769,7 +777,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
                         />
                       ))}
                     </View>
-                    <Text style={styles.pillText}>{hosts.length} hosts</Text>
+                    <Text style={styles.pillText} numberOfLines={1}>{hostNamesLabel}</Text>
                   </TouchableOpacity>
                 ) : (
                   // Plain text — host_name is never a Spurth account, so
