@@ -89,7 +89,7 @@ const ExploreScreen = () => {
   const [loadingMore, setLoadingMore] = useState(false);
   const pageRef = useRef(1);
   const navigation = useNavigation();
-  const { location } = useContext(LocationContext);
+  const { location, locationLoading, locationSource } = useContext(LocationContext);
 
   useEffect(() => {
     axios.get(`${BASE_URL}/api/profile/`)
@@ -234,6 +234,17 @@ const ExploreScreen = () => {
     return data;
   }, [activities, activeDate, activeCategory, searchQuery, location, profile]);
 
+  // Same default-view condition as the distance filter above — only there is
+  // "near you" actually being applied, so only there does it need a caveat.
+  const isDefaultDistanceView =
+    activeCategory === 'All Categories' && activeDate === 'Upcoming' && searchQuery.length === 0;
+  const locationNote = isDefaultDistanceView && !locationLoading && locationSource !== 'gps' && (
+    <Text style={styles.locationInlineNote}>
+      {locationSource === 'ip'
+        ? 'Showing results near your approximate location'
+        : 'Location is off — showing all activities'}
+    </Text>
+  );
 
   if (loading) {
     return (
@@ -412,6 +423,7 @@ const ExploreScreen = () => {
   const listData = [
     { key: 'sticky', kind: 'sticky' },
     ...(searchQuery.length > 0 ? [{ key: 'search-results', kind: 'search-results' }] : []),
+    ...(locationNote ? [{ key: 'location-note', kind: 'location-note' }] : []),
     ...(filteredActivities.length === 0
       ? [{ key: 'empty', kind: 'empty' }]
       : filteredActivities.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
@@ -420,6 +432,7 @@ const ExploreScreen = () => {
   const renderListItem = ({ item }) => {
     if (item.kind === 'sticky') return stickyHeader;
     if (item.kind === 'search-results') return <SearchResultsHeader />;
+    if (item.kind === 'location-note') return locationNote;
     if (item.kind === 'empty') {
       // "No Activities found." and "we couldn't reach the server" looked
       // identical here, and only one of them is worth retrying.
@@ -621,6 +634,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
     fontFamily: Fonts.regular
+  },
+  locationInlineNote: {
+    color: '#888',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
   },
   mapToggleBtn: {
     flexDirection: 'row',

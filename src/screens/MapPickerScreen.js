@@ -166,6 +166,19 @@ const MapPickerScreen = ({ navigation, route }) => {
         {selectedCoords && <Marker coordinate={selectedCoords} />}
       </MapView>
 
+      {/* Only the genuinely rare case now — GPS denied/unavailable AND the
+          IP-based fallback (LocationContext) also failed, e.g. fully
+          offline. Whenever the IP fallback succeeds, `location` already
+          carries those approximate coordinates and this never shows. */}
+      {!(location?.latitude && location?.longitude) && (
+        <View style={styles.locationFallbackNotice}>
+          <Ionicons name="information-circle-outline" size={14} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.locationFallbackText}>
+            Location unavailable — showing Kathmandu. Search to find your area.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.topRow}>
         <TouchableOpacity
           style={styles.backBtn}
@@ -241,6 +254,24 @@ const MapPickerScreen = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
+  locationFallbackNotice: {
+    position: 'absolute',
+    top: 104,
+    left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20,20,20,0.85)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  locationFallbackText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 12,
+    fontFamily: Fonts.regular,
+  },
   topRow: {
     position: 'absolute',
     top: 50,
