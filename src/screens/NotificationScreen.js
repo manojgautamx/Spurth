@@ -28,6 +28,9 @@ const TYPE_CONFIG = {
   join_request:     { icon: 'person-outline',            color: '#8575ff', label: 'Join Request' },
   request_accepted: { icon: 'checkmark-circle-outline',  color: '#36ACA6', label: 'Accepted'      },
   request_declined: { icon: 'close-circle-outline',      color: '#888',    label: 'Declined'      },
+  cohost_invite:    { icon: 'people-outline',            color: '#2CB9B0', label: 'Co-Host Invite' },
+  cohost_accepted:  { icon: 'checkmark-circle-outline',  color: '#36ACA6', label: 'Co-Host Accepted' },
+  cohost_declined:  { icon: 'close-circle-outline',      color: '#888',    label: 'Co-Host Declined' },
   // ─────────────────────────────────────────────────────────────────────────────
 };
 

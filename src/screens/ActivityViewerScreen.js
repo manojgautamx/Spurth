@@ -303,6 +303,33 @@ const ActivityViewerScreen = ({ route, navigation }) => {
     return [...participants].sort(() => 0.5 - Math.random()).slice(0, 3);
   }, [activity?.participants]);
 
+  // ActivitySerializer.get_hosts always includes the creator alongside any
+  // accepted co-hosts whenever is_hosting is true — so hosts.length is never
+  // 0 in that state, only 1 (creator alone, today's collapsed single-pill
+  // look) or more (co-hosts accepted, the separate stacked "Host" pill).
+  const hosts = useMemo(() => activity?.hosts || [], [activity?.hosts]);
+  const displayedHosts = useMemo(() => {
+    if (hosts.length === 0) return [];
+    if (hosts.length <= 3) return hosts;
+    return [...hosts].sort(() => 0.5 - Math.random()).slice(0, 3);
+  }, [hosts]);
+
+  const [cohostResponding, setCohostResponding] = useState(false);
+  const handleCohostInviteResponse = async (action) => {
+    const inviteId = activity?.pending_cohost_invite?.id;
+    if (!inviteId) return;
+    setCohostResponding(true);
+    try {
+      await axios.post(`${BASE_URL}/api/respond-cohost-invite/${inviteId}/`, { action });
+      const res = await axios.get(`${BASE_URL}/api/activity-detail/${activity.id}/`);
+      setActivity(res.data);
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.detail || 'Something went wrong.');
+    } finally {
+      setCohostResponding(false);
+    }
+  };
+
   // ── EARLY RETURN — safe, all hooks above ────────────────────────────────
   // Mirrors the real (loaded) return's wide-web sidebar wrapping below —
   // this screen sits outside MainTabNavigator (which is what normally
@@ -688,9 +715,78 @@ const ActivityViewerScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           )}
 
+          {!!activity.pending_cohost_invite && (
+            <View style={styles.cohostInviteCard}>
+              <View style={styles.cohostInviteHeader}>
+                <Ionicons name="people-outline" size={18} color="#2CB9B0" style={{ marginRight: 10 }} />
+                <Text style={styles.cohostInviteText} numberOfLines={2}>
+                  @{activity.created_by?.username || 'The organizer'} invited you to co-host this activity
+                </Text>
+              </View>
+              <View style={styles.cohostInviteBtnRow}>
+                <TouchableOpacity
+                  style={styles.cohostDeclineBtn}
+                  onPress={() => handleCohostInviteResponse('decline')}
+                  disabled={cohostResponding}
+                >
+                  <Text style={styles.cohostDeclineBtnText}>Decline</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.cohostAcceptBtn, cohostResponding && { opacity: 0.6 }]}
+                  onPress={() => handleCohostInviteResponse('accept')}
+                  disabled={cohostResponding}
+                >
+                  {cohostResponding
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.cohostAcceptBtnText}>Accept</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* A separate "Host" pill only when there's something beyond the
+              Created-by pill below worth saying: real co-hosts accepted
+              (hosts.length > 1 — get_hosts always includes the creator, so
+              1 alone means nobody else has), or a named host on a
+              not-personally-hosted activity. Otherwise today's exact single
+              -pill look (just Created-by, labeled "Host") is unchanged. */}
+          {((activity.is_hosting && hosts.length > 1) || (!activity.is_hosting && !!activity.host_name)) && (
+            <View style={styles.hostRow}>
+              <View style={styles.column}>
+                <Text style={styles.sectionHeader}>Host</Text>
+                {activity.is_hosting ? (
+                  <TouchableOpacity
+                    style={styles.pill}
+                    activeOpacity={0.7}
+                    onPress={() => navigation.navigate('HostsList', { activityId: activity.id, activityName: activity.name })}
+                  >
+                    <View style={styles.avatarStack}>
+                      {displayedHosts.map((host, index) => (
+                        <Image
+                          key={host.id || index}
+                          source={getAvatarSource(host.avatar)}
+                          style={[styles.stackAvatar, { marginLeft: index === 0 ? 0 : -10, zIndex: 10 - index }]}
+                        />
+                      ))}
+                    </View>
+                    <Text style={styles.pillText}>{hosts.length} hosts</Text>
+                  </TouchableOpacity>
+                ) : (
+                  // Plain text — host_name is never a Spurth account, so
+                  // there's no profile to visit and nothing to tap.
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText} numberOfLines={1}>{activity.host_name}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
           <View style={styles.hostRow}>
             <View style={styles.column}>
-              <Text style={styles.sectionHeader}>{activity.is_hosting ? 'Host' : 'Posted by'}</Text>
+              <Text style={styles.sectionHeader}>
+                {activity.is_hosting && hosts.length <= 1 ? 'Host' : 'Posted by'}
+              </Text>
               <TouchableOpacity
                 style={styles.pill}
                 activeOpacity={0.7}
@@ -1425,6 +1521,58 @@ const styles = StyleSheet.create({
     borderRadius: 13,
     borderWidth: 2,
     borderColor: '#1A1A1A',
+  },
+  // ── Co-host invite accept/decline ────────────────
+  cohostInviteCard: {
+    backgroundColor: '#181818',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(44,185,176,0.35)',
+    marginBottom: 20,
+  },
+  cohostInviteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cohostInviteText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.medium,
+    lineHeight: 19,
+  },
+  cohostInviteBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cohostDeclineBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cohostDeclineBtnText: {
+    color: '#aaa',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
+  },
+  cohostAcceptBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#2CB9B0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cohostAcceptBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontFamily: Fonts.semibold,
   },
 
   // ── Map ─────────────────────────────────────────

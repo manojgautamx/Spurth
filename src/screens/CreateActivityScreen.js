@@ -21,6 +21,7 @@ import { appendImageAsset } from '../utils/appendImageAsset';
 import * as ImagePicker from 'react-native-image-picker';
 import MediaPreview from '../components/MediaPreview';
 import CoverImageCropper from '../components/CoverImageCropper';
+import HostPicker from '../components/HostPicker';
 import { Fonts } from '../theme/fonts';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
@@ -86,6 +87,20 @@ const CreateActivityScreen = ({ navigation, route }) => {
   // booleans above), so falling back on any falsy value would silently
   // flip an edited activity's "just listing" choice back to hosting.
   const [isHosting, setIsHosting] = useState(editingActivity?.is_hosting ?? true);
+  // Not hosting: who actually is, as plain text — no Spurth account
+  // required, no profile to link to.
+  const [hostName, setHostName] = useState(editingActivity?.host_name || '');
+  // Hosting: co-hosts to *invite* — always starts empty, even when editing.
+  // Not an instant add: CreateActivityScreen sends one invite per selection
+  // after the activity exists, and they only become a listed host once they
+  // accept it. Already-accepted co-hosts (editingActivity.hosts, minus the
+  // creator ActivitySerializer.get_hosts includes alongside them) are shown
+  // separately, read-only — re-"inviting" someone already hosting makes no
+  // sense, and there's nothing here to remove them from.
+  const [selectedHosts, setSelectedHosts] = useState([]);
+  const existingCoHosts = (editingActivity?.hosts || []).filter(
+    (h) => h.id !== editingActivity?.created_by?.id
+  );
 
   // 🔥 Date & time
   const initialDate = editingActivity?.date_time
@@ -235,6 +250,10 @@ const CreateActivityScreen = ({ navigation, route }) => {
       Alert.alert('Missing Fields', 'Please enter maximum joinees.');
       return;
     }
+    if (!isHosting && !hostName.trim()) {
+      Alert.alert('Missing Fields', "Please enter who's hosting this activity.");
+      return;
+    }
 
     setLoading(true);
     setError('');
@@ -262,6 +281,13 @@ const CreateActivityScreen = ({ navigation, route }) => {
     );
     formData.append('is_invite_only', isInviteOnly ? 'true' : 'false');
     formData.append('is_hosting', isHosting ? 'true' : 'false');
+    // Only meaningful when not hosting (get_hosts returns [] regardless of
+    // host_name whenever is_hosting=true) — not sent at all when hosting,
+    // same as cover_image/crop fields above: left untouched on an edit that
+    // doesn't need to change it, harmless since nothing displays it anyway.
+    if (!isHosting) {
+      formData.append('host_name', hostName.trim());
+    }
 
     appendImageAsset(formData, 'cover_image', coverImage, `event_${Date.now()}.jpg`);
     // Only sent when a fresh crop was actually made this session — editing
@@ -275,6 +301,20 @@ const CreateActivityScreen = ({ navigation, route }) => {
       formData.append('cover_crop_size', String(coverCrop.size));
     }
 
+    // Fired after the activity itself is successfully saved (create or
+    // edit) — one invite per newly-picked co-host. Not required to all
+    // succeed for the save itself to count as successful: Promise.allSettled
+    // so one rejection (e.g. a race where someone was already invited)
+    // doesn't surface as a scary error on an otherwise-fine save.
+    const sendCoHostInvites = async (activityId) => {
+      if (!isHosting || selectedHosts.length === 0) return;
+      await Promise.allSettled(
+        selectedHosts.map((h) =>
+          axiosInstance.post(`${BASE_URL}/api/invite-cohost/${activityId}/`, { user_id: h.id })
+        )
+      );
+    };
+
     try {
       if (isEditing) {
         const res = await axiosInstance.put(
@@ -282,6 +322,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
           formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
+        await sendCoHostInvites(editingActivity.id);
         Alert.alert('Success', 'Event updated!', [
           {
             text: 'OK',
@@ -300,6 +341,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
           formData,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
+        await sendCoHostInvites(res.data.id);
         Alert.alert('Success', 'Event created!', [
           {
             text: 'OK',
@@ -747,6 +789,42 @@ const CreateActivityScreen = ({ navigation, route }) => {
                 : "You're just sharing info about an activity you're not personally running — no host badge."}
             </Text>
 
+            {isHosting ? (
+              <>
+                {existingCoHosts.length > 0 && (
+                  <>
+                    <Text style={[styles.fieldLabel, { marginTop: 20 }]}>Current co-hosts</Text>
+                    <View style={styles.existingCoHostsRow}>
+                      {existingCoHosts.map((h) => (
+                        <View key={h.id} style={styles.existingCoHostChip}>
+                          <Text style={styles.existingCoHostText}>@{h.username}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </>
+                )}
+                <HostPicker
+                  label="Invite co-hosts (optional)"
+                  selectedHosts={selectedHosts}
+                  onChange={setSelectedHosts}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 20 }]}>Host Name</Text>
+                <View style={styles.fieldInput}>
+                  <Icon name="person-outline" size={16} color="#555" style={styles.fieldIcon} />
+                  <TextInput
+                    style={styles.fieldTextInput}
+                    value={hostName}
+                    onChangeText={setHostName}
+                    placeholder="Who's hosting this?"
+                    placeholderTextColor="#555"
+                  />
+                </View>
+              </>
+            )}
+
             {/* Price */}
             <Text style={styles.fieldLabel}>
               Price{' '}
@@ -1005,6 +1083,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#222',
+  },
+
+  // ── Existing co-hosts (edit mode, read-only) ────────────────────────────────
+  existingCoHostsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  existingCoHostChip: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  existingCoHostText: {
+    color: '#aaa',
+    fontSize: 13,
+    fontFamily: Fonts.medium,
   },
 
   // ── Category Tags ─────────────────────────────────────────────────────────
