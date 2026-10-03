@@ -150,6 +150,12 @@ export default function AppNavigator() {
   const { userToken, isLoading } = useContext(AuthContext);
   const [profileComplete, setProfileComplete] = useState(null);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  // Null until profile/status/ resolves, same as profileComplete — true only
+  // for a brand-new Google sign-up (see google_auth) who hasn't picked a
+  // real username yet. Takes priority over profileComplete in getPhase
+  // below: GoogleUsernameScreen must be where they land, not the onboarding
+  // wizard.
+  const [needsUsernameSetup, setNeedsUsernameSetup] = useState(null);
 
   // ── Email verification deep link ─────────────────────────────────────────
   // Not a navigation target — just posts the token and shows a result alert.
@@ -196,6 +202,8 @@ export default function AppNavigator() {
       if (cached !== null) setProfileComplete(cached === 'true');
       const cachedPhone = await AsyncStorage.getItem('phoneVerified');
       if (cachedPhone !== null) setPhoneVerified(cachedPhone === 'true');
+      const cachedNeedsUsername = await AsyncStorage.getItem('needsUsernameSetup');
+      if (cachedNeedsUsername !== null) setNeedsUsernameSetup(cachedNeedsUsername === 'true');
 
       const response = await axios.get(
         `${BASE_URL}/api/profile/status/`,
@@ -209,6 +217,10 @@ export default function AppNavigator() {
       const isPhoneVerified = !!response.data.phone_verified;
       setPhoneVerified(isPhoneVerified);
       await AsyncStorage.setItem('phoneVerified', String(isPhoneVerified));
+
+      const needsUsername = !!response.data.needs_username_setup;
+      setNeedsUsernameSetup(needsUsername);
+      await AsyncStorage.setItem('needsUsernameSetup', String(needsUsername));
     } catch (err) {
       console.error('Profile status error:', err.message);
       const cached = await AsyncStorage.getItem('profileComplete');
@@ -216,6 +228,9 @@ export default function AppNavigator() {
       else setProfileComplete(false);
       const cachedPhone = await AsyncStorage.getItem('phoneVerified');
       if (cachedPhone !== null) setPhoneVerified(cachedPhone === 'true');
+      const cachedNeedsUsername = await AsyncStorage.getItem('needsUsernameSetup');
+      if (cachedNeedsUsername !== null) setNeedsUsernameSetup(cachedNeedsUsername === 'true');
+      else setNeedsUsernameSetup(false);
     }
   };
 
@@ -239,7 +254,8 @@ export default function AppNavigator() {
   // guard at all until this effect. Skipped while profileComplete is still
   // resolving (null) — that state already renders the spinner instead of
   // the Stack.Navigator, so there's nothing mounted yet to reset.
-  const getPhase = (token, complete) => (!token ? 'auth' : (complete ? 'main' : 'onboarding'));
+  const getPhase = (token, needsUsername, complete) =>
+    !token ? 'auth' : needsUsername ? 'needs_username' : (complete ? 'main' : 'onboarding');
   // Starts unset rather than seeded from the current (pre-AsyncStorage)
   // values — seeding it eagerly made the very first post-spinner render
   // look like a transition (e.g. 'auth' → 'main' for an already-logged-in
@@ -257,9 +273,9 @@ export default function AppNavigator() {
     // doesn't include isLoading, so without this check it fires once on
     // that transient pre-resolution render (userToken=null, isLoading=true)
     // and burns the null sentinel on a guess instead of the real baseline.
-    if (isLoading || (userToken && profileComplete === null)) return;
+    if (isLoading || (userToken && (profileComplete === null || needsUsernameSetup === null))) return;
 
-    const nextPhase = getPhase(userToken, profileComplete);
+    const nextPhase = getPhase(userToken, needsUsernameSetup, profileComplete);
     if (prevPhaseRef.current === null) {
       prevPhaseRef.current = nextPhase;
       return;
@@ -267,14 +283,15 @@ export default function AppNavigator() {
     if (nextPhase !== prevPhaseRef.current && navigationRef.isReady()) {
       const target =
         nextPhase === 'main' ? 'MainTabs' :
+        nextPhase === 'needs_username' ? 'GoogleUsername' :
         nextPhase === 'onboarding' ? 'Profile' :
         'Welcome';
       navigationRef.reset({ index: 0, routes: [{ name: target }] });
     }
     prevPhaseRef.current = nextPhase;
-  }, [userToken, profileComplete, isLoading]);
+  }, [userToken, needsUsernameSetup, profileComplete, isLoading]);
 
-  if (isLoading || (userToken && profileComplete === null)) {
+  if (isLoading || (userToken && (profileComplete === null || needsUsernameSetup === null))) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
         <ActivityIndicator size="large" color="#8575ff" />
@@ -296,7 +313,7 @@ export default function AppNavigator() {
   // but a signed-out user who ends up anywhere else (after logging out, or on
   // a stale /home bookmark) belongs at the sign-in entry point, not the pitch.
   const initialRouteName = userToken
-    ? (profileComplete ? 'MainTabs' : 'Profile')
+    ? (needsUsernameSetup ? 'GoogleUsername' : (profileComplete ? 'MainTabs' : 'Profile'))
     : 'Welcome';
 
   return (
@@ -326,7 +343,16 @@ export default function AppNavigator() {
         <Stack.Screen name="Comments"              component={CommentsScreen} options={{ headerShown: false, title: 'Post' }} />
 
         {userToken ? (
-          profileComplete ? (
+          needsUsernameSetup ? (
+            // Brand-new Google sign-up (needs_username_setup, from
+            // google_auth) — gated here as a real phase, same as the other
+            // branches, instead of the one-shot navigate('GoogleUsername')
+            // this used to rely on: that raced against this same component's
+            // own login-triggered reset (below) and almost always lost,
+            // leaving the auto-generated email-prefix username stuck
+            // permanently with no other screen anywhere to change it.
+            <Stack.Screen name="GoogleUsername" component={GoogleUsernameScreen} options={{ title: 'Choose a Username' }} />
+          ) : profileComplete ? (
             <>
               <Stack.Screen name="MainTabs"          component={MainTabNavigator} options={{ title: 'Home' }} />
               <Stack.Screen name="CreateActivity"    component={CreateActivityScreen} options={{ title: 'Create Activity' }} />
@@ -348,7 +374,6 @@ export default function AppNavigator() {
             <Stack.Screen name="Landing"        component={LandingScreen} options={{ title: 'Jump In. Connect.' }} />
             <Stack.Screen name="Login"          component={LoginScreen} options={{ title: 'Log In' }} />
             <Stack.Screen name="Signup"         component={SignupScreen} options={{ title: 'Sign Up' }} />
-            <Stack.Screen name="GoogleUsername" component={GoogleUsernameScreen} options={{ title: 'Choose a Username' }} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ title: 'Forgot Password' }} />
             <Stack.Screen name="ResetPassword"  component={ResetPasswordScreen} options={{ title: 'Reset Password' }} />
           </>

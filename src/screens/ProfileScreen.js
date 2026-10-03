@@ -12,6 +12,7 @@ import {
   TextInput,
   StatusBar,
   SafeAreaView,
+  Animated,
 } from 'react-native';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
@@ -87,6 +88,21 @@ export default function ProfileScreen({ navigation }) {
   const [gender, setGender] = useState('');
 
   const { refreshProfileStatus } = useContext(ProfileStatusContext);
+
+  // ── Step 1's welcome greeting: a subtle fade+rise on mount ───────────────────
+  // Step 1 is the very first thing a brand-new user sees right after signup
+  // (email or Google) — this used to be a bare "Pick your Interest" title
+  // with zero acknowledgment that signup just succeeded. Same Animated API
+  // (not a new dependency) WelcomeScreen already uses for its Ken Burns
+  // effect; runs once, on this screen's own mount.
+  const welcomeFade = useRef(new Animated.Value(0)).current;
+  const welcomeRise = useRef(new Animated.Value(12)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(welcomeFade, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(welcomeRise, { toValue: 0, duration: 500, useNativeDriver: true }),
+    ]).start();
+  }, [welcomeFade, welcomeRise]);
 
   // ── Location: auto-fill from device GPS, fall back to search-as-you-type ────
   const { location: deviceLocation } = useContext(LocationContext);
@@ -246,12 +262,15 @@ export default function ProfileScreen({ navigation }) {
               <Ionicons name="arrow-back" size={22} color="#fff" />
             </TouchableOpacity>
 
-            <View style={styles.interestHeader}>
-              <Text style={styles.stepTitle}>Pick your Interest</Text>
-              <Text style={styles.interestCount}>
-                {interests.length}/{MAX_INTERESTS} Selected
-              </Text>
-            </View>
+            <Animated.View style={{ opacity: welcomeFade, transform: [{ translateY: welcomeRise }] }}>
+              <Text style={styles.welcomeGreeting}>Welcome to Spurth! 🎉</Text>
+              <View style={styles.interestHeader}>
+                <Text style={styles.stepTitle}>Pick a few things you're into</Text>
+                <Text style={styles.interestCount}>
+                  {interests.length}/{MAX_INTERESTS} Selected
+                </Text>
+              </View>
+            </Animated.View>
 
             <ScrollView
               style={styles.interestScrollView}
@@ -666,6 +685,12 @@ const styles = StyleSheet.create({
   },
 
   // ── Step 3: Interests ─────────────────────────────────────────────────────
+  welcomeGreeting: {
+    color: '#2CB9B0',
+    fontSize: 15,
+    fontFamily: Fonts.semibold,
+    marginBottom: 6,
+  },
   interestHeader: {
     flexDirection: 'row',
     alignItems: 'center',
