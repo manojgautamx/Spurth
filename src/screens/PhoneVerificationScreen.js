@@ -90,12 +90,23 @@ const PhoneVerificationScreen = ({ navigation }) => {
     const fullNumber = `${country.dialCode}${digitsOnly}`;
     try {
       setSending(true);
+      // Checked up front, before ever touching Firebase: Firebase's own
+      // phone sign-in doesn't reject an already-used number (it just signs
+      // into whichever account already owns it), so without this an
+      // already-taken number used to look like entering it did nothing —
+      // the real rejection only ever happened later, server-side, after an
+      // OTP had already been requested.
+      const check = await axiosInstance.get('check-phone/', { params: { phone_number: fullNumber } });
+      if (!check.data.available) {
+        Alert.alert('Already in use', check.data.detail || 'This phone number is already linked to another account.');
+        return;
+      }
       const result = Platform.OS === 'web'
         ? await sendCodeWeb(fullNumber)
         : await sendCodeNative(fullNumber);
       setConfirmation(result);
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to send verification code');
+      Alert.alert('Error', err.response?.data?.detail || err.message || 'Failed to send verification code');
     } finally {
       setSending(false);
     }
