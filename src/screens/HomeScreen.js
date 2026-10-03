@@ -11,7 +11,9 @@ import {
   Image,
   ImageBackground,
   SafeAreaView,
+  Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -44,7 +46,15 @@ const HomeScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('Nearby');
-  const { location } = useContext(LocationContext);
+  const {
+    location,
+    locationLoading,
+    locationSource,
+    locationCity,
+    permissionPermanentlyDenied,
+    openLocationSettings,
+    refreshLocation,
+  } = useContext(LocationContext);
 
   const axios = axiosInstance;
   const navigation = useNavigation();
@@ -58,6 +68,28 @@ const HomeScreen = () => {
   const [verifySending, setVerifySending] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [verifyError, setVerifyError] = useState('');
+
+  // Location explainer/nudge — expanded (the full card) only on the very
+  // first Home visit where there's actually something to explain (GPS
+  // didn't resolve); every visit after that gets the collapsed pill.
+  // Starts "seen" (true) so the pill/card doesn't flash expanded before
+  // AsyncStorage answers, mirroring profileComplete's own null-then-resolve
+  // pattern in AppNavigator.js.
+  const [locationCardExpanded, setLocationCardExpanded] = useState(false);
+  const [locationExplainerSeen, setLocationExplainerSeen] = useState(true);
+
+  useEffect(() => {
+    AsyncStorage.getItem('locationExplainerSeen').then(val => {
+      if (val !== 'true') setLocationExplainerSeen(false);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (locationLoading || locationSource === 'gps' || locationExplainerSeen) return;
+    setLocationCardExpanded(true);
+    setLocationExplainerSeen(true);
+    AsyncStorage.setItem('locationExplainerSeen', 'true').catch(() => {});
+  }, [locationLoading, locationSource, locationExplainerSeen]);
 
   const fetchActivities = async () => {
     try {
@@ -320,6 +352,87 @@ const HomeScreen = () => {
         </View>
       )}
 
+      {/* Location nudge — never blocking. Hidden entirely once GPS has
+          resolved (locationSource === 'gps'); otherwise a collapsed pill
+          that expands into this same card on tap. Copy and accent color
+          differ between the IP-approximate tier (still useful, just not
+          exact) and the fully-off tier (no location at all). */}
+      {!locationLoading && locationSource !== 'gps' && !locationCardExpanded && (
+        <TouchableOpacity
+          style={[
+            styles.locationBanner,
+            isWideWeb && styles.locationBannerWeb,
+            locationSource === null && styles.locationBannerUrgent,
+          ]}
+          onPress={() => setLocationCardExpanded(true)}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="location-outline" size={isWideWeb ? 14 : 18} color="#fff" style={{ marginRight: isWideWeb ? 8 : 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.locationBannerTitle, isWideWeb && styles.locationBannerTitleWeb]}>
+              {locationSource === 'ip'
+                ? `Using your approximate location${locationCity ? ` near ${locationCity}` : ''}`
+                : 'Location is off'}
+            </Text>
+            {!isWideWeb && (
+              <Text style={styles.locationBannerSub}>
+                {locationSource === 'ip' ? 'Tap for precise results' : 'Tap to turn it on'}
+              </Text>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={isWideWeb ? 13 : 16} color="rgba(255,255,255,0.6)" />
+        </TouchableOpacity>
+      )}
+
+      {!locationLoading && locationSource !== 'gps' && locationCardExpanded && (
+        <View
+          style={[
+            styles.locationCard,
+            isWideWeb && styles.locationCardWeb,
+            locationSource === null && styles.locationCardUrgent,
+          ]}
+        >
+          <View style={styles.locationCardHeader}>
+            <Ionicons
+              name="location-outline"
+              size={16}
+              color={locationSource === null ? '#e2574c' : '#5aa9e6'}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.locationCardTitle}>
+              {locationSource === 'ip' ? 'Using your approximate location' : 'Location is off'}
+            </Text>
+            <TouchableOpacity onPress={() => setLocationCardExpanded(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close" size={18} color="#888" />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.locationCardSub}>
+            {locationSource === 'ip'
+              ? `We're showing activities near${locationCity ? ` ${locationCity}` : ' your area'}, based on your internet connection — not your exact spot. Enable precise location for better results.`
+              : "We couldn't find your location at all, so you're seeing every activity instead of just the ones near you."}
+          </Text>
+
+          {permissionPermanentlyDenied ? (
+            Platform.OS === 'web' ? (
+              <Text style={styles.locationCardTip}>
+                Click the location icon in your browser's address bar to allow access, then refresh the page.
+              </Text>
+            ) : (
+              <TouchableOpacity style={styles.locationCardBtn} onPress={openLocationSettings}>
+                <Text style={styles.locationCardBtnText}>Open Settings</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            <TouchableOpacity style={styles.locationCardBtn} onPress={refreshLocation}>
+              <Text style={styles.locationCardBtnText}>
+                {locationSource === 'ip' ? 'Enable Precise Location' : 'Enable Location'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* HERO */}
       <ImageBackground
         source={{
@@ -389,6 +502,18 @@ const HomeScreen = () => {
     </View>
   );
 
+  // One-line disclosure right above the Nearby tab's own list — the "Tap for
+  // precise results" nudge above only explains and offers the fix once; this
+  // is the reminder, every time, exactly where the filtering it's describing
+  // actually happens.
+  const locationNote = activeTab === 'Nearby' && !locationLoading && locationSource !== 'gps' && (
+    <Text style={styles.locationInlineNote}>
+      {locationSource === 'ip'
+        ? 'Showing results near your approximate location'
+        : 'Location is off — showing all activities'}
+    </Text>
+  );
+
   const exploreMoreButton = isWideWeb && activeData.length > 0 && (
     <TouchableOpacity
       style={styles.exploreMoreBtn}
@@ -437,6 +562,9 @@ const HomeScreen = () => {
     ...(isWideWeb ? [] : [{ key: 'header', kind: 'header' }]),
     { key: 'above', kind: 'above' },
     { key: 'sticky', kind: 'sticky' },
+    // Inserted after the sticky pills (last sticky index), so it never
+    // shifts stickyIndices below.
+    ...(locationNote ? [{ key: 'location-note', kind: 'location-note' }] : []),
     ...(activeData.length === 0
       ? [{ key: 'empty', kind: 'empty' }]
       : activeData.map(item => ({ key: item.id.toString(), kind: 'card', activity: item }))),
@@ -447,6 +575,7 @@ const HomeScreen = () => {
     if (item.kind === 'header') return header;
     if (item.kind === 'above') return aboveTabsContent;
     if (item.kind === 'sticky') return tabsPillRow;
+    if (item.kind === 'location-note') return locationNote;
     if (item.kind === 'empty') return activitiesEmptyState;
     return <ActivityCard activity={item.activity} />;
   };
@@ -906,6 +1035,110 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     fontSize: 12,
     textAlign: 'center',
+  },
+
+  /* ───────── Location nudge banner (collapsed pill) ─────────
+     Blue for the IP-approximate tier (still useful, just not exact),
+     overridden to a muted red for the fully-off tier — same shape/pattern
+     as the email verify banner above, so "collapsed pill ↔ expanded card"
+     reads consistently across the app. */
+  locationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#5aa9e6',
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 14,
+  },
+  locationBannerUrgent: {
+    backgroundColor: '#e2574c',
+  },
+  locationBannerWeb: {
+    padding: 9,
+    borderRadius: 10,
+  },
+  locationBannerTitle: {
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  locationBannerTitleWeb: {
+    fontSize: 12,
+    marginBottom: 0,
+  },
+  locationBannerSub: {
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+  },
+
+  /* ───────── Location nudge — expanded inline card ───────── */
+  locationCard: {
+    backgroundColor: '#181818',
+    marginHorizontal: 20,
+    marginTop: 10,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(90,169,230,0.35)',
+  },
+  locationCardUrgent: {
+    borderColor: 'rgba(226,87,76,0.35)',
+  },
+  locationCardWeb: {
+    padding: 12,
+    borderRadius: 10,
+  },
+  locationCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  locationCardTitle: {
+    flex: 1,
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 15,
+  },
+  locationCardSub: {
+    color: '#999',
+    fontFamily: Fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  locationCardTip: {
+    color: '#888',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    fontStyle: 'italic',
+  },
+  locationCardBtn: {
+    backgroundColor: '#5aa9e6',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  locationCardBtnText: {
+    color: '#fff',
+    fontFamily: Fonts.semibold,
+    fontSize: 14,
+  },
+
+  /* ───────── Location nudge — inline reminder above the Nearby list ───────── */
+  locationInlineNote: {
+    color: '#888',
+    fontFamily: Fonts.regular,
+    fontSize: 12,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
   },
 });
 
