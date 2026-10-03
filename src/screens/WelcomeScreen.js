@@ -9,6 +9,7 @@ import {
   Linking,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -60,27 +61,66 @@ export default function WelcomeScreen({ navigation }) {
   }, []);
 
   // ── Google Sign-In ────────────────────────────────────────────────────────
+  // Shared by both the native flow below and the web button overlay
+  // (googleOverlayRef, below) — whichever path gets an ID token from Google,
+  // this is what exchanges it with the backend and completes login.
+  const handleGoogleIdToken = async (idToken) => {
+    if (!idToken) {
+      Alert.alert('Error', 'No ID token received from Google');
+      return;
+    }
+    try {
+      const res = await axios.post(`${BASE_URL}/api/auth/google/`, { id_token: idToken });
+      await login(res.data.access, res.data.refresh);
+      if (res.data.is_new_user) navigation.navigate('GoogleUsername');
+    } catch (error) {
+      // error.response?.data?.detail is the backend's actual reason (bad/
+      // expired token, audience mismatch, ...) — error.message alone is
+      // just axios's generic "Request failed with status code 400", which
+      // told us nothing when this was the only thing shown.
+      Alert.alert('Sign-in failed', error.response?.data?.detail || error.message);
+    }
+  };
+
+  // Native only (Android/iOS) — goes through the real native Google Sign-In
+  // SDK via GoogleSignin.signIn(), unaffected by any of the web/FedCM
+  // concerns below. On web this handler is unreachable: the overlay button
+  // (see googleOverlayRef) physically intercepts the click first.
   const onGoogleSignIn = async () => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       const idToken = userInfo.data?.idToken || userInfo.idToken;
-
-      if (!idToken) {
-        Alert.alert('Error', 'No ID token received from Google');
-        return;
-      }
-
-      const res = await axios.post(`${BASE_URL}/api/auth/google/`, { id_token: idToken });
-      await login(res.data.access, res.data.refresh);
-
-      if (res.data.is_new_user) navigation.navigate('GoogleUsername');
+      await handleGoogleIdToken(idToken);
     } catch (error) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
-        Alert.alert('Sign-in failed', error.message);
+        Alert.alert('Sign-in failed', error.response?.data?.detail || error.message);
       }
     }
   };
+
+  // ── Web only: Google's own real button, mounted invisibly over the ─────────
+  // custom-styled pill below (see googleBtnOverlay in authActions/styles).
+  // Web's auto one-tap prompt() (what onGoogleSignIn above would trigger
+  // instead) can be silently suppressed by the browser for several
+  // completely legitimate reasons — recently dismissed, third-party
+  // cookies/FedCM disabled, no active Google session, incognito — with
+  // nothing but a console warning to show for it, which is exactly why this
+  // button could previously do nothing at all. A real click landing on
+  // Google's actual rendered button isn't subject to that suppression.
+  const googleOverlayRef = useRef(null);
+  // Mount once, not on every render handleGoogleIdToken's identity changes
+  // (it closes over `login`, which isn't memoized in AuthContext) — a ref
+  // kept in sync every render lets the mount-once effect below always call
+  // the latest version without needing it in that effect's own deps, and
+  // without re-invoking renderButton() (and reinitializing GIS) on every
+  // re-render.
+  const handleGoogleIdTokenRef = useRef(handleGoogleIdToken);
+  useEffect(() => { handleGoogleIdTokenRef.current = handleGoogleIdToken; });
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !googleOverlayRef.current) return;
+    GoogleSignin.mountWebButton(googleOverlayRef.current, (idToken) => handleGoogleIdTokenRef.current(idToken));
+  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -88,18 +128,27 @@ export default function WelcomeScreen({ navigation }) {
   // (position/alignment) around this differs between the two.
   const authActions = (
     <>
-      {/* Google — solid white pill */}
-      <TouchableOpacity style={styles.googleBtn} activeOpacity={0.84} onPress={onGoogleSignIn}>
-        <Image
-          source={{
-            // Official Google "G" logo — swap for require('../assets/google-logo.png') if preferred
-            uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1782493289/pngwing.com_mviuyi.png',
-          }}
-          style={styles.googleLogo}
-          resizeMode="contain"
-        />
-        <Text style={styles.googleBtnText}>Continue with Google</Text>
-      </TouchableOpacity>
+      {/* Google — solid white pill. Wrapped so the web-only overlay below can
+          sit exactly on top of it (see googleOverlayRef) — the decorative
+          button itself is all a native (Android/iOS) user ever interacts
+          with; on web, the real click lands on Google's own invisible
+          button instead, never reaching this one's onPress. */}
+      <View style={styles.googleBtnWrap}>
+        <TouchableOpacity style={styles.googleBtn} activeOpacity={0.84} onPress={onGoogleSignIn}>
+          <Image
+            source={{
+              // Official Google "G" logo — swap for require('../assets/google-logo.png') if preferred
+              uri: 'https://res.cloudinary.com/dppoa51hp/image/upload/v1782493289/pngwing.com_mviuyi.png',
+            }}
+            style={styles.googleLogo}
+            resizeMode="contain"
+          />
+          <Text style={styles.googleBtnText}>Continue with Google</Text>
+        </TouchableOpacity>
+        {Platform.OS === 'web' && (
+          <View ref={googleOverlayRef} style={styles.googleBtnOverlay} />
+        )}
+      </View>
 
       {/* Email — ghost pill with purple border */}
       <TouchableOpacity
@@ -308,6 +357,15 @@ const styles = StyleSheet.create({
   },
 
   // Google — solid white, full-width pill
+  // Wraps googleBtn + its web-only overlay — owns the spacing that used to
+  // live on googleBtn itself, since the overlay needs googleBtn's full
+  // width/height to size against (position: 'relative' so the overlay's
+  // absoluteFillObject below positions against this, not the whole screen).
+  googleBtnWrap: {
+    width: '100%',
+    marginBottom: 12,
+    position: 'relative',
+  },
   googleBtn: {
     width: '100%',
     height: 56,
@@ -316,13 +374,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
     // Subtle shadow so button floats over the gradient
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.28,
     shadowRadius: 10,
     elevation: 6,
+  },
+  // Google's own real "Sign in with Google" button, rendered invisibly
+  // (opacity: 0 — not display:none / pointerEvents:none, both of which
+  // would stop it from ever receiving the click it exists to catch) exactly
+  // over googleBtn above. See mountWebButton in src/shims/googleSignin.web.js.
+  googleBtnOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
+    overflow: 'hidden',
+    zIndex: 2,
   },
   googleLogo: {
     width: 20,
