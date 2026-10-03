@@ -71,8 +71,14 @@ export default function WelcomeScreen({ navigation }) {
     }
     try {
       const res = await axios.post(`${BASE_URL}/api/auth/google/`, { id_token: idToken });
+      // No explicit navigation to GoogleUsername here on purpose — a
+      // brand-new Google sign-up's needs_username_setup flag (read via
+      // AppNavigator's own profile/status/ check, triggered by login()
+      // below setting userToken) is what routes them there now. That one-
+      // shot navigate() call used to race against AppNavigator's own
+      // login-triggered reset and almost always lost, leaving the screen
+      // unreachable.
       await login(res.data.access, res.data.refresh);
-      if (res.data.is_new_user) navigation.navigate('GoogleUsername');
     } catch (error) {
       // error.response?.data?.detail is the backend's actual reason (bad/
       // expired token, audience mismatch, ...) — error.message alone is
