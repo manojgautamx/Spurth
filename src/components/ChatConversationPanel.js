@@ -14,8 +14,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { db } from '../firebase/firebaseConfig';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth } from '../firebase/firebaseConfig';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import useAxios from '../utils/useAxios';
@@ -81,13 +82,22 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   const [messages, setMessages]       = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [text, setText]               = useState('');
+  // Only the viewer's own id is still needed here — it drove senderName/
+  // senderAvatar on the client's own former Firestore write, which
+  // sendMessage no longer does (see below); userId itself stays, since
+  // renderItem still uses it to tell which messages are the viewer's own.
   const [userId, setUserId]           = useState('');
-  const [username, setUsername]       = useState('');
-  const [userAvatar, setUserAvatar]   = useState('');
   const [infoVisible, setInfoVisible] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [activity, setActivity]       = useState(null);
   const [showAllMembers, setShowAllMembers] = useState(false);
+  // Subscribing to Firestore before Firebase's own sign-in (a separate,
+  // un-awaited-by-anything-here round trip kicked off at login) has
+  // resolved gets a terminal permission-denied that never recovers, even
+  // once auth later arrives — same race ChatContext.js's listeners hit and
+  // were fixed for; this screen has its own separate subscription below,
+  // so it needs the same guard independently.
+  const [firebaseReady, setFirebaseReady] = useState(!!auth.currentUser);
 
   const flatListRef = useRef(null);
   const axios = useAxios();
@@ -96,10 +106,12 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
     axios.get(`${BASE_URL}/api/me/`)
       .then(res => {
         setUserId(String(res.data.id));
-        setUsername(res.data.username);
-        setUserAvatar(res.data.avatar || '');
       })
       .catch(e => console.warn('Failed to load user', e));
+  }, []);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => setFirebaseReady(!!user));
   }, []);
 
   useEffect(() => {
@@ -113,6 +125,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   // threads already exist in Firestore under that path, and changing it
   // would orphan existing message history instead of just renaming a term.
   useEffect(() => {
+    if (!firebaseReady) return;
     setMessagesLoading(true);
     const messagesQuery = query(
       collection(db, 'leagues', `league_${activityId}`, 'messages'),
@@ -125,20 +138,19 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
     return () => unsubscribe();
-  }, [activityId]);
+  }, [activityId, firebaseReady]);
 
   const sendMessage = async () => {
     if (!text.trim()) return;
     const msgText = text.trim();
     setText('');
     try {
-      await addDoc(collection(db, 'leagues', `league_${activityId}`, 'messages'), {
-        text: msgText,
-        senderId: userId,
-        senderName: username,
-        senderAvatar: userAvatar,
-        timestamp: serverTimestamp()
-      });
+      // Routed through Django (not a direct Firestore addDoc anymore) so a
+      // push can go out to the activity's other members in the same
+      // request — see spurth_backend's send_message view. The new message
+      // still shows up here the same way it always has, through the
+      // onSnapshot subscription above once that write lands in Firestore.
+      await axiosInstance.post(`send-message/${activityId}/`, { text: msgText });
     } catch (err) {
       Alert.alert('Message not sent', 'Check your connection and try again.');
     }
