@@ -23,7 +23,7 @@ import { getErrorMessage } from '../utils/errorMessage';
 import ErrorState from '../components/ErrorState';
 import { appendImageAsset, appendVideoAsset } from '../utils/appendImageAsset';
 import { validateVideoAsset } from '../utils/validateVideoAsset';
-import { nearestRatioKey } from '../constants/mediaRatios';
+import { nearestRatioKey, PHOTO_RATIO_KEYS, VIDEO_STAGE_RATIO_KEY } from '../constants/mediaRatios';
 import MediaRatioPicker from '../components/MediaRatioPicker';
 import MediaPreview from '../components/MediaPreview';
 import { AuthContext } from '../context/AuthContext';
@@ -172,13 +172,17 @@ const ExperienceScreen = () => {
       if (error) return Alert.alert('Video not supported', error);
       setVideo(first);
       setImages([]);
-      setMediaRatio(nearestRatioKey(first.width, first.height)); // width/height rarely known upfront for video — falls back to 'original'
+      // Video never offers a ratio choice — always the fixed 9:16 stage,
+      // with the video itself shown uncropped inside it (see VideoPlayer).
+      setMediaRatio(VIDEO_STAGE_RATIO_KEY);
     } else {
       // A second pick REPLACES the current selection (matches the old
       // single-image behavior) rather than appending to it.
       setImages(assets.slice(0, MAX_POST_IMAGES));
       setVideo(null);
-      setMediaRatio(nearestRatioKey(first.width, first.height)); // ratio applies to the whole set, seeded from the first photo
+      // Seeded from the first photo, but only ever lands on one of the
+      // two ratios the photo picker below actually offers.
+      setMediaRatio(nearestRatioKey(first.width, first.height, PHOTO_RATIO_KEYS));
     }
   };
 
@@ -412,7 +416,12 @@ const ExperienceScreen = () => {
 
       {!showPoll && (images.length > 0 || video) && (
         <>
-          <MediaRatioPicker selectedKey={mediaRatio} onSelect={setMediaRatio} />
+          {/* Video has no ratio choice — it's always the fixed 9:16 stage,
+              shown uncropped (see pickMedia/VideoPlayer) — so the picker
+              only makes sense, and only appears, for photos. */}
+          {!video && (
+            <MediaRatioPicker selectedKey={mediaRatio} onSelect={setMediaRatio} allowedKeys={PHOTO_RATIO_KEYS} />
+          )}
           <MediaPreview
             asset={video}
             assets={video ? undefined : images}
