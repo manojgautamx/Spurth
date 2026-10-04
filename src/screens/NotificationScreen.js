@@ -32,6 +32,11 @@ const TYPE_CONFIG = {
   cohost_invite:    { icon: 'people-outline',            color: '#2CB9B0', label: 'Co-Host Invite' },
   cohost_accepted:  { icon: 'checkmark-circle-outline',  color: '#36ACA6', label: 'Co-Host Accepted' },
   cohost_declined:  { icon: 'close-circle-outline',      color: '#888',    label: 'Co-Host Declined' },
+  participant_joined: { icon: 'person-add-outline',      color: '#36ACA6', label: 'Joined'        },
+  participant_left:   { icon: 'exit-outline',            color: '#888',    label: 'Left'          },
+  comment:             { icon: 'chatbubble-ellipses-outline', color: '#8575ff', label: 'Comment'   },
+  like:                { icon: 'heart-outline',          color: '#FF4C4C', label: 'Like'          },
+  activity_updated:    { icon: 'create-outline',         color: '#F2994A', label: 'Updated'       },
   // ─────────────────────────────────────────────────────────────────────────────
 };
 
