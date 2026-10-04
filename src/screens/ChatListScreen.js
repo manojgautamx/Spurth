@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import dayjs from 'dayjs';
@@ -137,10 +138,10 @@ export default function ChatListScreen({ route }) {
 
   if (loading) {
     return (
-      <View style={styles.safe}>
+      <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
         <ChatListSkeleton />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -225,12 +226,12 @@ export default function ChatListScreen({ route }) {
   }
 
   return (
-    <View style={styles.safe}>
+    <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
       <Text style={styles.header}>Chats</Text>
       {filterRow}
       {list}
-    </View>
+    </SafeAreaView>
   );
 }
 
