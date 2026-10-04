@@ -528,13 +528,14 @@ const styles = StyleSheet.create({
   // inset covered by the same background once this block is pinned.
   stickyHeaderBg: {
     backgroundColor: '#121212',
-    paddingTop: 30,
+    paddingTop: 44,
   },
   headerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 4,
     gap: 12
   },
   searchBar: {
