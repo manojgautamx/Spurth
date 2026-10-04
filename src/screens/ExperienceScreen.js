@@ -16,6 +16,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import axiosInstance from '../utils/axiosInstance';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { fetchAllPages, listFrom, hasMore, mergeById } from '../utils/paginated';
 import { getErrorMessage } from '../utils/errorMessage';
 import ErrorState from '../components/ErrorState';
@@ -603,12 +604,12 @@ const ExperienceScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingWrapper style={styles.container} scroll={false}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
       {list}
       {activityPickerModal}
       {numberPickerModal}
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 };
 

@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, StatusBar, ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
 
@@ -55,7 +56,7 @@ export default function EmailVerificationScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingWrapper style={styles.root} contentContainerStyle={{ flexGrow: 1 }}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
 
       <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -106,7 +107,7 @@ export default function EmailVerificationScreen({ navigation }) {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 }
 

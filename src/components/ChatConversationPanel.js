@@ -9,11 +9,10 @@ import {
   Image,
   ScrollView,
   StatusBar,
-  Platform,
-  KeyboardAvoidingView,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import KeyboardAvoidingWrapper from './KeyboardAvoidingWrapper';
 import { db, auth } from '../firebase/firebaseConfig';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -111,7 +110,18 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   }, []);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (user) => setFirebaseReady(!!user));
+    const unsubscribe = onAuthStateChanged(auth, (user) => setFirebaseReady(!!user));
+    // Safety net: onAuthStateChanged not firing at all has been observed in
+    // practice (chat permanently stuck loading on Android) — rather than
+    // hang forever waiting for a signal that might never come, proceed
+    // after a few seconds regardless. A no-op if the listener already fired.
+    const fallback = setTimeout(() => {
+      setFirebaseReady((ready) => {
+        if (!ready) console.warn('ChatConversationPanel: onAuthStateChanged never fired — proceeding anyway');
+        return true;
+      });
+    }, 3000);
+    return () => { unsubscribe(); clearTimeout(fallback); };
   }, []);
 
   useEffect(() => {
@@ -302,11 +312,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
       </View>
       <View style={styles.headerDivider} />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
         {messagesLoading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="small" color="#2CB9B0" />
@@ -343,7 +349,7 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingWrapper>
 
       {infoVisible && (
         // A real RN Modal portals to the document body on web, so it always

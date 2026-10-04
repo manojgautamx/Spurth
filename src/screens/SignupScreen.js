@@ -7,10 +7,9 @@ import {
   StyleSheet,
   Alert,
   StatusBar,
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { AuthContext } from '../context/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
 import { register } from '../services/api';
@@ -459,10 +458,7 @@ export default function SignupScreen({ navigation }) {
 
   // ── Mobile (and narrow web) ────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingWrapper style={styles.root} scroll={false}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -471,7 +467,7 @@ export default function SignupScreen({ navigation }) {
       >
         {formContent}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingWrapper>
   );
 }
 

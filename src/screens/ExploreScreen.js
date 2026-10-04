@@ -21,6 +21,7 @@ import { useNavigation } from '@react-navigation/native';
 
 import useAxios from '../utils/useAxios';
 import axiosInstance from '../utils/axiosInstance';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { listFrom, hasMore, mergeById } from '../utils/paginated';
 import { getErrorMessage } from '../utils/errorMessage';
 import ErrorState from '../components/ErrorState';
@@ -493,7 +494,9 @@ const ExploreScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
-      {list}
+      <KeyboardAvoidingWrapper scroll={false}>
+        {list}
+      </KeyboardAvoidingWrapper>
     </SafeAreaView>
   );
 };

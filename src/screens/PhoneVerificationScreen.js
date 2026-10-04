@@ -16,6 +16,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 import WebSidebar from '../components/web/WebSidebar';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import axiosInstance from '../utils/axiosInstance';
 import { auth } from '../firebase/firebaseConfig';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
@@ -197,7 +198,7 @@ const PhoneVerificationScreen = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingWrapper style={styles.container} scroll={false}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F0F" />
       <View style={styles.webRow}>
         {isWideWeb && <WebSidebar />}
@@ -251,7 +252,7 @@ const PhoneVerificationScreen = ({ navigation }) => {
           />
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 };
 

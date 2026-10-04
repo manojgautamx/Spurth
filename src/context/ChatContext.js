@@ -52,7 +52,21 @@ export const ChatProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, (user) => setFirebaseReady(!!user));
+    const unsubscribe = onAuthStateChanged(auth, (user) => setFirebaseReady(!!user));
+    // Safety net: onAuthStateChanged not firing at all has been observed in
+    // practice (chat permanently stuck loading on Android) — rather than
+    // hang forever waiting for a signal that might never come, proceed
+    // after a few seconds regardless. By then signIntoFirebase()'s own
+    // request (fired at login, well before this could even mount) has long
+    // since resolved one way or the other, so this is a late correction,
+    // not a race with it. A no-op if the listener already fired by then.
+    const fallback = setTimeout(() => {
+      setFirebaseReady((ready) => {
+        if (!ready) console.warn('ChatContext: onAuthStateChanged never fired — proceeding anyway');
+        return true;
+      });
+    }, 3000);
+    return () => { unsubscribe(); clearTimeout(fallback); };
   }, []);
 
   const isUnread = useCallback((activity) => {

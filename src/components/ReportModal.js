@@ -7,12 +7,11 @@ import {
   Modal,
   ActivityIndicator,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { StyleSheet } from 'react-native';
+import KeyboardAvoidingWrapper from './KeyboardAvoidingWrapper';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
 
@@ -69,10 +68,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={handleClose} />
-      <KeyboardAvoidingView
-        style={styles.sheet}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingWrapper style={styles.sheet} scroll={false}>
         <View style={styles.handle} />
         <Text style={styles.title}>Report {targetLabel}</Text>
 
@@ -118,7 +114,7 @@ export default function ReportModal({ visible, onClose, targetType, targetId, ta
             )}
           </TouchableOpacity>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingWrapper>
     </Modal>
   );
 }

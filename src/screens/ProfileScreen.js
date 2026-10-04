@@ -7,13 +7,12 @@ import {
   Image,
   ScrollView,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
   TextInput,
   StatusBar,
   SafeAreaView,
   Animated,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -347,10 +346,7 @@ export default function ProfileScreen({ navigation }) {
 
       {/* ── STEP 3: Personal Details ─────────────────────────────────────── */}
       {step === 3 && (
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
           <ScrollView
             contentContainerStyle={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}
             keyboardShouldPersistTaps="handled"
@@ -504,7 +500,7 @@ export default function ProfileScreen({ navigation }) {
             </View>
           </View>
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardAvoidingWrapper>
       )}
     </SafeAreaView>
   );

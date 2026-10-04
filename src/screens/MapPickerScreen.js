@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { LocationContext } from '../context/LocationContext';
 import { Fonts } from '../theme/fonts';
 
@@ -154,7 +155,7 @@ const MapPickerScreen = ({ navigation, route }) => {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
       <MapView
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
@@ -249,7 +250,7 @@ const MapPickerScreen = ({ navigation, route }) => {
         <Ionicons name="checkmark-circle" size={18} color="#fff" style={{ marginRight: 8 }} />
         <Text style={styles.confirmText}>Confirm Location</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 };
 
