@@ -8,6 +8,9 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../../theme/fonts';
 import { navigationRef } from '../../navigation/navigationRef';
 import axiosInstance from '../../utils/axiosInstance';
+import NavBadge from '../NavBadge';
+import { useNotificationBadge } from '../../context/NotificationContext';
+import { useChatBadge } from '../../context/ChatContext';
 
 import HomeIcon from '../../assets/icons/HomeIcon';
 import ExploreIcon from '../../assets/icons/ExploreIcon';
@@ -18,12 +21,14 @@ import ChatIcon from '../../assets/icons/ChatIcon';
 export const SIDEBAR_WIDTH = 248;
 
 // Same icon set the mobile bottom tab bar uses (AppNavigator.js), so the
-// sidebar reads as the same app rather than an approximation of it.
+// sidebar reads as the same app rather than an approximation of it. `badge`
+// names the context field (NotificationContext/ChatContext) each row's
+// unread count comes from — not every row has one.
 const NAV_ITEMS = [
   { route: 'Home',         label: 'Home',         Icon: HomeIcon },
   { route: 'Explore',      label: 'Explore',       Icon: ExploreIcon },
-  { route: 'Chat',         label: 'Messages',      Icon: ChatIcon },
-  { route: 'Notification', label: 'Notifications', Icon: NotificationIcon },
+  { route: 'Chat',         label: 'Messages',      Icon: ChatIcon,         badge: 'chat' },
+  { route: 'Notification', label: 'Notifications', Icon: NotificationIcon, badge: 'notification' },
   { route: 'Experience',   label: 'Experiences',   Icon: ActivityIcon },
 ];
 
@@ -59,6 +64,9 @@ const TAB_ROUTES = new Set(['Home', 'Explore', 'Chat', 'Notification', 'Experien
 
 export default function WebSidebar() {
   const activeRouteName = useActiveRouteName();
+  const { unreadCount } = useNotificationBadge();
+  const { unreadChatCount } = useChatBadge();
+  const badgeCounts = { notification: unreadCount, chat: unreadChatCount };
   // ProfileView's route is username-based (profile/:username), but this
   // sidebar only ever links to the viewer's OWN profile and has no reason
   // to already know their username — fetched once so that link lands on a
@@ -94,7 +102,7 @@ export default function WebSidebar() {
       />
 
       <View style={styles.navList}>
-        {NAV_ITEMS.map(({ route, label, Icon }) => {
+        {NAV_ITEMS.map(({ route, label, Icon, badge }) => {
           const isActive = activeRouteName === route;
           return (
             <TouchableOpacity
@@ -104,9 +112,11 @@ export default function WebSidebar() {
               activeOpacity={0.7}
             >
               {/* The custom SVG icon components only accept size/color, not
-                  style — wrapping in a View is what actually applies the gap. */}
+                  style — wrapping in a View is what actually applies the gap.
+                  Doubles as NavBadge's absolute-position anchor below. */}
               <View style={styles.navIcon}>
                 <Icon size={22} color={isActive ? '#fff' : '#888'} />
+                {badge && <NavBadge count={badgeCounts[badge]} />}
               </View>
               <Text style={[styles.navLabel, isActive && styles.navLabelActive]}>
                 {label}
@@ -175,6 +185,10 @@ const styles = StyleSheet.create({
   },
   navIcon: {
     marginRight: 16,
+    // NavBadge positions itself absolutely against this — needs a
+    // positioned ancestor to anchor to, or it'd escape to the nearest one
+    // further up the tree (navItem, which has its own padding to clear).
+    position: 'relative',
   },
   navLabel: {
     color: '#888',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import dayjs from 'dayjs';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { db } from '../firebase/firebaseConfig';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import axiosInstance from '../utils/axiosInstance';
-import { fetchAllPages } from '../utils/paginated';
-import { getErrorMessage } from '../utils/errorMessage';
 import ErrorState from '../components/ErrorState';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -25,8 +19,7 @@ import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import ChatConversationPanel from '../components/ChatConversationPanel';
 import ChatListSkeleton from '../components/skeletons/ChatListSkeleton';
-
-const STORAGE_KEY = 'chat_last_read';
+import { useChatBadge } from '../context/ChatContext';
 
 const getCoverSource = (item) => {
   if (item.cover_image) {
@@ -42,11 +35,12 @@ const FILTERS = ['All', 'Unread', 'Read'];
 
 export default function ChatListScreen({ route }) {
   const isWideWeb = useIsWideWeb();
-  const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Data layer (fetch + Firestore last-message listeners + "last read"
+  // tracking) lives in ChatContext now, shared with the navbar badge, so
+  // it keeps running for the whole session rather than only while this
+  // screen is mounted — see ChatContext.js.
+  const { activities, loading, error, isUnread, markActivityRead } = useChatBadge();
   const [activeFilter, setActiveFilter] = useState('All');
-  const [lastRead, setLastRead] = useState({});
   // Wide web only — selecting a chat opens it in the adjoining panel
   // instead of navigating to a separate screen (see renderItem below).
   // Initialized from route.params (a shared/refreshed /Chat/:activityId
@@ -58,7 +52,6 @@ export default function ChatListScreen({ route }) {
       : null
   );
   const navigation = useNavigation();
-  const unsubscribersRef = useRef([]);
 
   const selectActivity = (activity) => {
     setSelectedActivity(activity);
@@ -67,82 +60,6 @@ export default function ChatListScreen({ route }) {
       activityName: activity ? activity.name : undefined,
     });
   };
-
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then(raw => raw ? setLastRead(JSON.parse(raw)) : null)
-      .catch(() => {});
-  }, []);
-
-  const markAsRead = async (activityId, lastMsgTimestamp) => {
-    if (!lastMsgTimestamp) return;
-    const ms = lastMsgTimestamp.toDate
-      ? lastMsgTimestamp.toDate().getTime()
-      : new Date(lastMsgTimestamp).getTime();
-    const updated = { ...lastRead, [activityId]: ms };
-    setLastRead(updated);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  };
-
-  const isUnread = (activity) => {
-    const last = activity.lastMessage;
-    if (!last?.timestamp) return false;
-    const lastReadMs = lastRead[activity.id] || 0;
-    const msgMs = last.timestamp.toDate
-      ? last.timestamp.toDate().getTime()
-      : new Date(last.timestamp).getTime();
-    return msgMs > lastReadMs;
-  };
-
-  useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        // Every activity you're in needs a chat row, so both lists are
-        // walked to the end rather than stopping at the first page.
-        const [created, joined] = await Promise.all([
-          fetchAllPages(axiosInstance, 'my-activities/'),
-          fetchAllPages(axiosInstance, 'joined-activities/'),
-        ]);
-        const merged = [
-          ...created,
-          ...joined.filter(j => !created.some(c => c.id === j.id)),
-        ];
-
-        setActivities(merged);
-
-        unsubscribersRef.current.forEach(u => u && u());
-        unsubscribersRef.current = [];
-
-        // Firestore chat threads were created under a 'leagues'/'league_<id>'
-        // path before this rename — kept as-is so existing chat history
-        // isn't orphaned under a path no longer written to.
-        unsubscribersRef.current = merged.map(activity => {
-          const lastMessageQuery = query(
-            collection(db, 'leagues', `league_${activity.id}`, 'messages'),
-            orderBy('timestamp', 'desc'),
-            limit(1)
-          );
-          return onSnapshot(lastMessageQuery, snapshot => {
-            if (!snapshot.empty) {
-              const msg = snapshot.docs[0].data();
-              setActivities(prev =>
-                prev.map(a =>
-                  a.id === activity.id ? { ...a, lastMessage: msg } : a
-                )
-              );
-            }
-          });
-        });
-      } catch (err) {
-        setError(getErrorMessage(err, "Couldn't load your chats."));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchActivities();
-    return () => { unsubscribersRef.current.forEach(u => u && u()); };
-  }, []);
 
   const getFilteredActivities = () => {
     const sorted = [...activities].sort((a, b) => {
@@ -178,7 +95,7 @@ export default function ChatListScreen({ route }) {
         style={[styles.chatCard, isSelected && styles.chatCardSelected]}
         activeOpacity={0.8}
         onPress={() => {
-          markAsRead(item.id, last?.timestamp);
+          markActivityRead(item.id, last?.timestamp);
           if (isWideWeb) {
             selectActivity(item);
           } else {
