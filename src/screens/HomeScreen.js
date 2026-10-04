@@ -24,6 +24,7 @@ import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import { Fonts } from '../theme/fonts';
 import ActivityCard from '../components/ActivityCard';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { LocationContext, filterActivitiesByDistance } from '../context/LocationContext';
 import { BASE_URL } from '../config';
 import { useDistance } from '../context/DistanceContext';
@@ -608,7 +609,9 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {activitiesList}
+      <KeyboardAvoidingWrapper scroll={false}>
+        {activitiesList}
+      </KeyboardAvoidingWrapper>
     </SafeAreaView>
   );
 };

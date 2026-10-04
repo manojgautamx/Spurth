@@ -27,6 +27,7 @@ import { promptSignIn } from '../utils/requireAuth';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import { Fonts } from '../theme/fonts';
 import ActivityMap from '../components/ActivityMap';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { getActivityTypeIcon } from '../utils/activityTypeIcons';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import PostCard from '../components/PostCard';
@@ -1159,7 +1160,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
           activeOpacity={1}
           onPress={() => setInvitePickerVisible(false)}
         />
-        <View style={styles.commentModalSheet}>
+        <KeyboardAvoidingWrapper style={styles.commentModalSheet} scroll={false}>
           <View style={styles.commentHandle} />
           <Text style={styles.commentSheetTitle}>Invite People</Text>
 
@@ -1214,7 +1215,7 @@ const ActivityViewerScreen = ({ route, navigation }) => {
               )}
             />
           )}
-        </View>
+        </KeyboardAvoidingWrapper>
       </Modal>
 
       <DateTimePickerModal

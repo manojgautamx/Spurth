@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, StatusBar,
-  KeyboardAvoidingView, Platform, ScrollView,
+  ScrollView,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
@@ -32,10 +33,7 @@ export default function ForgotPasswordScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingWrapper style={styles.root} scroll={false}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
@@ -92,7 +90,7 @@ export default function ForgotPasswordScreen({ navigation }) {
         )}
 
       </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingWrapper>
   );
 }
 

@@ -10,9 +10,8 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -404,10 +403,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
           <ScrollView
             contentContainerStyle={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}
             keyboardShouldPersistTaps="handled"
@@ -485,7 +481,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
+        </KeyboardAvoidingWrapper>
       </SafeAreaView>
     );
   }
@@ -497,10 +493,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
     return (
       <SafeAreaView style={styles.root}>
         <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
+        <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
           <ScrollView
             contentContainerStyle={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}
             keyboardShouldPersistTaps="handled"
@@ -699,7 +692,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
             }}
             onCancel={() => setEndTimePickerVisibility(false)}
           />
-        </KeyboardAvoidingView>
+        </KeyboardAvoidingWrapper>
       </SafeAreaView>
     );
   }
@@ -710,10 +703,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
         <ScrollView
           contentContainerStyle={[styles.stepContainer, isWideWeb && styles.stepContainerWeb]}
           keyboardShouldPersistTaps="handled"
@@ -907,7 +897,7 @@ const CreateActivityScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           </View>
         </View>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingWrapper>
     </SafeAreaView>
   );
 };

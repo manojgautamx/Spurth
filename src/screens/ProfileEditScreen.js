@@ -7,12 +7,11 @@ import {
   Image,
   ScrollView,
   Alert,
-  Platform,
-  KeyboardAvoidingView,
   TextInput,
   StatusBar,
   ActivityIndicator,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -200,10 +199,7 @@ export default function ProfileEditScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, isWideWeb && styles.scrollContentWide]}
           keyboardShouldPersistTaps="handled"
@@ -344,7 +340,7 @@ export default function ProfileEditScreen({ navigation }) {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardAvoidingWrapper>
 
       </View>
       </View>

@@ -7,6 +7,7 @@ import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { navigationRef } from './src/navigation/navigationRef';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { LocationProvider } from './src/context/LocationContext';
 import { DistanceProvider } from './src/context/DistanceContext';
 import { NotificationProvider } from './src/context/NotificationContext';
@@ -118,36 +119,43 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer
-        ref={navigationRef}
-        linking={linking}
-        documentTitle={{
-          // Without this, React Navigation's web integration falls back to
-          // the raw route name (e.g. "Landing", "ProfileView") as the
-          // browser tab title. Screens set their own via
-          // options={{ title: '...' }}; anything that doesn't just gets
-          // the bare brand name instead of a leaked internal route name.
-          formatter: (options) => options?.title ? `Spurth - ${options.title}` : 'Spurth',
-        }}
-      >
-        <AuthProvider>
-          <NotificationProvider>
-            <ChatProvider>
-              <DistanceProvider>
-                <LocationProvider>
-                  {/* Inside the providers so a crash in any screen still lands
-                      on a recoverable page rather than a blank one, but outside
-                      AppNavigator so the boundary itself can't be taken down by
-                      the same error. */}
-                  <ErrorBoundary>
-                    <AppNavigator />
-                  </ErrorBoundary>
-                </LocationProvider>
-              </DistanceProvider>
-            </ChatProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </NavigationContainer>
+      {/* Required infrastructure for react-native-keyboard-controller's
+          components (KeyboardAvoidingWrapper.js) anywhere below it — wrapped
+          as high as GestureHandlerRootView itself, same tier as every other
+          app-wide provider here. No-op passthrough on web (see
+          src/shims/keyboardController.web.js). */}
+      <KeyboardProvider>
+        <NavigationContainer
+          ref={navigationRef}
+          linking={linking}
+          documentTitle={{
+            // Without this, React Navigation's web integration falls back to
+            // the raw route name (e.g. "Landing", "ProfileView") as the
+            // browser tab title. Screens set their own via
+            // options={{ title: '...' }}; anything that doesn't just gets
+            // the bare brand name instead of a leaked internal route name.
+            formatter: (options) => options?.title ? `Spurth - ${options.title}` : 'Spurth',
+          }}
+        >
+          <AuthProvider>
+            <NotificationProvider>
+              <ChatProvider>
+                <DistanceProvider>
+                  <LocationProvider>
+                    {/* Inside the providers so a crash in any screen still lands
+                        on a recoverable page rather than a blank one, but outside
+                        AppNavigator so the boundary itself can't be taken down by
+                        the same error. */}
+                    <ErrorBoundary>
+                      <AppNavigator />
+                    </ErrorBoundary>
+                  </LocationProvider>
+                </DistanceProvider>
+              </ChatProvider>
+            </NotificationProvider>
+          </AuthProvider>
+        </NavigationContainer>
+      </KeyboardProvider>
       <AppAlertModal />
     </GestureHandlerRootView>
   );

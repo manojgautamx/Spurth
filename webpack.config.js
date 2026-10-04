@@ -37,6 +37,7 @@ module.exports = (env, argv) => {
         'react-native-maps': path.resolve(__dirname, 'src/shims/maps.web.js'),
         'react-native-video': path.resolve(__dirname, 'src/shims/video.web.js'),
         '@react-native-firebase/messaging': path.resolve(__dirname, 'src/shims/push.web.js'),
+        'react-native-keyboard-controller': path.resolve(__dirname, 'src/shims/keyboardController.web.js'),
       },
       fallback: {
         crypto: false,

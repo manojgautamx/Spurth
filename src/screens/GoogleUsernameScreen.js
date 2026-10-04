@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, Alert, StatusBar, ActivityIndicator,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import axiosInstance from '../utils/axiosInstance';
 import { ProfileStatusContext } from '../navigation/AppNavigator';
 import { Fonts } from '../theme/fonts';
@@ -110,7 +111,7 @@ export default function GoogleUsernameScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingWrapper style={styles.root} contentContainerStyle={{ flexGrow: 1 }}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
       <View style={styles.container}>
         <Text style={styles.title}>Pick a username</Text>
@@ -155,7 +156,7 @@ export default function GoogleUsernameScreen() {
             : <Text style={styles.btnText}>Continue</Text>}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 }
 

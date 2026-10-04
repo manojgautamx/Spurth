@@ -12,9 +12,8 @@ import {
   Image,
   Modal,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Slider from '@react-native-community/slider';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -258,7 +257,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <KeyboardAvoidingWrapper style={styles.root} scroll={false}>
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
 
       {/* Wide web: cap content to the same column width as Home/Explore
@@ -442,10 +441,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setChangePasswordVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            style={styles.modalCardWrap}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
+          <KeyboardAvoidingWrapper style={styles.modalCardWrap} scroll={false}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Change Password</Text>
 
@@ -522,7 +518,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
+          </KeyboardAvoidingWrapper>
         </View>
       </Modal>
 
@@ -534,10 +530,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setAccountModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            style={styles.modalCardWrap}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
+          <KeyboardAvoidingWrapper style={styles.modalCardWrap} scroll={false}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Manage Account</Text>
               <Text style={styles.modalSubtitle}>
@@ -592,7 +585,7 @@ export default function SettingsScreen() {
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
+          </KeyboardAvoidingWrapper>
         </View>
       </Modal>
 
@@ -670,10 +663,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setHelpModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            style={styles.modalCardWrap}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
+          <KeyboardAvoidingWrapper style={styles.modalCardWrap} scroll={false}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Contact Support</Text>
               <Text style={styles.modalSubtitle}>
@@ -730,10 +720,10 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
+          </KeyboardAvoidingWrapper>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingWrapper>
   );
 }
 

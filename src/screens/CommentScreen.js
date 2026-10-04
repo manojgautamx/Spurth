@@ -6,13 +6,12 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
   ActivityIndicator,
   Alert,
   Share,
 } from 'react-native';
+import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
 import PostCard from '../components/PostCard';
@@ -171,7 +170,7 @@ export default function CommentScreen({ route, navigation }) {
   }
 
   const body = (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingWrapper style={styles.flex} scroll={false}>
       <FlatList
         data={comments}
         keyExtractor={(item) => item.id.toString()}
@@ -211,7 +210,7 @@ export default function CommentScreen({ route, navigation }) {
           <Ionicons name="send" size={18} color={text.trim() ? '#2CB9B0' : '#444'} />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAvoidingWrapper>
   );
 
   const header = (
