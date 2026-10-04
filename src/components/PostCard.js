@@ -9,7 +9,7 @@ import { promptSignIn } from '../utils/requireAuth';
 import ReportModal from './ReportModal';
 import VideoPlayer from './VideoPlayer';
 import MediaPreview from './MediaPreview';
-import { ratioValue } from '../constants/mediaRatios';
+import { ratioValue, VIDEO_STAGE_RATIO_KEY } from '../constants/mediaRatios';
 
 import { BASE_URL } from '../config';
 
@@ -108,11 +108,20 @@ export default function PostCard({
   // to plain single-image rendering when there's just one.
   const mainImageAssets = (post.images || []).map((uri) => ({ uri: getImageUrl(uri) }));
   const hasRatio = post.media_ratio && post.media_ratio !== 'original';
-  // Always a full size decision (never leaves a fixed height for
-  // aspectRatio to try to override) — old ratio-less posts fall back to
-  // the same fixed heights the cards always used.
-  const mainMediaSizeStyle = hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 300 };
-  const compactMediaSizeStyle = hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 220 };
+  // Video always renders inside the fixed 9:16 stage — regardless of
+  // whatever (if anything) is stored in media_ratio, including legacy
+  // posts made before this was the rule — with the video itself shown
+  // uncropped inside it (VideoPlayer's resizeMode="contain"). Images keep
+  // using whichever ratio was actually chosen at post time. Always a full
+  // size decision either way (never leaves a fixed height for aspectRatio
+  // to try to override) — old ratio-less photo posts fall back to the
+  // same fixed heights the cards always used.
+  const mainMediaSizeStyle = mainVideoUri
+    ? { aspectRatio: ratioValue(VIDEO_STAGE_RATIO_KEY) }
+    : hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 300 };
+  const compactMediaSizeStyle = mainVideoUri
+    ? { aspectRatio: ratioValue(VIDEO_STAGE_RATIO_KEY) }
+    : hasRatio ? { aspectRatio: ratioValue(post.media_ratio) } : { height: 220 };
   const DEFAULT_COVER = 'https://via.placeholder.com/100x100.png?text=Event';
   const coverImageUri = getImageUrl(post.cover_image) || DEFAULT_COVER;
   const isConcluded = post.activity_is_concluded;

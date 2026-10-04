@@ -72,7 +72,13 @@ export default function VideoPlayer({ uri, style }) {
         ref={videoRef}
         source={{ uri }}
         style={StyleSheet.absoluteFill}
-        resizeMode="cover"
+        // "contain", not "cover" — a post's video is never cropped. The
+        // container around this player decides the visible stage (always
+        // 9:16 for posts, see VIDEO_STAGE_RATIO_KEY); a video whose own
+        // shape doesn't match that stage is letterboxed/pillarboxed
+        // against the container's black background instead of having its
+        // edges cropped away to fill it.
+        resizeMode="contain"
         paused={paused}
         muted={muted}
         repeat
