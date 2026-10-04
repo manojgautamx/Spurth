@@ -23,6 +23,7 @@ import axiosInstance from '../utils/axiosInstance';
 import useAxios from '../utils/useAxios';
 import { AuthContext } from '../context/AuthContext';
 import { Fonts } from '../theme/fonts';
+import { TAB_HEADER_TOP_PADDING } from '../theme/layout';
 import ActivityCard from '../components/ActivityCard';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { LocationContext, filterActivitiesByDistance } from '../context/LocationContext';
@@ -625,7 +626,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: TAB_HEADER_TOP_PADDING,
     paddingBottom: 15,
     // Now a sticky FlatList item (pinned while content scrolls underneath
     // it) rather than a fixed sibling — needs its own opaque background so

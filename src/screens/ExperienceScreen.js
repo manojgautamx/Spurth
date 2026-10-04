@@ -37,6 +37,7 @@ import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import ActivitiesRail from '../components/web/ActivitiesRail';
 import { Fonts } from '../theme/fonts';
+import { TAB_HEADER_TOP_PADDING } from '../theme/layout';
 import ExperienceSkeleton from '../components/skeletons/ExperienceSkeleton';
 
 const ExperienceScreen = () => {
@@ -673,7 +674,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 20,
     marginBottom: 16,
-    marginTop: 8,
+    marginTop: TAB_HEADER_TOP_PADDING,
   },
   sectionLabel: {
     color: '#fff',
