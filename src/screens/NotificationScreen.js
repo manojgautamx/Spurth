@@ -13,6 +13,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
+import { TAB_HEADER_TOP_PADDING } from '../theme/layout';
 import { useIsWideWeb } from '../utils/responsive';
 import ActivitiesRail from '../components/web/ActivitiesRail';
 import NotificationSkeleton from '../components/skeletons/NotificationSkeleton';
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: TAB_HEADER_TOP_PADDING,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#1A1A1A',
