@@ -1,6 +1,7 @@
 import { Platform, Alert } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import axiosInstance from './axiosInstance';
+import { triggerNotificationRefresh } from './notificationRefreshRef';
 
 // Web has no working push path yet (see src/shims/push.web.js — it needs a
 // VAPID key nobody has generated), so every function here is a no-op on
@@ -58,6 +59,9 @@ export async function registerForPushNotifications() {
       if (title || body) {
         Alert.alert(title || 'Spurth', body || '');
       }
+      // Bumps the navbar badge right away instead of waiting for
+      // NotificationContext's next 30s poll tick.
+      triggerNotificationRefresh();
     });
   } catch (e) {
     // No permission, no Play Services, or a flaky first call — the rest of

@@ -9,6 +9,8 @@ import { navigationRef } from './src/navigation/navigationRef';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LocationProvider } from './src/context/LocationContext';
 import { DistanceProvider } from './src/context/DistanceContext';
+import { NotificationProvider } from './src/context/NotificationContext';
+import { ChatProvider } from './src/context/ChatContext';
 import AppAlertModal from './src/components/AppAlertModal';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { showAlert } from './src/utils/alertController';
@@ -129,17 +131,21 @@ export default function App() {
         }}
       >
         <AuthProvider>
-          <DistanceProvider>
-            <LocationProvider>
-              {/* Inside the providers so a crash in any screen still lands
-                  on a recoverable page rather than a blank one, but outside
-                  AppNavigator so the boundary itself can't be taken down by
-                  the same error. */}
-              <ErrorBoundary>
-                <AppNavigator />
-              </ErrorBoundary>
-            </LocationProvider>
-          </DistanceProvider>
+          <NotificationProvider>
+            <ChatProvider>
+              <DistanceProvider>
+                <LocationProvider>
+                  {/* Inside the providers so a crash in any screen still lands
+                      on a recoverable page rather than a blank one, but outside
+                      AppNavigator so the boundary itself can't be taken down by
+                      the same error. */}
+                  <ErrorBoundary>
+                    <AppNavigator />
+                  </ErrorBoundary>
+                </LocationProvider>
+              </DistanceProvider>
+            </ChatProvider>
+          </NotificationProvider>
         </AuthProvider>
       </NavigationContainer>
       <AppAlertModal />

@@ -16,6 +16,7 @@ import { Fonts } from '../theme/fonts';
 import { useIsWideWeb } from '../utils/responsive';
 import ActivitiesRail from '../components/web/ActivitiesRail';
 import NotificationSkeleton from '../components/skeletons/NotificationSkeleton';
+import { useNotificationBadge } from '../context/NotificationContext';
 
 // ── Icon + colour per notification type ────────────────────────────────────────
 const TYPE_CONFIG = {
@@ -85,15 +86,17 @@ const NotificationScreen = () => {
   const isWideWeb = useIsWideWeb();
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Shared with the navbar badge (BottomTabs/WebSidebar) — this screen
+  // updates the one real count instead of keeping its own private copy.
+  const { unreadCount, refresh: refreshBadge, markAllRead: markBadgeAllRead, decrementBy } =
+    useNotificationBadge();
 
   const fetchNotifications = async () => {
     try {
       const res = await axiosInstance.get('notifications/');
       setNotifications(res.data.results || []);
-      setUnreadCount(res.data.unread_count || 0);
     } catch (err) {
       console.warn('Fetch notifications error', err);
     } finally {
@@ -106,19 +109,21 @@ const NotificationScreen = () => {
   useFocusEffect(
     useCallback(() => {
       fetchNotifications();
-    }, [])
+      refreshBadge();
+    }, [refreshBadge])
   );
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchNotifications();
+    refreshBadge();
   };
 
   const handleMarkAllRead = async () => {
     try {
       await axiosInstance.post('notifications/read-all/');
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-      setUnreadCount(0);
+      markBadgeAllRead();
     } catch (err) {
       console.warn('Mark all read error', err);
     }
@@ -132,7 +137,7 @@ const NotificationScreen = () => {
         setNotifications(prev =>
           prev.map(n => n.id === item.id ? { ...n, is_read: true } : n)
         );
-        setUnreadCount(prev => Math.max(0, prev - 1));
+        decrementBy(1);
       } catch (err) {
         console.warn('Mark read error', err);
       }

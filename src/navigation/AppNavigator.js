@@ -45,6 +45,9 @@ import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import WebSidebar, { SIDEBAR_WIDTH } from '../components/web/WebSidebar';
 import { useIsWideWeb } from '../utils/responsive';
+import NavBadge from '../components/NavBadge';
+import { useNotificationBadge } from '../context/NotificationContext';
+import { useChatBadge } from '../context/ChatContext';
 
 export const ProfileStatusContext = createContext();
 
@@ -83,6 +86,8 @@ const WEB_CONTENT_MAX_WIDTH = SIDEBAR_WIDTH + 680 + 360;
 
 function MainTabNavigator() {
   const isWideWeb = useIsWideWeb();
+  const { unreadCount } = useNotificationBadge();
+  const { unreadChatCount } = useChatBadge();
 
   const tabs = (
     <View style={{ flex: 1, overflow: 'hidden' }}>
@@ -104,13 +109,30 @@ function MainTabNavigator() {
             },
             tabBarActiveTintColor: '#8575ff',
             tabBarInactiveTintColor: '#FFFFFF',
+            // React Navigation's own tabBarBadge option renders nothing on
+            // this project's react-native-web setup (confirmed empty even
+            // with a hardcoded value) — NavBadge is used directly instead,
+            // the same overlay WebSidebar uses, wrapped around whichever
+            // icon needs it.
             tabBarIcon: ({ color }) => {
               switch (route.name) {
                 case 'Home':         return <HomeIcon color={color} />;
                 case 'Explore':      return <ExploreIcon color={color} />;
                 case 'Experience':   return <ActivityIcon color={color} />;
-                case 'Notification': return <NotificationIcon color={color} />;
-                case 'Chat':         return <ChatIcon color={color} />;
+                case 'Notification':
+                  return (
+                    <View style={{ position: 'relative' }}>
+                      <NotificationIcon color={color} />
+                      <NavBadge count={unreadCount} />
+                    </View>
+                  );
+                case 'Chat':
+                  return (
+                    <View style={{ position: 'relative' }}>
+                      <ChatIcon color={color} />
+                      <NavBadge count={unreadChatCount} />
+                    </View>
+                  );
               }
             },
           })}
