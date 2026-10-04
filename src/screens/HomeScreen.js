@@ -411,7 +411,7 @@ const HomeScreen = () => {
           <Text style={styles.locationCardSub}>
             {locationSource === 'ip'
               ? `We're showing activities near${locationCity ? ` ${locationCity}` : ' your area'}, based on your internet connection — not your exact spot. Enable precise location for better results.`
-              : "We couldn't find your location at all, so you're seeing every activity instead of just the ones near you."}
+              : 'Your location is off. Please turn it on to see relevant activities happening in your area.'}
           </Text>
 
           {permissionPermanentlyDenied ? (

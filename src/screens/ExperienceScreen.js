@@ -312,11 +312,16 @@ const ExperienceScreen = () => {
           </View>
         )}
         <TextInput
-          placeholder={showPoll ? 'Ask a question' : "What's your story?"}
+          placeholder={
+            !selectedActivity
+              ? 'Select an activity to post'
+              : showPoll ? 'Ask a question' : "What's your story?"
+          }
           placeholderTextColor="#666"
           style={styles.input}
           value={caption}
           onChangeText={setCaption}
+          editable={!!selectedActivity}
         />
       </View>
 
@@ -373,19 +378,20 @@ const ExperienceScreen = () => {
           <TouchableOpacity
             onPress={pickMedia}
             style={styles.iconBtn}
-            disabled={showPoll}
+            disabled={showPoll || !selectedActivity}
             accessibilityRole="button"
             accessibilityLabel="Add photos or a video"
           >
-            <Ionicons name="camera-outline" size={20} color={showPoll ? '#444' : '#888'} />
+            <Ionicons name="camera-outline" size={20} color={showPoll || !selectedActivity ? '#444' : '#888'} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={togglePoll}
             style={styles.iconBtn}
+            disabled={!selectedActivity}
             accessibilityRole="button"
             accessibilityLabel={showPoll ? 'Remove the poll' : 'Add a poll'}
           >
-            <Ionicons name="stats-chart-outline" size={20} color={showPoll ? '#2CB9B0' : '#888'} />
+            <Ionicons name="stats-chart-outline" size={20} color={!selectedActivity ? '#444' : showPoll ? '#2CB9B0' : '#888'} />
           </TouchableOpacity>
         </View>
 

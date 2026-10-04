@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
   },
   forgotBtn: {
-    alignSelf: 'flex-end',
+    alignSelf: 'center',
     marginTop: 8,
   },
   forgotText: {
