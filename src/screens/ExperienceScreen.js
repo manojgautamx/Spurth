@@ -12,6 +12,7 @@ import {
   StatusBar,
   Modal,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
@@ -584,10 +585,10 @@ const ExperienceScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
         <ExperienceSkeleton />
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -610,18 +611,28 @@ const ExperienceScreen = () => {
   }
 
   return (
-    <KeyboardAvoidingWrapper style={styles.container} scroll={false}>
-      <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
-      {list}
-      {activityPickerModal}
-      {numberPickerModal}
-    </KeyboardAvoidingWrapper>
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingWrapper scroll={false}>
+        <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
+        {list}
+        {activityPickerModal}
+        {numberPickerModal}
+      </KeyboardAvoidingWrapper>
+    </SafeAreaView>
   );
 };
 
 export default ExperienceScreen;
 
 const styles = StyleSheet.create({
+  // Mobile/narrow — SafeAreaView's background paints the status-bar area
+  // itself instead of leaving it to show the window's own default (gray)
+  // background, and needs no manual StatusBar.currentHeight padding on top
+  // of that (same pattern HomeScreen.js already uses).
+  safeArea: { flex: 1, backgroundColor: '#0A0A0A', overflow: 'hidden' },
+  // Wide web only now (container's mobile usages were replaced by
+  // safeArea above) — kept exactly as-is, including its own paddingTop,
+  // since a browser has no native status bar for SafeAreaView to matter.
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
