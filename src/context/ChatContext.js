@@ -134,16 +134,28 @@ export const ChatProvider = ({ children }) => {
             orderBy('timestamp', 'desc'),
             limit(1)
           );
-          return onSnapshot(lastMessageQuery, snapshot => {
-            if (!snapshot.empty) {
-              const msg = snapshot.docs[0].data();
-              setActivities(prev =>
-                prev.map(a =>
-                  a.id === activity.id ? { ...a, lastMessage: msg } : a
-                )
-              );
-            }
-          });
+          return onSnapshot(
+            lastMessageQuery,
+            snapshot => {
+              if (!snapshot.empty) {
+                const msg = snapshot.docs[0].data();
+                setActivities(prev =>
+                  prev.map(a =>
+                    a.id === activity.id ? { ...a, lastMessage: msg } : a
+                  )
+                );
+              }
+            },
+            // Terminal for this one activity's listener (Firestore doesn't
+            // retry past an error) — same class of permission-denied race
+            // as ChatConversationPanel.js's own listener. Lower stakes here
+            // (the list itself already rendered from the REST fetch above;
+            // this only ever adds a last-message preview on top of it), so
+            // just log it rather than surfacing another error UI — a
+            // silently stale preview for one row beats compounding this
+            // with its own failure state.
+            snapshotErr => console.warn(`ChatContext: messages listener failed for activity ${activity.id}`, snapshotErr)
+          );
         });
       } catch (err) {
         if (active) setError(getErrorMessage(err, "Couldn't load your chats."));

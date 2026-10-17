@@ -23,6 +23,7 @@ import { BASE_URL } from '../config';
 import { useNavigation } from '@react-navigation/native';
 import axiosInstance from '../utils/axiosInstance';
 import { getErrorMessage } from '../utils/errorMessage';
+import ErrorState from './ErrorState';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,6 +81,15 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   const navigation = useNavigation();
   const [messages, setMessages]       = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(true);
+  // Set only by the listener's error callback below — onSnapshot has no
+  // built-in retry once it errors (a permission-denied, e.g. from
+  // sync_league_members not having landed in Firestore yet for a just-
+  // joined member, kills the subscription for good), so without this the
+  // screen was left on messagesLoading's spinner forever with no way out
+  // short of leaving and reopening the chat. retryKey remounts the
+  // subscription on demand instead.
+  const [messagesError, setMessagesError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
   const [text, setText]               = useState('');
   // Only the viewer's own id is still needed here — it drove senderName/
   // senderAvatar on the client's own former Firestore write, which
@@ -137,18 +147,31 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
   useEffect(() => {
     if (!firebaseReady) return;
     setMessagesLoading(true);
+    setMessagesError(null);
     const messagesQuery = query(
       collection(db, 'leagues', `league_${activityId}`, 'messages'),
       orderBy('timestamp', 'asc')
     );
-    const unsubscribe = onSnapshot(messagesQuery, snapshot => {
-      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setMessages(msgs);
-      setMessagesLoading(false);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-    });
+    const unsubscribe = onSnapshot(
+      messagesQuery,
+      snapshot => {
+        const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMessages(msgs);
+        setMessagesLoading(false);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      },
+      error => {
+        // Terminal for this subscription (Firestore doesn't retry a listener
+        // past its own error) — surface it instead of leaving the spinner
+        // spinning forever. Often transient (membership sync racing the
+        // listener attaching), so "Try again" via retryKey is usually enough.
+        console.warn('ChatConversationPanel: messages listener failed', error);
+        setMessagesLoading(false);
+        setMessagesError(getErrorMessage(error, "Couldn't load messages."));
+      }
+    );
     return () => unsubscribe();
-  }, [activityId, firebaseReady]);
+  }, [activityId, firebaseReady, retryKey]);
 
   const sendMessage = async () => {
     if (!text.trim()) return;
@@ -313,7 +336,9 @@ export default function ChatConversationPanel({ activityId, activityName, onBack
       <View style={styles.headerDivider} />
 
       <KeyboardAvoidingWrapper style={{ flex: 1 }} scroll={false}>
-        {messagesLoading ? (
+        {messagesError ? (
+          <ErrorState message={messagesError} onRetry={() => setRetryKey(k => k + 1)} />
+        ) : messagesLoading ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="small" color="#2CB9B0" />
           </View>
