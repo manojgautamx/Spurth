@@ -27,7 +27,7 @@ import { getErrorMessage } from '../utils/errorMessage';
 import ErrorState from '../components/ErrorState';
 import ActivityCard from '../components/ActivityCard';
 import { Fonts } from '../theme/fonts';
-import { TAB_HEADER_TOP_PADDING } from '../theme/layout';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 import { getMainCategory } from '../utils/categoryMapper';
 import { rankByInterest } from '../utils/rankByInterest';
 import { BASE_URL } from '../config';
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
   // inset covered by the same background once this block is pinned.
   stickyHeaderBg: {
     backgroundColor: '#121212',
-    paddingTop: TAB_HEADER_TOP_PADDING,
+    paddingTop: SCREEN_TOP_PADDING,
   },
   headerContainer: {
     flexDirection: 'row',

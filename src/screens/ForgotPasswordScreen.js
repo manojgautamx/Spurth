@@ -8,6 +8,7 @@ import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 
 const PRIMARY = '#6E35B7';
 
@@ -96,7 +97,7 @@ export default function ForgotPasswordScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0A0A0A' },
-  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: 60, paddingBottom: 48 },
+  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingTop: SCREEN_TOP_PADDING, paddingBottom: 48 },
   backBtn: { marginBottom: 32 },
   heading: { color: '#fff', fontSize: 30, fontFamily: Fonts.bold, marginBottom: 8 },
   subheading: { color: '#555', fontSize: 15, fontFamily: Fonts.regular, marginBottom: 32, lineHeight: 22 },

@@ -7,6 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import axiosInstance from '../utils/axiosInstance';
 import { Fonts } from '../theme/fonts';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 
 export default function EmailVerificationScreen({ navigation }) {
   const [token, setToken] = useState('');
@@ -113,7 +114,7 @@ export default function EmailVerificationScreen({ navigation }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0A0A0A' },
-  backBtn: { padding: 20, paddingTop: 50 },
+  backBtn: { padding: 20, paddingTop: SCREEN_TOP_PADDING },
   content: { flex: 1, paddingHorizontal: 28, justifyContent: 'center', marginTop: -60 },
   iconWrap: {
     width: 90, height: 90, borderRadius: 45,

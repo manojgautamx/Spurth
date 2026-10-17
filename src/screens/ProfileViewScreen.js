@@ -22,6 +22,7 @@ import { AuthContext } from '../context/AuthContext';
 import { promptSignIn } from '../utils/requireAuth';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PostCard from '../components/PostCard';
@@ -786,7 +787,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: SCREEN_TOP_PADDING,
     paddingBottom: 10,
   },
   profileCard: {

@@ -16,7 +16,7 @@ import ErrorState from '../components/ErrorState';
 import { getActivityTypeImage } from '../utils/getActivityTypeImage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { Fonts } from '../theme/fonts';
-import { TAB_HEADER_TOP_PADDING } from '../theme/layout';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 import { BASE_URL } from '../config';
 import { useIsWideWeb } from '../utils/responsive';
 import ChatConversationPanel from '../components/ChatConversationPanel';
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 22,
     fontFamily: Fonts.semibold,
-    marginTop: TAB_HEADER_TOP_PADDING,
+    marginTop: SCREEN_TOP_PADDING,
     marginBottom: 16,
   },
   filterRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },

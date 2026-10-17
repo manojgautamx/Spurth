@@ -16,6 +16,7 @@ import { register } from '../services/api';
 import { signIntoFirebase } from '../utils/auth';
 import { classifyAuthError } from '../utils/authErrors';
 import { Fonts } from '../theme/fonts';
+import { SCREEN_TOP_PADDING } from '../theme/layout';
 import { BASE_URL } from '../config';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AuthHeroPane from '../components/AuthHeroPane';
@@ -479,7 +480,7 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 28,
-    paddingTop: 60,
+    paddingTop: SCREEN_TOP_PADDING,
     paddingBottom: 48,
   },
 
