@@ -145,7 +145,18 @@ export const LocationProvider = ({ children }) => {
         },
         {
           enableHighAccuracy: false,
-          timeout: 10000,
+          // Some real devices (confirmed on a tablet: no
+          // android.hardware.location.gps feature at all, WiFi-only — no
+          // cellular either, so no A-GPS assist) have no GPS chip and can
+          // only ever resolve through the network/WiFi location provider,
+          // which can take noticeably longer than a phone's GPS+A-GPS fix,
+          // especially on a cold first request. 10s was cutting that off
+          // before it had a real chance, silently landing on the (far
+          // less precise) IP fallback below every time — correct behavior
+          // for a genuine failure, but indistinguishable from one to a
+          // user who granted the permission and still never got their
+          // real location.
+          timeout: 20000,
           maximumAge: 60000, // cache for 1 min
         }
       );

@@ -2,6 +2,20 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- Android 15 (API 35, this app's targetSdk) enforces edge-to-edge
+             by default unless a window opts out — with nothing here telling
+             it what color the status/nav bar area should be, it fell back
+             to Android's own default light scrim (~#FAFAFA), showing as a
+             white strip top and bottom regardless of the device's own dark/
+             light setting (confirmed: switching system dark mode made no
+             difference — this app's always-dark UI was never tied to it).
+             Opting back out restores the pre-35 behavior every screen's own
+             <StatusBar backgroundColor .../> (react-native) already
+             expects and relies on throughout the app; the two colors below
+             are just the resting color for the moment before that runs. -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">@color/system_bar_background</item>
+        <item name="android:navigationBarColor">@color/system_bar_background</item>
     </style>
 
     <style name="BootTheme" parent="Theme.BootSplash">

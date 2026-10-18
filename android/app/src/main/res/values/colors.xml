@@ -1,3 +1,8 @@
 <resources>
-    <color name="bootsplash_background">#4d3ec1</color>
+    <color name="bootsplash_background">#633de9</color>
+    <!-- Every screen is always-dark regardless of the device's system
+         light/dark setting (the app has no light theme of its own) — this
+         is the status/nav bar's resting color before/between whatever a
+         screen's own <StatusBar backgroundColor> sets at runtime. -->
+    <color name="system_bar_background">#0A0A0A</color>
 </resources>
