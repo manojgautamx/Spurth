@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -16,7 +16,31 @@ const firebaseConfig = {
 };
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// getFirestore(app) alone defaults to Firestore's WebChannel transport,
+// which streams over the Fetch API's readable-body support — real
+// browsers have that; React Native's fetch polyfill doesn't, so on native
+// the realtime Listen RPC just errors ("WebChannelConnection... RPC
+// 'Listen' stream transport errored", confirmed in logcat on a real
+// device) and every onSnapshot listener fails silently, no matter how
+// correct the auth/rules side of it is — the exact "chat still doesn't
+// load on Android, works fine on web" split this was causing. Forcing
+// long-polling instead of the streaming transport is Firestore's own
+// documented fix for non-browser JS environments; web keeps the default
+// (long-polling there would just be slower for no reason).
+export const db = Platform.OS === 'web'
+  ? getFirestore(app)
+  : (() => {
+      try {
+        return initializeFirestore(app, {
+          experimentalAutoDetectLongPolling: true,
+          useFetchStreams: false,
+        });
+      } catch (e) {
+        // Same Fast Refresh re-evaluation case as `auth` below.
+        return getFirestore(app);
+      }
+    })();
 
 // getAuth(app) alone is fine on web (the browser's own persistence is its
 // default). On native it's NOT equivalent — @firebase/auth's own React
