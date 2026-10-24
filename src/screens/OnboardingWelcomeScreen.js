@@ -20,12 +20,9 @@ export default function OnboardingWelcomeScreen({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor="#0A0A0A" />
       <View style={[styles.container, isWideWeb && styles.containerWeb]}>
         <View style={[styles.content, isWideWeb && styles.contentWeb]}>
-          <Text style={styles.eyebrow}>Welcome to Spurth! 🎉</Text>
-          <Text style={styles.headline}>You're in — let's set up your profile</Text>
-          <Text style={styles.subtext}>
-            Takes under a minute. Add a photo, a few interests, and you're
-            ready to find activities happening near you.
-          </Text>
+          <Text style={styles.eyebrow}>Welcome to Spurth</Text>
+          <Text style={styles.headline}>Let's set up your profile</Text>
+          <Text style={styles.subtext}>Just a few quick steps.</Text>
         </View>
 
         <TouchableOpacity
