@@ -22,6 +22,7 @@ import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import MapPickerScreen from '../screens/MapPickerScreen';
 import ActivityViewerScreen from '../screens/ActivityViewerScreen';
 import ProfileScreen from '../screens/ProfileScreen';
+import OnboardingWelcomeScreen from '../screens/OnboardingWelcomeScreen';
 import ProfileViewScreen from '../screens/ProfileViewScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import ActivityChatScreen from '../screens/ActivityChatScreen';
@@ -307,7 +308,7 @@ export default function AppNavigator() {
       const target =
         nextPhase === 'main' ? 'MainTabs' :
         nextPhase === 'needs_username' ? 'GoogleUsername' :
-        nextPhase === 'onboarding' ? 'Profile' :
+        nextPhase === 'onboarding' ? 'OnboardingWelcome' :
         'Welcome';
       navigationRef.reset({ index: 0, routes: [{ name: target }] });
     }
@@ -336,7 +337,7 @@ export default function AppNavigator() {
   // but a signed-out user who ends up anywhere else (after logging out, or on
   // a stale /home bookmark) belongs at the sign-in entry point, not the pitch.
   const initialRouteName = userToken
-    ? (needsUsernameSetup ? 'GoogleUsername' : (profileComplete ? 'MainTabs' : 'Profile'))
+    ? (needsUsernameSetup ? 'GoogleUsername' : (profileComplete ? 'MainTabs' : 'OnboardingWelcome'))
     : 'Welcome';
 
   return (
@@ -390,7 +391,10 @@ export default function AppNavigator() {
               <Stack.Screen name="Settings"          component={SettingsScreen} options={{ title: 'Settings' }} />
             </>
           ) : (
-            <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Set Up Your Profile' }} />
+            <>
+              <Stack.Screen name="OnboardingWelcome" component={OnboardingWelcomeScreen} options={{ title: 'Welcome' }} />
+              <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Set Up Your Profile' }} />
+            </>
           )
         ) : (
           <>

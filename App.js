@@ -78,6 +78,7 @@ const linking = {
       ForgotPassword: 'forgot-password',
       ResetPassword: 'reset-password',
       // Logged-in branch
+      OnboardingWelcome: 'get-started',
       Profile: 'setup-profile',
       CreateActivity: 'create',
       PhoneVerification: 'verify-phone',

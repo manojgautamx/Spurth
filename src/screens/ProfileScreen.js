@@ -11,6 +11,7 @@ import {
   StatusBar,
   SafeAreaView,
   Animated,
+  Platform,
 } from 'react-native';
 import KeyboardAvoidingWrapper from '../components/KeyboardAvoidingWrapper';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
@@ -88,12 +89,13 @@ export default function ProfileScreen({ navigation }) {
 
   const { refreshProfileStatus } = useContext(ProfileStatusContext);
 
-  // ── Step 1's welcome greeting: a subtle fade+rise on mount ───────────────────
-  // Step 1 is the very first thing a brand-new user sees right after signup
-  // (email or Google) — this used to be a bare "Pick your Interest" title
-  // with zero acknowledgment that signup just succeeded. Same Animated API
-  // (not a new dependency) WelcomeScreen already uses for its Ken Burns
-  // effect; runs once, on this screen's own mount.
+  // ── Step 1's header: a subtle fade+rise on mount ─────────────────────────────
+  // This screen itself is no longer the first thing a brand-new user sees
+  // (OnboardingWelcomeScreen now owns that "you're in" moment, with its own
+  // greeting) — this animation just gives step 1's own title the same
+  // small entrance polish it always had. Same Animated API (not a new
+  // dependency) WelcomeScreen already uses for its Ken Burns effect; runs
+  // once, on this screen's own mount.
   const welcomeFade = useRef(new Animated.Value(0)).current;
   const welcomeRise = useRef(new Animated.Value(12)).current;
   useEffect(() => {
@@ -262,7 +264,6 @@ export default function ProfileScreen({ navigation }) {
             </TouchableOpacity>
 
             <Animated.View style={{ opacity: welcomeFade, transform: [{ translateY: welcomeRise }] }}>
-              <Text style={styles.welcomeGreeting}>Welcome to Spurth! 🎉</Text>
               <View style={styles.interestHeader}>
                 <Text style={styles.stepTitle}>Pick a few things you're into</Text>
                 <Text style={styles.interestCount}>
@@ -681,12 +682,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Step 3: Interests ─────────────────────────────────────────────────────
-  welcomeGreeting: {
-    color: '#2CB9B0',
-    fontSize: 15,
-    fontFamily: Fonts.semibold,
-    marginBottom: 6,
-  },
   interestHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -743,11 +738,22 @@ const styles = StyleSheet.create({
 
   // ── Bottom CTA ────────────────────────────────────────────────────────────
   bottomAction: {
-    // 'fixed' anchors to the actual viewport instead of the nearest
-    // positioned ancestor — on web, a tall scrollable child (the interest
+    // 'fixed' (web only) anchors to the actual viewport instead of the
+    // nearest positioned ancestor — a tall scrollable child (the interest
     // tag grid) can inflate that ancestor's box well past the viewport
-    // height, which would otherwise carry this button down off-screen with it.
-    position: 'fixed',
+    // height on web, which would otherwise carry this button down off-
+    // screen with it. 'fixed' isn't a value React Native's native layout
+    // engine (Yoga) understands at all — this used to be a bare
+    // `position: 'fixed'` with no Platform split, which native silently
+    // failed to parse (logged "Could not parse yoga::PositionType: fixed")
+    // and fell back to its own default ('relative'), leaving this button
+    // sitting in normal document flow instead of pinned to the bottom —
+    // it visibly overlapped the last form field on every step. Native's
+    // own ScrollViews don't inflate their parent's height the way a web
+    // block element does, so plain 'absolute' (anchored to stepContainer,
+    // the flex:1 parent two levels up) already achieves the same "pinned
+    // to the bottom of the screen" result 'fixed' gets on web.
+    position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     bottom: 30,
     left: 24,
     right: 24,
